@@ -58,6 +58,7 @@ export const STATE_PATHS = [
   "/interface/bridge/host",
   "/interface/wifi/registration-table",
   "/interface/wifi/capsman/remote-cap",
+  "/interface/wifi/radio",
 ];
 
 export interface RestOptions {
