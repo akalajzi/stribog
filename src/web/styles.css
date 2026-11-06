@@ -221,20 +221,21 @@ pre.cli .c { color: var(--tx-3); }
 .mapctl button { width: 32px; height: 30px; display: grid; place-items: center; color: var(--tx-2); border: 0; background: none; cursor: pointer; }
 .mapctl button + button { border-top: 1px solid var(--hair); }
 .mapctl button:hover { background: var(--ink-3); color: var(--tx-1); }
-/* Inside the map: sizes are map units, so they zoom with it. */
-.owners-box { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 20px 26px 22px; border-radius: 22px; background: color-mix(in srgb, var(--ink-2) 92%, transparent); box-shadow: inset 0 0 0 1.5px var(--hair-2); font-family: Inter, sans-serif; font-size: 18px; color: var(--tx-2); }
-.owners-box small { color: var(--tx-3); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; margin-bottom: auto; }
-.owners-box .faint { font-size: 18px; }
-.ob-row { display: grid; grid-template-columns: 230px minmax(0, 1fr) 200px 120px 110px; gap: 18px; align-items: center; }
-.ob-row b { color: var(--tx-1); font-weight: 500; font-size: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-who { color: var(--tx-3); font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Inside the map: sizes are map units, so they zoom with it (about 0.6 of a pixel when the whole network fits). */
+.owners-slot { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+.owners-box { box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 24px 32px 28px; border-radius: 26px; background: color-mix(in srgb, var(--ink-2) 92%, transparent); box-shadow: inset 0 0 0 2px var(--hair-2); font-family: Inter, sans-serif; font-size: 24px; color: var(--tx-2); }
+.owners-box small { color: var(--tx-3); font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; }
+.owners-box .faint { font-size: 22px; }
+.ob-row { display: grid; grid-template-columns: 360px minmax(0, 1fr) 160px 150px 130px; gap: 24px; align-items: center; }
+.ob-row b { color: var(--tx-1); font-weight: 500; font-size: 27px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-who { color: var(--tx-3); font-size: 21px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ob-who a { color: var(--tx-2); text-decoration: none; }
 .ob-who a:hover { color: var(--tx-1); }
-.ob-bar { height: 6px; border-radius: 3px; background: var(--ink-1); overflow: hidden; }
-.ob-bar i { display: block; height: 100%; border-radius: 3px; background: var(--chart-down); transition: width .6s ease; }
-.ob-rate { text-align: right; color: var(--tx-1); font-size: 19px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ob-rate.up { color: var(--tx-2); font-size: 16px; }
-.ob-rate i { font-style: normal; color: var(--tx-3); font-size: 14px; }
+.ob-bar { height: 8px; border-radius: 4px; background: var(--ink-1); overflow: hidden; }
+.ob-bar i { display: block; height: 100%; border-radius: 4px; background: var(--chart-down); transition: width .6s ease; }
+.ob-rate { text-align: right; color: var(--tx-1); font-size: 26px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ob-rate.up { color: var(--tx-2); font-size: 21px; }
+.ob-rate i { font-style: normal; color: var(--tx-3); font-size: 18px; }
 .maptop { position: absolute; left: 18px; top: 16px; right: 18px; display: flex; gap: 10px; align-items: flex-start; justify-content: center; pointer-events: none; }
 .maptop > * { pointer-events: auto; }
 .mapwrap:not(.noside) .maptop { right: calc(var(--side-w) + 18px); }

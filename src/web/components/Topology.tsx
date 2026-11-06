@@ -21,8 +21,8 @@ interface Props {
 type View = { x: number; y: number; w: number; h: number };
 
 /** The "on the internet now" box above the Internet node, in map units (it zooms with the map). */
-const OWNERS_W = 1000;
-const OWNERS_H = 300;
+const OWNERS_W = 1240;
+const OWNERS_H = 380;
 const OWNERS_GAP = 70;
 
 /**
@@ -355,6 +355,8 @@ function OwnersBox({ layout, now, onSelect }: { layout: NetworkPayload["layout"]
   const max = Math.max(1, ...rows.map((o) => o.downBps + o.upBps));
   return (
     <foreignObject x={n.x - OWNERS_W / 2} y={n.y - OWNERS_GAP - OWNERS_H} width={OWNERS_W} height={OWNERS_H}>
+      {/* The box sits on the bottom of its space and grows upwards with its rows. */}
+      <div className="owners-slot">
       <div
         className="owners-box"
         onPointerDown={(e) => e.stopPropagation()}
@@ -385,6 +387,7 @@ function OwnersBox({ layout, now, onSelect }: { layout: NetworkPayload["layout"]
           ))
         )}
         {now && !now.ownersKnown && <span className="faint">Owner names arrive once Stribog has its network database.</span>}
+      </div>
       </div>
     </foreignObject>
   );

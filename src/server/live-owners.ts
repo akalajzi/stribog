@@ -18,13 +18,18 @@ export interface OwnersNow {
   ownersKnown: boolean;
 }
 
-/** Reads closer together than this reuse the last one: tabs share it, and the router is spared. */
-const MIN_MS = 3000;
+/**
+ * Reads closer together than this reuse the last one: tabs share it, and the router is spared.
+ * A big connection table (thousands of connections, a torrent client say) is read less often:
+ * about 2 ms per connection, so 2,000 connections every 4 seconds, 10,000 every 20.
+ */
+const minMs = (connections: number) => Math.max(3000, connections * 2);
 
 interface State {
   prev: Map<string, { orig: number; repl: number }>;
   at?: number;
   last?: OwnersNow;
+  size?: number;
   running?: Promise<OwnersNow>;
 }
 const states = new WeakMap<Session, State>();
@@ -44,13 +49,14 @@ export async function ownersNow(session: Session): Promise<OwnersNow | undefined
   if (!r) return undefined;
   const st: State = states.get(session) ?? { prev: new Map() };
   states.set(session, st);
-  if (st.last && Date.now() - st.last.at < MIN_MS) return st.last;
+  if (st.last && Date.now() - st.last.at < minMs(st.size ?? 0)) return st.last;
   st.running ??= (async () => {
     try {
       const conns = await new RouterOsRest({ url: r.url, user: r.user, password: r.password, insecure: r.encrypted }).connections();
       const now = Date.now();
       const seconds = st.at ? (now - st.at) / 1000 : undefined;
       const moved = deltas(conns, st.prev);
+      st.size = conns.length;
       st.at = now;
       const db = asnDb(setup().dataDir);
       // The first read only sets the counters: everything a connection ever moved is not "now".
