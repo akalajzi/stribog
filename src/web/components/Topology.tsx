@@ -21,9 +21,9 @@ interface Props {
 type View = { x: number; y: number; w: number; h: number };
 
 /** The "on the internet now" box above the Internet node, in map units (it zooms with the map). */
-const OWNERS_W = 1240;
-const OWNERS_H = 380;
-const OWNERS_GAP = 70;
+const OWNERS_W = 620;
+const OWNERS_H = 200;
+const OWNERS_GAP = 56;
 
 /**
  * Where the map was looked at, kept across data refreshes and visits to other pages. Until
