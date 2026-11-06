@@ -2,7 +2,8 @@
 //
 // Top to bottom: Internet → ISP router (with the old upstream network beside it) → gateway →
 // devices on gateway ports, in port order so links never cross → devices behind those.
-// Devices behind an access point sit in rows below it: wired first, then Wi-Fi by signal.
+// Devices behind an access point sit below it in one cluster per medium (cable, each Wi-Fi band),
+// each with its own line in that medium's colour.
 
 import type { Device, NetworkModel, Port } from "./model.ts";
 import type { Band } from "./net.ts";
@@ -41,13 +42,14 @@ export interface LZone {
   sub?: string;
 }
 
-/** The shared trunk and row branches under a device with several devices behind it. */
+/** One cluster's line under a device: from the device to a comb over the cluster's rows. */
 export interface LBus {
   id: string;
   from: string;
   d: string;
-  /** Every device on it is on Wi-Fi. */
-  wifi: boolean;
+  medium: Medium;
+  label: string;
+  labelAt: { x: number; y: number };
 }
 
 export interface Layout {
@@ -66,10 +68,11 @@ const NODE_W = 190;
 const UPSTREAM_COL_W = 178;
 /** The node that stands for every device seen only on the ISP router's network. */
 export const UPSTREAM_GROUP = "upstream:others";
-/** Devices behind one device: columns per row, cell width and row height. */
-const KID_COLS = 4;
+/** Devices behind one device: columns per cluster row, cell width, row height, gap between clusters. */
+const KID_COLS = 3;
 const KID_W = 168;
 const KID_ROW_H = 178;
+const CLUSTER_GAP = 44;
 
 export function mediumOf(d: Device, port?: Port, ghost?: boolean): Medium {
   if (ghost) return "planned";
@@ -122,15 +125,26 @@ export function layoutTopology(m: NetworkModel): Layout {
   const portIndex = (p?: string) => (p ? ports.findIndex((x) => x.name === p) : 999);
   tier1.sort((a, b) => portIndex(a.port) - portIndex(b.port));
 
-  // What hangs off a device: wired first (port order), then Wi-Fi, strongest signal first.
-  const kidsOf = (id: string) => {
+  // What hangs off a device, one cluster per medium: cable, then each Wi-Fi band from 2.4 up.
+  // Within a cluster, Wi-Fi goes from the strongest signal down.
+  const clustersOf = (id: string): { medium: Medium; kids: Device[] }[] => {
     const kids = children(id);
-    const wired = kids.filter((c) => c.via?.kind !== "wifi");
-    const wifi = kids.filter((c) => c.via?.kind === "wifi").sort((a, b) => (b.via?.signal ?? -99) - (a.via?.signal ?? -99));
-    return [...wired, ...wifi];
+    const groups = new Map<Medium, Device[]>();
+    for (const c of kids) {
+      const md = c.via?.kind === "wifi" ? mediumOf(c) : "wired";
+      groups.set(md, [...(groups.get(md) ?? []), c]);
+    }
+    const order: Medium[] = ["wired", "wifi-2.4", "wifi-5", "wifi-6"];
+    return [...groups.entries()]
+      .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+      .map(([medium, ks]) => ({ medium, kids: medium === "wired" ? ks : [...ks].sort((a, b) => (b.via?.signal ?? -99) - (a.via?.signal ?? -99)) }));
   };
-  const even = (n: number) => n + (n % 2);
-  const widthOf = (s: Slot) => (s.kind === "device" ? Math.max(NODE_W, Math.min(even(kidsOf(s.dev.id).length), KID_COLS) * KID_W + 24) : NODE_W);
+  const clusterW = (n: number) => Math.min(n, KID_COLS) * KID_W + 20;
+  const widthOf = (s: Slot) => {
+    if (s.kind !== "device") return NODE_W;
+    const cs = clustersOf(s.dev.id);
+    return Math.max(NODE_W, cs.reduce((w, c) => w + clusterW(c.kids.length), 0) + Math.max(0, cs.length - 1) * CLUSTER_GAP + 24);
+  };
   const widths = tier1.map(widthOf);
   const total = widths.reduce((a, b) => a + b, 0);
   let cursor = gx - total / 2;
@@ -141,7 +155,7 @@ export function layoutTopology(m: NetworkModel): Layout {
     cursor += w;
     const id = s.kind === "device" ? s.dev.id : s.id;
     const isAp = s.kind === "device" ? s.dev.kind === "ap" : s.deviceKind === "ap";
-    const kids = s.kind === "device" ? kidsOf(s.dev.id) : [];
+    const clusters = s.kind === "device" ? clustersOf(s.dev.id) : [];
     const y = t1;
     nodes.push({ id, x, y, kind: s.kind === "device" ? s.dev.kind : s.deviceKind, label: "below", ghost: s.kind === "ghost" });
 
@@ -162,38 +176,48 @@ export function layoutTopology(m: NetworkModel): Layout {
       weight: s.kind === "ghost" ? 0 : medium === "2.5g" ? 0.9 : 0.5,
     });
 
-    // Devices behind this one, in rows under a trunk that starts below the device's label and
-    // branches above each row. Rows have an even number of places, so the trunk runs through a
-    // gap, never through a device. Each device's own link is the drop from its branch.
-    if (!kids.length) return;
-    const trunkTop = y + 96;
-    const rowY = (r: number) => y + 236 + r * KID_ROW_H;
+    // Devices behind this one: clusters side by side, each a comb in its medium's colour. The line
+    // leaves below the device's label, runs down the cluster's left edge, and branches over each
+    // row; each device's own link is the drop from its branch.
+    if (!clusters.length) return;
+    const lineTop = y + 96;
+    const rowY = (r: number) => y + 250 + r * KID_ROW_H;
     const branchY = (r: number) => rowY(r) - 70;
-    const rows = Math.ceil(kids.length / KID_COLS);
-    const bus: string[] = [`M ${round(x)} ${round(trunkTop)} V ${round(branchY(rows - 1))}`];
-    for (let r = 0; r < rows; r++) {
-      const inRow = kids.slice(r * KID_COLS, (r + 1) * KID_COLS);
-      const places = even(inRow.length);
-      const xs = inRow.map((_, j) => x + (j - (places - 1) / 2) * KID_W);
-      bus.push(`M ${round(Math.min(x, ...xs))} ${round(branchY(r))} H ${round(Math.max(x, ...xs))}`);
-      inRow.forEach((c, j) => {
-        const cx = xs[j]!;
-        const cy = rowY(r);
-        nodes.push({ id: c.id, x: cx, y: cy, kind: c.kind, label: "below" });
-        const wifi = c.via?.kind === "wifi";
-        links.push({
-          id: `l:${c.id}`,
-          from: id,
-          to: c.id,
-          d: `M ${round(cx)} ${round(branchY(r))} V ${round(cy - 40)}`,
-          medium: mediumOf(c),
-          label: wifi ? undefined : (c.via?.port ?? ""),
-          labelAt: { x: cx + 7, y: branchY(r) + 20, anchor: "start" },
-          weight: 0.5,
+    const total = clusters.reduce((w, c) => w + clusterW(c.kids.length), 0) + (clusters.length - 1) * CLUSTER_GAP;
+    let left = x - total / 2;
+    for (const c of clusters) {
+      const w = clusterW(c.kids.length);
+      const firstX = left + 20 + KID_W / 2;
+      // A lone device gets the line straight down to it; a cluster gets a comb along its left edge.
+      const trunkX = c.kids.length === 1 ? firstX : left + 6;
+      const rows = Math.ceil(c.kids.length / KID_COLS);
+      const comb: string[] = [`M ${round(x)} ${round(lineTop)} C ${round(x)} ${round(lineTop + 50)}, ${round(trunkX)} ${round(lineTop + 20)}, ${round(trunkX)} ${round(lineTop + 70)} V ${round(branchY(rows - 1))}`];
+      for (let r = 0; r < rows; r++) {
+        const inRow = c.kids.slice(r * KID_COLS, (r + 1) * KID_COLS);
+        comb.push(`M ${round(trunkX)} ${round(branchY(r))} H ${round(firstX + (inRow.length - 1) * KID_W)}`);
+        inRow.forEach((d, j) => {
+          const cx = firstX + j * KID_W;
+          const cy = rowY(r);
+          nodes.push({ id: d.id, x: cx, y: cy, kind: d.kind, label: "below" });
+          const wifi = d.via?.kind === "wifi";
+          links.push({
+            id: `l:${d.id}`,
+            from: id,
+            to: d.id,
+            d: `M ${round(cx)} ${round(branchY(r))} V ${round(cy - 40)}`,
+            medium: mediumOf(d),
+            // The cluster's label says the medium; a lone cable also names its port there.
+            label: wifi || c.kids.length === 1 ? undefined : (d.via?.port ?? ""),
+            labelAt: { x: cx + 7, y: branchY(r) + 20, anchor: "start" },
+            weight: 0.5,
+          });
         });
-      });
+      }
+      const port = c.kids.length === 1 ? c.kids[0]!.via?.port : undefined;
+      const label = c.medium === "wired" ? `Cable · ${port ?? c.kids.length}` : `${c.medium.replace("wifi-", "")} GHz Wi-Fi · ${c.kids.length}`;
+      buses.push({ id: `bus:${id}:${c.medium}`, from: id, d: comb.join(" "), medium: c.medium === "wired" ? mediumOf(c.kids[0]!) : c.medium, label, labelAt: { x: trunkX + 10, y: lineTop + (c.kids.length === 1 ? 92 : 62) } });
+      left += w + CLUSTER_GAP;
     }
-    buses.push({ id: `bus:${id}`, from: id, d: bus.join(" "), wifi: kids.every((c) => c.via?.kind === "wifi") });
   });
 
   // ---- spine: internet, upstream, gateway ----------------------------------------

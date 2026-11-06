@@ -77,28 +77,35 @@ describe("layout: demo network", () => {
     expect([...px].sort((a, b) => a - b)).toEqual(px);
   });
 
-  it("draws devices behind an AP below it: wired first, then Wi-Fi by signal, on dashed band-coloured links", () => {
+  it("puts devices behind an AP into one cluster per medium, each with its own coloured line", () => {
     for (const apId of ["mac:00:00:5E:00:53:A0", "mac:00:00:5E:00:53:B0"]) {
       const ap = l.nodes.find((n) => n.id === apId)!;
       const kids = m.devices.filter((d) => d.parent === apId);
-      expect(kids.length).toBeGreaterThan(0);
-      const placed = kids.map((d) => ({ d, n: l.nodes.find((x) => x.id === d.id)! }));
-      for (const { d, n } of placed) {
-        expect(n.y, d.name).toBeGreaterThan(ap.y + 100);
-        expect(n.label).toBe("below");
-        const link = l.links.find((x) => x.to === d.id)!;
-        expect(link.from).toBe(apId);
-        if (d.via?.kind === "wifi") {
-          expect(link.medium).toBe(d.via.band === "2.4" ? "wifi-2.4" : d.via.band === "6" ? "wifi-6" : "wifi-5");
-          expect(link.label).toBeUndefined();
+      const mediumOfKid = (d: (typeof kids)[number]) => (d.via?.kind === "wifi" ? `wifi-${d.via.band}` : "wired");
+      const groups = new Map<string, typeof kids>();
+      for (const d of kids) groups.set(mediumOfKid(d), [...(groups.get(mediumOfKid(d)) ?? []), d]);
+      const buses = l.buses.filter((b) => b.from === apId);
+      expect(buses).toHaveLength(groups.size);
+
+      const spans: [number, number][] = [];
+      for (const [medium, ds] of groups) {
+        const bus = buses.find((b) => (medium === "wired" ? !b.medium.startsWith("wifi") : b.medium === medium))!;
+        expect(bus.label).toMatch(medium === "wired" ? /^Cable · \S+$/ : new RegExp(`^${medium.replace("wifi-", "").replace(".", "\\.")} GHz Wi-Fi · ${ds.length}$`));
+        const placed = ds.map((d) => ({ d, n: l.nodes.find((x) => x.id === d.id)! }));
+        for (const { d, n } of placed) {
+          expect(n.y, d.name).toBeGreaterThan(ap.y + 100);
+          const link = l.links.find((x) => x.to === d.id)!;
+          expect(link.from).toBe(apId);
+          if (d.via?.kind === "wifi") expect(link.medium).toBe(medium);
         }
+        // Inside a Wi-Fi cluster, reading order goes from the strongest signal down.
+        const order = placed.sort((a, b) => a.n.y - b.n.y || a.n.x - b.n.x).map((p) => p.d.via?.signal ?? -99);
+        if (medium !== "wired") expect([...order].sort((a, b) => b - a)).toEqual(order);
+        spans.push([Math.min(...placed.map((p) => p.n.x)), Math.max(...placed.map((p) => p.n.x))]);
       }
-      // Reading order (row by row, left to right): wired, then Wi-Fi from strongest to weakest.
-      const order = placed.sort((a, b) => a.n.y - b.n.y || a.n.x - b.n.x).map((p) => p.d);
-      const firstWifi = order.findIndex((d) => d.via?.kind === "wifi");
-      expect(order.slice(firstWifi).every((d) => d.via?.kind === "wifi")).toBe(true);
-      const signals = order.slice(firstWifi).map((d) => d.via?.signal ?? -99);
-      expect([...signals].sort((a, b) => b - a)).toEqual(signals);
+      // Clusters sit side by side, never interleaved.
+      spans.sort((a, b) => a[0] - b[0]);
+      for (let k = 1; k < spans.length; k++) expect(spans[k]![0]).toBeGreaterThan(spans[k - 1]![1] + 100);
     }
   });
 

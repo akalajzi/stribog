@@ -280,7 +280,7 @@ export function GatewayArt({ ports, portX, model }: { ports: Port[]; portX: Reco
   );
 }
 
-/** 16 px line glyphs for lists and orbit badges. */
+/** 16 px line glyphs for lists. */
 export function Glyph({ kind, size = 16, color = "currentColor" }: { kind: string; size?: number; color?: string }) {
   const p = { fill: "none", stroke: color, strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   const body = (() => {

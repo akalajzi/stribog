@@ -5,7 +5,7 @@ A calm, honest control room for MikroTik home networks.
 Stribog signs in to a RouterOS router with the same user and password as WinBox or WebFig (or reads `/export` files) and shows you:
 
 - **Review**: how the network is set up, what is solid, what is fragile, and exactly what to change. Every finding explains why it matters in plain words and, where the fix is on the router, gives a RouterOS script to review.
-- **Topology**: a tidy map with drawings of the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit in rows under it, strongest signal first.
+- **Topology**: a tidy map with drawings of the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), each with its own line in that colour, strongest signal first.
 - **Wi-Fi**: networks, a channel map per band (including where a planned access point would have to go), and every client on a signal scale.
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
 - **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.

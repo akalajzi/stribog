@@ -111,9 +111,16 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
             </g>
           ))}
 
-          {layout.buses.map((b) => (
-            <path key={b.id} d={b.d} fill="none" stroke="var(--tx-3)" strokeOpacity={dim(b.from) ? 0.15 : 0.55} strokeWidth={1.4} strokeDasharray={b.wifi ? "7 6" : undefined} strokeLinejoin="round" />
-          ))}
+          {layout.buses.map((b) => {
+            const c = mediumColor(b.medium);
+            const wifi = b.medium.startsWith("wifi");
+            return (
+              <g key={b.id} opacity={dim(b.from) ? 0.25 : 1}>
+                <path d={b.d} fill="none" stroke={c} strokeWidth={wifi ? 2.2 : 2.8} strokeOpacity={0.95} strokeDasharray={wifi ? "8 6" : undefined} strokeLinejoin="round" strokeLinecap="round" />
+                <text x={b.labelAt.x} y={b.labelAt.y} fontSize={11} fontWeight={600} fill={c}>{b.label}</text>
+              </g>
+            );
+          })}
 
           {layout.links.map((l) => {
             const c = mediumColor(l.medium);
@@ -128,7 +135,7 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
             return (
               <g key={l.id} opacity={faded ? 0.25 : 1}>
                 {cable && <path d={l.d} fill="none" stroke={c} strokeWidth={width + 3} opacity={l.medium === "2.5g" ? 0.5 : 0.28} filter="url(#soft)" />}
-                <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.85 : 0.4) : 1} strokeWidth={wifi ? 1.8 : dashed ? 1.6 : width} strokeDasharray={dashed} strokeLinecap="round" />
+                <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.95 : 0.45) : 1} strokeWidth={wifi ? 2.2 : dashed ? 1.6 : width} strokeDasharray={wifi ? "8 6" : dashed} strokeLinecap="round" />
                 {alive &&
                   [0, 1, 2].slice(0, l.weight > 0.6 ? 3 : 2).map((k) => (
                     <circle key={k} r={2.3} fill="var(--tx-1)" opacity={0.9}>
