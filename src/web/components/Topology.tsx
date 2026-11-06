@@ -268,8 +268,10 @@ function SevDot({ sev, x, y }: { sev?: Severity; x: number; y: number }) {
   return <circle cx={x} cy={y} r={3.5} fill={c} stroke="var(--ink-0)" strokeWidth={2} />;
 }
 
-function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string[]; sev?: Severity }) {
+function Labels({ n, name: full, lines, sev }: { n: LNode; name: string; lines: string[]; sev?: Severity }) {
   const [l1, l2] = lines;
+  // Keep neighbours apart; the full name is in the inspector and the tooltip.
+  const name = n.label === "below" && full.length > 24 ? `${full.slice(0, 22).trimEnd()}…` : full;
   if (n.label === "left") {
     const x = -GATEWAY_W / 2 - 18;
     return (

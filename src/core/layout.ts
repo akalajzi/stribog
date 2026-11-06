@@ -42,7 +42,7 @@ export interface LZone {
   sub?: string;
 }
 
-/** One cluster's line under a device: from the device to a comb over the cluster's rows. */
+/** One cluster's line under a device: a curve down to the cluster's centre, then a branch over each row. */
 export interface LBus {
   id: string;
   from: string;
@@ -68,9 +68,8 @@ const NODE_W = 190;
 const UPSTREAM_COL_W = 178;
 /** The node that stands for every device seen only on the ISP router's network. */
 export const UPSTREAM_GROUP = "upstream:others";
-/** Devices behind one device: columns per cluster row, cell width, row height, gap between clusters. */
-const KID_COLS = 3;
-const KID_W = 168;
+/** Devices behind one device: cell width, row height, gap between clusters. */
+const KID_W = 188;
 const KID_ROW_H = 178;
 const CLUSTER_GAP = 44;
 
@@ -139,7 +138,10 @@ export function layoutTopology(m: NetworkModel): Layout {
       .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
       .map(([medium, ks]) => ({ medium, kids: medium === "wired" ? ks : [...ks].sort((a, b) => (b.via?.signal ?? -99) - (a.via?.signal ?? -99)) }));
   };
-  const clusterW = (n: number) => Math.min(n, KID_COLS) * KID_W + 20;
+  // Up to three side by side; more go four to a row, so the centre line runs through the gap
+  // between the middle two and only the last (possibly odd) row sits under its end.
+  const colsFor = (n: number) => (n <= 3 ? n : 4);
+  const clusterW = (n: number) => colsFor(n) * KID_W;
   const widthOf = (s: Slot) => {
     if (s.kind !== "device") return NODE_W;
     const cs = clustersOf(s.dev.id);
@@ -176,9 +178,9 @@ export function layoutTopology(m: NetworkModel): Layout {
       weight: s.kind === "ghost" ? 0 : medium === "2.5g" ? 0.9 : 0.5,
     });
 
-    // Devices behind this one: clusters side by side, each a comb in its medium's colour. The line
-    // leaves below the device's label, runs down the cluster's left edge, and branches over each
-    // row; each device's own link is the drop from its branch.
+    // Devices behind this one: clusters side by side, each a small tree in its medium's colour.
+    // A curve leaves below the device's label and comes down into the cluster's centre; a branch
+    // runs over each row; each device's own link is the drop from its branch.
     if (!clusters.length) return;
     const lineTop = y + 96;
     const rowY = (r: number) => y + 250 + r * KID_ROW_H;
@@ -187,19 +189,18 @@ export function layoutTopology(m: NetworkModel): Layout {
     let left = x - total / 2;
     for (const c of clusters) {
       const w = clusterW(c.kids.length);
-      const firstX = left + 20 + KID_W / 2;
-      // A lone device gets the line straight down to it; a cluster gets a comb along its left edge.
-      const trunkX = c.kids.length === 1 ? firstX : left + 6;
-      const rows = Math.ceil(c.kids.length / KID_COLS);
-      const comb: string[] = [`M ${round(x)} ${round(lineTop)} C ${round(x)} ${round(lineTop + 50)}, ${round(trunkX)} ${round(lineTop + 20)}, ${round(trunkX)} ${round(lineTop + 70)} V ${round(branchY(rows - 1))}`];
+      const cols = colsFor(c.kids.length);
+      const mid = left + w / 2;
+      const rows = Math.ceil(c.kids.length / cols);
+      const tree: string[] = [`${vcurve(x, lineTop, mid, branchY(0))}${rows > 1 ? ` V ${round(branchY(rows - 1))}` : ""}`];
       for (let r = 0; r < rows; r++) {
-        const inRow = c.kids.slice(r * KID_COLS, (r + 1) * KID_COLS);
-        comb.push(`M ${round(trunkX)} ${round(branchY(r))} H ${round(firstX + (inRow.length - 1) * KID_W)}`);
+        const inRow = c.kids.slice(r * cols, (r + 1) * cols);
+        const xs = inRow.map((_, j) => mid + (j - (inRow.length - 1) / 2) * KID_W);
+        if (inRow.length > 1) tree.push(`M ${round(xs[0]!)} ${round(branchY(r))} H ${round(xs.at(-1)!)}`);
         inRow.forEach((d, j) => {
-          const cx = firstX + j * KID_W;
+          const cx = xs[j]!;
           const cy = rowY(r);
           nodes.push({ id: d.id, x: cx, y: cy, kind: d.kind, label: "below" });
-          const wifi = d.via?.kind === "wifi";
           links.push({
             id: `l:${d.id}`,
             from: id,
@@ -207,7 +208,7 @@ export function layoutTopology(m: NetworkModel): Layout {
             d: `M ${round(cx)} ${round(branchY(r))} V ${round(cy - 40)}`,
             medium: mediumOf(d),
             // The cluster's label says the medium; a lone cable also names its port there.
-            label: wifi || c.kids.length === 1 ? undefined : (d.via?.port ?? ""),
+            label: d.via?.kind === "wifi" || c.kids.length === 1 ? undefined : (d.via?.port ?? ""),
             labelAt: { x: cx + 7, y: branchY(r) + 20, anchor: "start" },
             weight: 0.5,
           });
@@ -215,7 +216,7 @@ export function layoutTopology(m: NetworkModel): Layout {
       }
       const port = c.kids.length === 1 ? c.kids[0]!.via?.port : undefined;
       const label = c.medium === "wired" ? `Cable · ${port ?? c.kids.length}` : `${c.medium.replace("wifi-", "")} GHz Wi-Fi · ${c.kids.length}`;
-      buses.push({ id: `bus:${id}:${c.medium}`, from: id, d: comb.join(" "), medium: c.medium === "wired" ? mediumOf(c.kids[0]!) : c.medium, label, labelAt: { x: trunkX + 10, y: lineTop + (c.kids.length === 1 ? 92 : 62) } });
+      buses.push({ id: `bus:${id}:${c.medium}`, from: id, d: tree.join(" "), medium: c.medium === "wired" ? mediumOf(c.kids[0]!) : c.medium, label, labelAt: { x: left + 6, y: branchY(0) - 12 } });
       left += w + CLUSTER_GAP;
     }
   });

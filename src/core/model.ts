@@ -572,7 +572,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
     if (!conf?.ssid) return undefined;
     const sec = secProfiles.find((s) => s.name === conf.security);
     const ch = chanProfiles.find((c) => c.name === conf.channel);
-    const band = bandFromRos(ch?.band) ?? (/(2g|2ghz|24)/i.test(conf.name ?? "") ? "2.4" : /(5g|5ghz)/i.test(conf.name ?? "") ? "5" : undefined);
+    // The channel profile or the configuration's own channel band; a name like "home-2g" is the last resort.
+    const band = bandFromRos(ch?.band ?? conf["channel.band"]) ?? (/(2g|2ghz|24)/i.test(conf.name ?? "") ? "2.4" : /(5g|5ghz)/i.test(conf.name ?? "") ? "5" : undefined);
     let s = ssids.get(conf.ssid);
     if (!s) {
       s = {
@@ -616,7 +617,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
       ? menu(capSnap.config, "/interface/wifi").find((x) => (x._notes ?? "").includes("channel:") && guessBandFromNote(x._notes) === s?.band)?._notes
       : undefined;
     const current = parseChannelStatus(live?.channel ?? capNote?.match(/channel:\s*(\S+)/)?.[1]);
-    const band = s?.band ?? current?.band ?? "5";
+    // What the router says about this radio first (REST puts the channel band on the interface).
+    const band = bandFromRos(w["channel.band"]) ?? current?.band ?? s?.band ?? "5";
     const radio: Radio = {
       id: w.name ?? "",
       apId,
@@ -630,7 +632,12 @@ export function buildModel(snap: Snapshot): NetworkModel {
       clients: 0,
     };
     radios.push(radio);
-    for (const x of [s, ...slaveSsids]) if (x && !x.ssid.aps.includes(apId)) x.ssid.aps.push(apId);
+    for (const x of [s, ...slaveSsids]) {
+      if (!x) continue;
+      if (!x.ssid.aps.includes(apId)) x.ssid.aps.push(apId);
+      // An SSID is on every band of the radios that carry it, whatever its configuration is called.
+      if (!x.ssid.bands.includes(band)) x.ssid.bands.push(band);
+    }
   }
   for (const s of ssids.values()) if (s.network) networks.find((n) => n.id === s.network)?.ssids.push(s.name);
 
@@ -736,7 +743,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
       d.via = {
         kind: "wifi",
         ssid: ssidName,
-        band: radio?.band ?? bandFromRos(reg.band),
+        band: bandFromRos(reg.band) ?? radio?.band,
         signal: parseSignal(reg.signal ?? reg["signal-strength"]),
         txRate: wifiRate(reg["tx-rate"]),
         rxRate: wifiRate(reg["rx-rate"]),

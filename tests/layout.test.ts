@@ -219,3 +219,46 @@ add interface=wan-br
     expect(m.devices.filter((d) => d.zone === "upstream" && d.status === "online" && d.id !== "upstream")).toHaveLength(2);
   });
 });
+
+describe("layout: a busy access point", () => {
+  // One CAP with nine 5 GHz clients and two on 2.4 GHz, read the way REST reports it.
+  const AP = "00:00:5E:00:53:C0";
+  const reg = (i: number, iface: string, band: string) => ({ interface: iface, "mac-address": `00:00:5E:00:53:${(0x80 + i).toString(16).toUpperCase()}`, band, signal: String(-40 - i * 3) });
+  const m = buildModel({
+    collectedAt: "x",
+    devices: [
+      {
+        role: "router",
+        config: {
+          meta: {},
+          menus: {
+            "/interface/wifi/configuration": [{ name: "c5", ssid: "Maple" }, { name: "c2", ssid: "Maple" }],
+            "/interface/wifi": [
+              { name: "cap-wifi1", master: "true", cap: `cap-den@${AP}%*e`, configuration: "c5", "channel.band": "5ghz-ax" },
+              { name: "cap-wifi2", master: "true", cap: `cap-den@${AP}%*e`, configuration: "c2", "channel.band": "2ghz-ax" },
+            ],
+          },
+        },
+        state: {
+          "/interface/wifi/capsman/remote-cap": [{ address: `${AP}%bridge`, "base-mac": AP, identity: "cap-den", state: "Ok" }],
+          "/interface/wifi/registration-table": [...Array.from({ length: 9 }, (_, i) => reg(i, "cap-wifi1", "5ghz-ax")), reg(9, "cap-wifi2", "2ghz-ax"), reg(10, "cap-wifi2", "2ghz-ax")],
+        },
+        sources: [],
+      },
+    ],
+  });
+  const l = layoutTopology(m);
+
+  it("draws one tree per band whose centre line runs between devices, never through one", () => {
+    checkSane(m, l);
+    const buses = l.buses.filter((b) => b.from === `mac:${AP}`);
+    expect(buses.map((b) => b.label).sort()).toEqual(["2.4 GHz Wi-Fi · 2", "5 GHz Wi-Fi · 9"]);
+    const five = m.devices.filter((d) => d.via?.band === "5").map((d) => l.nodes.find((n) => n.id === d.id)!);
+    const rows = [...new Set(five.map((n) => n.y))].sort((a, b) => a - b);
+    expect(rows).toHaveLength(3);
+    const firstRow = five.filter((n) => n.y === rows[0]);
+    const centre = (Math.min(...firstRow.map((n) => n.x)) + Math.max(...firstRow.map((n) => n.x))) / 2;
+    // Every row but the last is crossed by the centre line; none of its devices may sit on it.
+    for (const n of five.filter((x) => x.y !== rows.at(-1))) expect(Math.abs(n.x - centre)).toBeGreaterThan(60);
+  });
+});
