@@ -63,6 +63,9 @@ export const GATEWAY_W = 236;
 export const GATEWAY_H = 62;
 const ROW = { internet: 0, upstream: 170, gateway: 380, tier1: 640 };
 const NODE_W = 190;
+const LEGACY_COLS = 6;
+const LEGACY_COL_W = 160;
+const LEGACY_ROW_H = 105;
 const ORBIT_MIN = 72;
 const ORBIT_MAX = 176;
 
@@ -93,9 +96,17 @@ export function layoutTopology(m: NetworkModel): Layout {
   const upstream = byId.get("upstream");
   const children = (id: string) => m.devices.filter((d) => d.parent === id);
 
+  // The ISP router's own network sits in a grid beside it; more than two rows push the rest down.
+  const legacy = m.devices
+    .filter((d) => d.zone === "upstream" && d.id !== "upstream" && d.mac)
+    .sort((a, b) => rankLegacy(a) - rankLegacy(b) || ipNum(a.ip) - ipNum(b.ip));
+  const gridRows = Math.ceil(legacy.length / LEGACY_COLS);
+  const shift = Math.max(0, gridRows - 2) * LEGACY_ROW_H;
+
   // Gateway and its port x positions (ports sit on the front panel of the drawing).
   const gx = 0;
-  const gy = ROW.gateway;
+  const gy = ROW.gateway + shift;
+  const t1 = ROW.tier1 + shift;
   const portX: Record<string, number> = {};
   const ports = m.ports;
   const left = gx - GATEWAY_W / 2;
@@ -135,7 +146,7 @@ export function layoutTopology(m: NetworkModel): Layout {
     const id = s.kind === "device" ? s.dev.id : s.id;
     const isAp = s.kind === "device" ? s.dev.kind === "ap" : s.deviceKind === "ap";
     const wifiKids = s.kind === "device" ? children(s.dev.id).filter((c) => c.via?.kind === "wifi") : [];
-    const y = ROW.tier1 + (wifiKids.length ? 60 : 0);
+    const y = t1 + (wifiKids.length ? 60 : 0);
     nodes.push({ id, x, y, kind: s.kind === "device" ? s.dev.kind : s.deviceKind, label: isAp && wifiKids.length ? "pill" : "below", ghost: s.kind === "ghost" });
 
     const port = ports.find((p) => p.name === s.port);
@@ -213,23 +224,25 @@ export function layoutTopology(m: NetworkModel): Layout {
   }
 
   // ---- upstream zone: the ISP router's own network ------------------------------
-  const legacy = m.devices.filter((d) => d.zone === "upstream" && d.id !== "upstream" && d.mac);
+  // Devices there are not behind this router; they share the zone with the ISP router, so they
+  // get no link of their own unless they hang off one of this router's WAN-side ports.
   if (upstream || legacy.length) {
-    const colW = 168;
+    const y0 = gridRows > 1 ? ROW.upstream - 50 : ROW.upstream + 10;
     legacy.forEach((d, k) => {
-      const x = gx - 250 - k * colW;
-      const y = ROW.upstream + 10;
+      const x = gx - 250 - (k % LEGACY_COLS) * LEGACY_COL_W;
+      const y = y0 + Math.floor(k / LEGACY_COLS) * LEGACY_ROW_H;
       nodes.push({ id: d.id, x, y, kind: d.kind, label: "below" });
-      const viaRouterPort = d.parent === router?.id && d.via?.port;
-      if (viaRouterPort) {
-        const px = portX[d.via!.port!] ?? gx;
-        links.push({ id: `l:${d.id}`, from: router!.id, to: d.id, d: `M ${px} ${gy - GATEWAY_H / 2 - 4} C ${px} ${gy - 120}, ${x} ${y + 150}, ${x} ${y + 76}`, medium: "legacy", label: d.via!.port, labelAt: { x: (px + x) / 2 - 6, y: gy - 92, anchor: "end" }, weight: 0.2 });
-      } else {
-        links.push({ id: `l:${d.id}`, from: "upstream", to: d.id, d: `M ${gx - 40} ${ROW.upstream} C ${gx - 120} ${ROW.upstream}, ${x + 90} ${y - 50}, ${x + 30} ${y - 26}`, medium: d.kind === "printer" || d.kind === "phone" || d.kind === "laptop" ? "wifi-2.4" : "legacy", weight: 0.15 });
+      if (router && d.parent === router.id && d.via?.port) {
+        const px = portX[d.via.port] ?? gx;
+        links.push({ id: `l:${d.id}`, from: router.id, to: d.id, d: `M ${px} ${gy - GATEWAY_H / 2 - 4} C ${px} ${gy - 120}, ${x} ${y + 150}, ${x} ${y + 76}`, medium: "legacy", label: d.via.port, labelAt: { x: (px + x) / 2 - 6, y: gy - 92, anchor: "end" }, weight: 0.2 });
       }
     });
-    const minX = legacy.length ? gx - 250 - (legacy.length - 1) * colW - colW / 2 - 10 : gx - 140;
-    zones.push({ x: minX, y: ROW.upstream - 92, w: gx + 210 - minX, h: 240, title: "Upstream", sub: m.wan.gateway ? `${m.wan.gateway.replace(/\.\d+$/, ".0/24")} · ${upstream?.name ?? "ISP router"}` : upstream?.name });
+    const cols = Math.min(LEGACY_COLS, legacy.length);
+    const minX = legacy.length ? gx - 250 - (cols - 1) * LEGACY_COL_W - LEGACY_COL_W / 2 - 10 : gx - 140;
+    const top = ROW.upstream - 92;
+    const bottom = Math.max(ROW.upstream + 148, y0 + (gridRows - 1) * LEGACY_ROW_H + 78);
+    const sub = [m.wan.gateway ? `${m.wan.gateway.replace(/\.\d+$/, ".0/24")}` : "", upstream?.name ?? "ISP router", legacy.length ? `${legacy.length} device${legacy.length === 1 ? "" : "s"} not behind this router` : ""].filter(Boolean).join(" · ");
+    zones.push({ x: minX, y: top, w: gx + 210 - minX, h: bottom - top, title: "Upstream", sub });
   }
 
   // ---- bounds -----------------------------------------------------------------------
@@ -242,6 +255,14 @@ export function layoutTopology(m: NetworkModel): Layout {
   const y1 = Math.max(...ys) + 120;
   return { nodes, links, orbits, zones, bounds: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, portX };
 }
+
+/** Named and online devices first, so the grid reads like a list. */
+function rankLegacy(d: Device): number {
+  const named = d.nameSource !== "mac" && d.nameSource !== "vendor" ? 0 : 2;
+  return named + (d.status === "online" ? 0 : 1);
+}
+
+const ipNum = (ip?: string) => (ip ? ip.split(".").reduce((n, o) => n * 256 + Number(o), 0) : Infinity);
 
 function vcurve(x1: number, y1: number, x2: number, y2: number): string {
   const my = (y1 + y2) / 2;
