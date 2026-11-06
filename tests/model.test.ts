@@ -357,3 +357,10 @@ it("shows REST Wi-Fi rates (bits per second) the way exports print them", () => 
   });
   expect(mm.devices.find((d) => d.mac === "00:00:5E:00:53:71")!.via).toMatchObject({ txRate: "480.4Mbps", rxRate: "720.6Mbps" });
 });
+
+it("reads traffic now: per router port from monitor-traffic, per Wi-Fi client from the registration table", () => {
+  const p = m.ports.find((x) => x.name === "ether2")!;
+  expect(p).toMatchObject({ rxBps: 210_000_000, txBps: 3_100_000 });
+  expect(byMac("00:00:5E:00:53:70")!.via).toMatchObject({ downBps: 38_400_000, upBps: 1_900_000 });
+  expect(byMac("00:00:5E:00:53:72")?.via?.downBps).toBe(0);
+});

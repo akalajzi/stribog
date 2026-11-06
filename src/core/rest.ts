@@ -227,6 +227,22 @@ export class RouterOsRest {
     return [];
   }
 
+  /**
+   * Current throughput of the given interfaces: `/interface monitor-traffic … once`. Read-only.
+   * Rows are tagged with the interface name.
+   */
+  async monitorTraffic(names: string[]) {
+    if (!names.length) return [];
+    const path = "/interface/monitor-traffic";
+    let rows: RosRecord[] = [];
+    for (const once of ["", "true"]) {
+      rows = await this.call("POST", path, { interface: names.join(","), once });
+      if (rows.length) break;
+    }
+    if (rows.length) delete this.errors[`POST ${path}`];
+    return rows.map((r, i) => ({ ...r, name: r.name ?? names[i]! }));
+  }
+
   async snapshot(): Promise<DeviceSnapshot> {
     // Fail loudly on a bad login instead of returning an empty network.
     const resource = await this.get("/system/resource");
@@ -248,14 +264,16 @@ export class RouterOsRest {
     const wifi = (menus["/interface/wifi"] ?? []).filter((w) => !w["master-interface"]);
     // PoE ports have their own menu and ids; routers without PoE have none.
     const poePorts = menus["/interface/ethernet/poe"] ?? [];
-    const [mon, poe, wmon] = await Promise.all([
+    const [mon, poe, wmon, traffic] = await Promise.all([
       this.monitor("/interface/ethernet", ether).catch(failed("POST /interface/ethernet/monitor")),
       this.monitor("/interface/ethernet/poe", poePorts).catch(failed("POST /interface/ethernet/poe/monitor")),
       this.monitor("/interface/wifi", wifi).catch(failed("POST /interface/wifi/monitor")),
+      this.monitorTraffic(ether.map((e) => e.name ?? "").filter(Boolean)).catch(failed("POST /interface/monitor-traffic")),
     ]);
     state["/interface/ethernet/monitor"] = mon;
     state["/interface/ethernet/poe/monitor"] = poe;
     state["/interface/wifi/monitor"] = wmon;
+    state["/interface/monitor-traffic"] = traffic;
     state["/system/resource"] = resource;
     const res = state["/system/resource"]?.[0];
     const at = new Date().toISOString();

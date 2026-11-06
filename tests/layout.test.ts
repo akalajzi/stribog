@@ -129,7 +129,8 @@ describe("layout: demo network", () => {
   it("labels links with port, speed and PoE", () => {
     expect(l.links.find((x) => x.to === "mac:00:00:5E:00:53:A0")!.label).toBe("ether7 · 1G · PoE 6.8 W");
     expect(l.links.find((x) => x.to === "mac:00:00:5E:00:53:30")).toMatchObject({ label: "ether4 · 100M", medium: "100m" });
-    expect(l.links.find((x) => x.to === "planned:garden-ap")).toMatchObject({ medium: "planned", weight: 0 });
+    expect(l.links.find((x) => x.to === "planned:garden-ap")).toMatchObject({ medium: "planned" });
+    expect(l.links.find((x) => x.to === "planned:garden-ap")!.down).toBeUndefined();
   });
 });
 
@@ -260,5 +261,27 @@ describe("layout: a busy access point", () => {
     const centre = (Math.min(...firstRow.map((n) => n.x)) + Math.max(...firstRow.map((n) => n.x))) / 2;
     // Every row but the last is crossed by the centre line; none of its devices may sit on it.
     for (const n of five.filter((x) => x.y !== rows.at(-1))) expect(Math.abs(n.x - centre)).toBeGreaterThan(60);
+  });
+});
+
+describe("layout: traffic", () => {
+  const { config, base } = readConfig(DEMO);
+  const m = buildModel(snapshotFromFiles(config, base));
+  const l = layoutTopology(m);
+  it("carries traffic on links: down is towards the device, and the WAN link counts what comes in", () => {
+    const wan = m.ports.find((p) => p.name === m.devices.find((d) => d.id === m.routerId)!.via!.port)!;
+    expect(l.links.find((x) => x.id === `l:${m.routerId}`)).toMatchObject({ down: wan.rxBps, up: wan.txBps });
+    const nas = m.devices.find((d) => d.mac === "00:00:5E:00:53:10")!;
+    const port = m.ports.find((p) => p.name === nas.via!.port)!;
+    expect(l.links.find((x) => x.to === nas.id)).toMatchObject({ down: port.txBps, up: port.rxBps });
+    const laptop = m.devices.find((d) => d.mac === "00:00:5E:00:53:70")!;
+    expect(l.links.find((x) => x.to === laptop.id)).toMatchObject({ down: 38_400_000, up: 1_900_000 });
+  });
+  it("sums a cluster's Wi-Fi traffic onto its line", () => {
+    const laptop = m.devices.find((d) => d.mac === "00:00:5E:00:53:70")!;
+    const bus = l.buses.find((b) => b.from === laptop.parent && b.medium === "wifi-5")!;
+    const kids = m.devices.filter((d) => d.parent === laptop.parent && d.via?.band === "5");
+    expect(bus.down).toBe(kids.reduce((t, d) => t + (d.via?.downBps ?? 0), 0));
+    expect(bus.trunk).toMatch(/^M /);
   });
 });

@@ -4,6 +4,7 @@ import { bandColor, Glyph } from "./DeviceArt.tsx";
 import { SEV_VAR } from "./FindingCard.tsx";
 import { DeviceAbout, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
 import { UPSTREAM_GROUP } from "../../core/layout.ts";
+import { fmtBps } from "../../core/net.ts";
 
 export function SignalBars({ dbm }: { dbm?: number }) {
   const n = dbm === undefined ? 0 : dbm >= -55 ? 4 : dbm >= -62 ? 3 : dbm >= -70 ? 2 : 1;
@@ -44,6 +45,14 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
   const port = d.via?.kind === "port" && d.parent === model.routerId ? model.ports.find((p) => p.name === d.via?.port) : undefined;
   const radios = model.radios.filter((r) => r.apId === d.id);
   const net = model.networks.find((n) => n.id === d.network);
+  // Traffic now: Wi-Fi from the registration table; a device on a router port from that port
+  // (tx towards it); the router itself from its WAN port (rx is what comes in from the internet).
+  const wanPort = d.id === model.routerId ? model.ports.find((p) => p.name === d.via?.port) : undefined;
+  const traffic =
+    d.via?.kind === "wifi" ? { down: d.via.downBps, up: d.via.upBps, where: "on Wi-Fi" }
+    : port ? { down: port.txBps, up: port.rxBps, where: `on ${port.name}` }
+    : wanPort ? { down: wanPort.rxBps, up: wanPort.txBps, where: `internet, on ${wanPort.name}` }
+    : undefined;
 
   return (
     <aside className="side">
@@ -108,7 +117,13 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
               <span className="tx mono">{port.speedMbps ? `${port.speedMbps >= 1000 ? port.speedMbps / 1000 + " Gbps" : port.speedMbps + " Mbps"}` : port.running === false ? "no link" : "?"}{port.poeWatts ? ` · PoE ${port.poeVolts} V ${port.poeWatts} W` : ""}</span>
             </>
           )}
-          {d.via?.kind === "wifi" && d.via.rxRate && <><span>Rates</span><span className="tx mono">tx {d.via.txRate} · rx {d.via.rxRate}</span></>}
+          {d.via?.kind === "wifi" && d.via.rxRate && <><span>Link rates</span><span className="tx mono">tx {d.via.txRate} · rx {d.via.rxRate}</span></>}
+          {traffic && (traffic.down !== undefined || traffic.up !== undefined) && (
+            <>
+              <span>Traffic now</span>
+              <span className="tx mono">↓ {fmtBps(traffic.down ?? 0)} · ↑ {fmtBps(traffic.up ?? 0)}<span className="faint"> {traffic.where}</span></span>
+            </>
+          )}
           {d.only24 && d.via?.band === "2.4" && <><span>Radio</span><span className="tx">2.4 GHz only (by design)</span></>}
         </div>
       </div>

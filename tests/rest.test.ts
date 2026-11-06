@@ -56,6 +56,11 @@ const ROUTES: Record<string, unknown> = {
   ],
   "POST /interface/ethernet/poe/monitor": [{ "poe-out-status": "disabled" }, { "poe-out-status": "powered-on", "poe-out-power": "6.8" }],
   "POST /interface/wifi/monitor": [{ channel: "2412/ax" }],
+  "POST /interface/monitor-traffic": [
+    { name: "ether1", "rx-bits-per-second": "48000000", "tx-bits-per-second": "2100000" },
+    { name: "ether2", "rx-bits-per-second": "0", "tx-bits-per-second": "0" },
+    { name: "sfp-sfpplus1", "rx-bits-per-second": "0", "tx-bits-per-second": "0" },
+  ],
   "GET /ppp/secret": [{ name: "x", password: "nope" }],
 };
 
@@ -72,7 +77,7 @@ describe("RouterOsRest", () => {
     // Nothing but GET and the read-only monitor commands.
     for (const c of calls.filter((x) => x.method !== "GET")) {
       expect(c.method).toBe("POST");
-      expect(c.path).toMatch(/\/monitor$/);
+      expect(c.path).toMatch(/\/monitor(-traffic)?$/);
     }
   });
 
@@ -122,6 +127,13 @@ describe("RouterOsRest", () => {
     // Failures are kept with the reason; menus this model simply lacks (404 on GET) are not.
     expect(snap.readErrors!["GET /ip/firewall/filter"]).toMatch(/HTTP 500/);
     expect(snap.readErrors!["GET /interface/pppoe-client"]).toBeUndefined();
+  });
+
+  it("reads every port's current throughput once, by name", async () => {
+    const { calls, fetchImpl } = fakeRouter(ROUTES);
+    const snap = await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl }).snapshot();
+    expect(calls.find((c) => c.path === "/interface/monitor-traffic")?.body).toEqual({ interface: "ether1,ether2,sfp-sfpplus1", once: "" });
+    expect(snap.state!["/interface/monitor-traffic"]![0]).toMatchObject({ name: "ether1", "rx-bits-per-second": "48000000" });
   });
 
   it("falls back to `numbers` when a router refuses `.id`, and remembers it", async () => {

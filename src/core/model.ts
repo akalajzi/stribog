@@ -48,6 +48,9 @@ export interface Connection {
   signal?: number;
   txRate?: string;
   rxRate?: string;
+  /** Current throughput towards the device and from it, bits per second (Wi-Fi: from the registration table). */
+  downBps?: number;
+  upBps?: number;
   radio?: string;
   certainty: Certainty;
 }
@@ -94,6 +97,9 @@ export interface Port {
   poeWatts?: number;
   poeVolts?: number;
   speedMbps?: number;
+  /** Current throughput, bits per second, as the router port sees it: rx is from the device, tx towards it. */
+  rxBps?: number;
+  txBps?: number;
   running?: boolean;
   hwOffload?: boolean;
   deviceIds: string[];
@@ -473,6 +479,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
   ]);
   const monitor = stateMenu("/interface/ethernet/monitor");
   const poeMon = stateMenu("/interface/ethernet/poe/monitor");
+  const trafficMon = stateMenu("/interface/monitor-traffic");
   const ifState = stateMenu("/interface");
   const ports: Port[] = [...portNames]
     .filter(Boolean)
@@ -483,6 +490,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
       const bp = bridgePorts.find((p) => p.interface === name);
       const mon = monitor.find((m) => m.name === name);
       const poe = poeMon.find((m) => m.name === name);
+      const traffic = trafficMon.find((m) => m.name === name);
       const ifs = ifState.find((i) => i.name === name);
       const bridge = bp?.bridge;
       return {
@@ -496,6 +504,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
         poeWatts: poe?.["poe-out-power"] ? Number(poe["poe-out-power"].replace(/[^\d.]/g, "")) : undefined,
         poeVolts: poe?.["poe-out-voltage"] ? Number(poe["poe-out-voltage"].replace(/[^\d.]/g, "")) : undefined,
         speedMbps: mon?.status === "link-ok" ? rateMbps(mon.rate) : undefined,
+        rxBps: bps(traffic?.["rx-bits-per-second"]),
+        txBps: bps(traffic?.["tx-bits-per-second"]),
         running: mon ? mon.status === "link-ok" : ifs ? isTrue(ifs.running) : undefined,
         hwOffload: bp ? !(bp.hw === "no" || bp.hw === "false") : undefined,
         deviceIds: [],
@@ -747,6 +757,9 @@ export function buildModel(snap: Snapshot): NetworkModel {
         signal: parseSignal(reg.signal ?? reg["signal-strength"]),
         txRate: wifiRate(reg["tx-rate"]),
         rxRate: wifiRate(reg["rx-rate"]),
+        // The access point transmits towards the client.
+        downBps: bps(reg["tx-bits-per-second"]),
+        upBps: bps(reg["rx-bits-per-second"]),
         radio: radio?.id,
         certainty: "read",
       };
@@ -871,6 +884,15 @@ function labelFor(name: string, comment: string | undefined, role: NetworkRole):
   const c = comment?.replace(/\s*\d+\.\d+\.\d+\.\d+\/\d+\s*/, "").trim();
   if (c && c.length <= 24) return c;
   return name.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+/** "48000000", "48Mbps", "1.2Gbps" → bits per second. */
+function bps(v?: string): number | undefined {
+  if (v === undefined || v === "") return undefined;
+  const m = /^([\d.]+)\s*([kMG])?(?:bps)?$/i.exec(v.trim());
+  if (!m) return undefined;
+  const mult = { k: 1e3, m: 1e6, g: 1e9 }[(m[2] ?? "").toLowerCase() as "k" | "m" | "g"] ?? 1;
+  return Number(m[1]) * mult;
 }
 
 /** Wi-Fi rates as "866.7Mbps": exports print them that way, REST gives bits per second. */

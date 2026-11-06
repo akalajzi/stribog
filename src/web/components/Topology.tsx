@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from "react";
 import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
-import { GATEWAY_W } from "../../core/layout.ts";
-import { UPSTREAM_GROUP } from "../../core/layout.ts";
-import { ArtDefs, bandColor, COLORS, DeviceArt, GatewayArt, Glyph, mediumColor } from "./DeviceArt.tsx";
+import { GATEWAY_W, UPSTREAM_GROUP } from "../../core/layout.ts";
+import { fmtBps } from "../../core/net.ts";
+import { ArtDefs, COLORS, DeviceArt, GatewayArt, mediumColor } from "./DeviceArt.tsx";
 
 const SEV_COLOR: Partial<Record<Severity, string>> = { critical: COLORS.bad, warning: COLORS.warn, suggestion: "var(--idea)" };
 const SEV_RANK: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
@@ -117,7 +117,9 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
             return (
               <g key={b.id} opacity={dim(b.from) ? 0.25 : 1}>
                 <path d={b.d} fill="none" stroke={c} strokeWidth={wifi ? 2.2 : 2.8} strokeOpacity={0.95} strokeDasharray={wifi ? "8 6" : undefined} strokeLinejoin="round" strokeLinecap="round" />
-                <text x={b.labelAt.x} y={b.labelAt.y} fontSize={11} fontWeight={600} fill={c}>{b.label}</text>
+                <path id={`${b.id}:trunk`} d={b.trunk} fill="none" stroke="none" />
+                <Flow pathId={`${b.id}:trunk`} down={b.down} up={b.up} color={c} />
+                <text x={b.labelAt.x} y={b.labelAt.y} fontSize={11} fontWeight={600} fill={c}>{[b.label, busy(b)].filter(Boolean).join(" · ")}</text>
               </g>
             );
           })}
@@ -129,24 +131,16 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
             const dashed = l.medium === "planned" ? "2 6" : l.medium === "legacy" ? "2 5" : wifi ? "7 6" : undefined;
             const faded = dim(l.to) && dim(l.from);
             const to = byId.get(l.to);
-            const alive = !dashed && to?.status === "online";
             const width = l.medium === "2.5g" ? 3.4 : l.medium === "wan" ? 2.6 : 2.8;
             const cable = !dashed && l.medium !== "wan";
             return (
               <g key={l.id} opacity={faded ? 0.25 : 1}>
                 {cable && <path d={l.d} fill="none" stroke={c} strokeWidth={width + 3} opacity={l.medium === "2.5g" ? 0.5 : 0.28} filter="url(#soft)" />}
                 <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.95 : 0.45) : 1} strokeWidth={wifi ? 2.2 : dashed ? 1.6 : width} strokeDasharray={wifi ? "8 6" : dashed} strokeLinecap="round" />
-                {alive &&
-                  [0, 1, 2].slice(0, l.weight > 0.6 ? 3 : 2).map((k) => (
-                    <circle key={k} r={2.3} fill="var(--tx-1)" opacity={0.9}>
-                      <animateMotion dur={`${l.weight > 0.6 ? 1.6 : 2.4}s`} begin={`-${k * (l.weight > 0.6 ? 0.55 : 1.2)}s`} repeatCount="indefinite">
-                        <mpath href={`#${l.id}`} />
-                      </animateMotion>
-                    </circle>
-                  ))}
-                {l.label && l.labelAt && (
+                <Flow pathId={l.id} down={l.down} up={l.up} color={c} />
+                {(l.label || busy(l)) && l.labelAt && (
                   <text x={l.labelAt.x} y={l.labelAt.y} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
-                    {l.label}
+                    {[l.label, busy(l)].filter(Boolean).join(" · ")}
                   </text>
                 )}
               </g>
@@ -215,7 +209,7 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
         <span><i style={{ borderColor: COLORS.up, opacity: 0.6 }} />upstream</span>
         <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dotted" }} />upstream side</span>
         {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />planned</span>}
-        <span>· moving dots = link up</span>
+        <span>· moving dots = traffic now: light ones to the device, coloured ones back</span>
       </div>
       <div className="mapctl">
         <button title="Zoom in" onClick={() => zoom(0.8)}>+</button>
@@ -237,6 +231,41 @@ function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
         <animate attributeName="stroke-opacity" values=".3;0" dur="2.4s" repeatCount="indefinite" />
       </circle>
     </g>
+  );
+}
+
+/** How busy a link is, 0 (idle, under 2 kb/s) to 1 (1 Gb/s and up), on a log scale. */
+const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
+
+/** "↓ 48 Mb/s ↑ 2.1 Mb/s" once a link carries at least 1 Mb/s, else nothing. */
+function busy(l: { down?: number; up?: number }): string {
+  if ((l.down ?? 0) + (l.up ?? 0) < 1e6) return "";
+  return [l.down ? `↓ ${fmtBps(l.down)}` : "", l.up ? `↑ ${fmtBps(l.up)}` : ""].filter(Boolean).join(" ");
+}
+
+/**
+ * Traffic now, as moving dots: more of them and faster as throughput grows, none when idle.
+ * Light dots travel away from the router (down), dots in the link's colour come back (up).
+ */
+function Flow({ pathId, down, up, color }: { pathId: string; down?: number; up?: number; color: string }) {
+  const dots = (bps: number | undefined, back: boolean) => {
+    const t = level(bps);
+    if (!t) return null;
+    const n = 1 + Math.round(t * 4);
+    const dur = 3.4 - 2.4 * t;
+    return Array.from({ length: n }, (_, k) => (
+      <circle key={`${back}${k}`} r={back ? 2 : 2.4} fill={back ? color : "var(--tx-1)"} opacity={0.9}>
+        <animateMotion dur={`${dur}s`} begin={`-${(k * dur) / n}s`} repeatCount="indefinite" {...(back ? { keyPoints: "1;0", keyTimes: "0;1", calcMode: "linear" } : {})}>
+          <mpath href={`#${pathId}`} />
+        </animateMotion>
+      </circle>
+    ));
+  };
+  return (
+    <>
+      {dots(down, false)}
+      {dots(up, true)}
+    </>
   );
 }
 

@@ -70,17 +70,28 @@
     { "address": "192.168.50.107", "mac-address": "F2:00:5E:00:53:77", "server": "home-dhcp", "status": "bound", "host-name": "Galaxy-S23", "dynamic": "true" },
     { "address": "192.168.60.101", "mac-address": "7A:00:5E:00:53:73", "server": "guest-dhcp", "status": "bound", "host-name": "guest-laptop", "dynamic": "true" }
   ],
+  "/interface/monitor-traffic": [
+    { "name": "ether1", "rx-bits-per-second": "61200000", "tx-bits-per-second": "4300000" },
+    { "name": "ether2", "rx-bits-per-second": "210000000", "tx-bits-per-second": "3100000" },
+    { "name": "ether3", "rx-bits-per-second": "0", "tx-bits-per-second": "0" },
+    { "name": "ether4", "rx-bits-per-second": "310000", "tx-bits-per-second": "18500000" },
+    { "name": "ether5", "rx-bits-per-second": "0", "tx-bits-per-second": "0" },
+    { "name": "ether6", "rx-bits-per-second": "0", "tx-bits-per-second": "0" },
+    { "name": "ether7", "rx-bits-per-second": "2100000", "tx-bits-per-second": "40100000" },
+    { "name": "ether8", "rx-bits-per-second": "12000", "tx-bits-per-second": "91000" },
+    { "name": "sfp-sfpplus1", "rx-bits-per-second": "0", "tx-bits-per-second": "0" }
+  ],
   "/interface/wifi/registration-table": [
-    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:70", "signal": "-52", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "960.7Mbps", "uptime": "6h12m" },
-    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "5E:00:5E:00:53:71", "signal": "-48", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "1080.6Mbps", "uptime": "2h40m" },
-    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:72", "signal": "-57", "band": "5ghz-ax", "tx-rate": "864.8Mbps", "rx-rate": "720.6Mbps", "uptime": "1d3h" },
-    { "interface": "cap-guest2", "ssid": "Maple Guest", "mac-address": "7A:00:5E:00:53:73", "signal": "-66", "band": "5ghz-ax", "tx-rate": "432.4Mbps", "rx-rate": "288.2Mbps", "uptime": "48m" },
-    { "interface": "cap-wifi1", "ssid": "Maple", "mac-address": "00:00:5E:00:53:40", "signal": "-67", "band": "2ghz-n", "tx-rate": "65Mbps", "rx-rate": "52Mbps", "uptime": "12d6h" },
-    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "9E:00:5E:00:53:74", "signal": "-60", "band": "5ghz-ax", "tx-rate": "720.6Mbps", "rx-rate": "576.5Mbps", "uptime": "5h02m" },
-    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "D6:00:5E:00:53:75", "signal": "-63", "band": "5ghz-ax", "tx-rate": "576.5Mbps", "rx-rate": "432.4Mbps", "uptime": "3h31m" },
-    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "F2:00:5E:00:53:77", "signal": "-76", "band": "5ghz-ax", "tx-rate": "86.6Mbps", "rx-rate": "54Mbps", "uptime": "22m" },
-    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:41", "signal": "-58", "band": "2ghz-n", "tx-rate": "72.2Mbps", "rx-rate": "65Mbps", "uptime": "12d6h" },
-    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:50", "signal": "-62", "band": "2ghz-n", "tx-rate": "65Mbps", "rx-rate": "58.5Mbps", "uptime": "4d11h" },
-    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:76", "signal": "-69", "band": "2ghz-ax", "tx-rate": "103.2Mbps", "rx-rate": "86Mbps", "uptime": "1h15m" }
+    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:70", "signal": "-52", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "960.7Mbps", "uptime": "6h12m", "tx-bits-per-second": "38400000", "rx-bits-per-second": "1900000" },
+    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "5E:00:5E:00:53:71", "signal": "-48", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "1080.6Mbps", "uptime": "2h40m", "tx-bits-per-second": "820000", "rx-bits-per-second": "95000" },
+    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:72", "signal": "-57", "band": "5ghz-ax", "tx-rate": "864.8Mbps", "rx-rate": "720.6Mbps", "uptime": "1d3h", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-guest2", "ssid": "Maple Guest", "mac-address": "7A:00:5E:00:53:73", "signal": "-66", "band": "5ghz-ax", "tx-rate": "432.4Mbps", "rx-rate": "288.2Mbps", "uptime": "48m", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi1", "ssid": "Maple", "mac-address": "00:00:5E:00:53:40", "signal": "-67", "band": "2ghz-n", "tx-rate": "65Mbps", "rx-rate": "52Mbps", "uptime": "12d6h", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "9E:00:5E:00:53:74", "signal": "-60", "band": "5ghz-ax", "tx-rate": "720.6Mbps", "rx-rate": "576.5Mbps", "uptime": "5h02m", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "D6:00:5E:00:53:75", "signal": "-63", "band": "5ghz-ax", "tx-rate": "576.5Mbps", "rx-rate": "432.4Mbps", "uptime": "3h31m", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "F2:00:5E:00:53:77", "signal": "-76", "band": "5ghz-ax", "tx-rate": "86.6Mbps", "rx-rate": "54Mbps", "uptime": "22m", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:41", "signal": "-58", "band": "2ghz-n", "tx-rate": "72.2Mbps", "rx-rate": "65Mbps", "uptime": "12d6h", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:50", "signal": "-62", "band": "2ghz-n", "tx-rate": "65Mbps", "rx-rate": "58.5Mbps", "uptime": "4d11h", "tx-bits-per-second": "0", "rx-bits-per-second": "0" },
+    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:76", "signal": "-69", "band": "2ghz-ax", "tx-rate": "103.2Mbps", "rx-rate": "86Mbps", "uptime": "1h15m", "tx-bits-per-second": "0", "rx-bits-per-second": "0" }
   ]
 }
