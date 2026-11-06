@@ -261,8 +261,10 @@ pre.cli .c { color: var(--tx-3); }
 .home-alert b { display: block; font-weight: 500; }
 .home-alert span .faint { display: block; font-size: 12.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-quiet { padding: 16px; color: var(--tx-2); }
-.home-more { justify-self: start; margin-top: 14px; font-size: 12.5px; color: var(--tx-3); text-decoration: none; }
-.home-more:hover { color: var(--tx-1); }
+.home-review-toggle { width: 100%; padding: 0; background: none; border: 0; cursor: pointer; font-family: inherit; text-align: left; }
+.home-review-toggle:hover { color: var(--tx-1); }
+.home-review-toggle .chev { display: inline-block; width: 8px; font-size: 13px; letter-spacing: 0; }
+.home-review-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .tile { padding: 14px 16px; }
 .tile small { color: var(--tx-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; }

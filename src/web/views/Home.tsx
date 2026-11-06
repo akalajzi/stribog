@@ -1,10 +1,12 @@
-import type { NetworkPayload, Severity } from "../api.ts";
+import { useEffect, useState } from "react";
+import type { Finding, NetworkPayload, Severity } from "../api.ts";
 import { STATUS_LABEL } from "../../core/analyze.ts";
 import { fmtBps } from "../../core/net.ts";
 import { SEV_VAR } from "../components/FindingCard.tsx";
+import { Review } from "./Review.tsx";
 
 // The first page: is the network working, and does anything need you. Everything else (ideas,
-// notes, what is good) is on the review page.
+// notes, what is good) is in the review below, folded until asked for.
 
 interface Alert {
   key: string;
@@ -20,8 +22,18 @@ function uptime(v?: string): string | undefined {
   return parts.length ? parts.slice(0, 2).map((m) => `${m[1]} ${m[2]}`).join(" ") : undefined;
 }
 
-export function Home({ data }: { data: NetworkPayload }) {
+export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: string; onShow: (f: Finding) => void }) {
   const { model: m, analysis: a, meta } = data;
+  // The review is folded; opening one finding (from an alert or the map) unfolds it.
+  const [reviewOpen, setReviewOpen] = useState(!!focus);
+  useEffect(() => {
+    if (focus) setReviewOpen(true);
+  }, [focus]);
+  const toggleReview = () => {
+    // Folding forgets the finding, so following the same link again unfolds it again.
+    if (reviewOpen && focus) location.hash = "#/";
+    setReviewOpen(!reviewOpen);
+  };
   const router = m.devices.find((d) => d.id === m.routerId);
   const wanPort = router ? m.ports.find((p) => p.name === router.via?.port) : undefined;
   const people = m.devices.filter((d) => d.mac && !d.managed && d.zone === "lan");
@@ -37,12 +49,14 @@ export function Home({ data }: { data: NetworkPayload }) {
   if (live && !m.wan.address) alerts.push({ key: "wan", severity: "critical", title: "The router has no internet address", detail: `Nothing on ${m.wan.iface ?? "the WAN port"}.`, href: "#/network" });
   for (const ap of aps.filter((d) => live && d.status !== "online")) alerts.push({ key: ap.id, severity: "critical", title: `${ap.name} is offline`, detail: "Wi-Fi from this access point is down.", href: `#/map?d=${encodeURIComponent(ap.id)}` });
   for (const f of a.findings.filter((x) => !x.accepted && (x.severity === "critical" || x.severity === "warning")))
-    alerts.push({ key: f.id, severity: f.severity, title: f.title, detail: f.summary, href: `#/review?f=${encodeURIComponent(f.id)}` });
+    alerts.push({ key: f.id, severity: f.severity, title: f.title, detail: f.summary, href: `#/?f=${encodeURIComponent(f.id)}` });
 
   const internetOk = !live || !!m.wan.address;
   const status = alerts.some((x) => x.severity === "critical") ? "attention" : alerts.length ? "loose-ends" : "healthy";
   const statusColor = status === "attention" ? "var(--bad)" : status === "loose-ends" ? "var(--warn)" : "var(--ok)";
+  const toFix = a.counts.critical + a.counts.warning;
   const rest = [
+    toFix && `${toFix} worth fixing`,
     a.counts.suggestion && `${a.counts.suggestion} idea${a.counts.suggestion === 1 ? "" : "s"}`,
     a.counts.info && `${a.counts.info} note${a.counts.info === 1 ? "" : "s"}`,
     a.counts.pass && `${a.counts.pass} good`,
@@ -113,11 +127,13 @@ export function Home({ data }: { data: NetworkPayload }) {
           <div className="card home-quiet">Nothing needs you right now.</div>
         )}
 
-        {rest.length > 0 && (
-          <a className="home-more" href="#/review">
-            Review: {rest.join(" · ")} ›
-          </a>
-        )}
+        <section className="home-review">
+          <button className="sec-title home-review-toggle" aria-expanded={reviewOpen} onClick={toggleReview}>
+            <span className="chev" aria-hidden>›</span>
+            Review {rest.length ? <em className="faint">{rest.join(" · ")}</em> : null}
+          </button>
+          {reviewOpen && <Review data={data} focus={focus} onShow={onShow} />}
+        </section>
       </div>
     </div>
   );

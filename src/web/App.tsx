@@ -7,7 +7,6 @@ import { DeviceView } from "./views/DeviceView.tsx";
 import { Topology } from "./components/Topology.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { Home } from "./views/Home.tsx";
-import { ReviewView } from "./views/ReviewView.tsx";
 import { WifiView } from "./views/WifiView.tsx";
 import { ClientsView } from "./views/ClientsView.tsx";
 import { NetworkView } from "./views/NetworkView.tsx";
@@ -15,7 +14,6 @@ import { PlanView } from "./views/PlanView.tsx";
 
 const NAV: { path: string; label: string; icon: ReactNode }[] = [
   { path: "/", label: "Home", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11 12 4l8 7" /><path d="M6 9.5V20h12V9.5" /><path d="M10 20v-5h4v5" /></svg> },
-  { path: "/review", label: "Review", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /><path d="m8.5 12 2.5 2.5L20 5.5" /></svg> },
   { path: "/map", label: "Topology", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="5" r="2.2" /><circle cx="5" cy="18" r="2.2" /><circle cx="19" cy="18" r="2.2" /><circle cx="12" cy="13" r="2.2" /><path d="M12 7.2v3.6M10.3 14.5l-3.6 2.2M13.7 14.5l3.6 2.2" /></svg> },
   { path: "/wifi", label: "Wi-Fi", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 9.5a13 13 0 0 1 18 0M6 13a8 8 0 0 1 12 0M9 16.5a3.5 3.5 0 0 1 6 0" /><circle cx="12" cy="19.5" r=".8" fill="currentColor" /></svg> },
   { path: "/clients", label: "Clients", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="13" height="10" rx="1.5" /><rect x="15.5" y="9" width="5.5" height="10" rx="1.3" /><path d="M6 19h7" /></svg> },
@@ -43,6 +41,11 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
   const [path, params, go] = useRoute();
   // Traffic every couple of seconds where it is watched: the map and the home page.
   const fresh = useLiveRates(data, path === "/" || path === "/map");
+  // The review used to be its own page; old links land on the home page, where it is now.
+  useEffect(() => {
+    if (path === "/review") go("/", Object.fromEntries(params));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path]);
   // Notes changed somewhere (a finding accepted, say): the review depends on them.
   useEffect(() => {
     addEventListener("stribog:notes-changed", refetch);
@@ -66,7 +69,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
         {NAV.map((n) => (
           <a key={n.path} href={`#${n.path}`} className={`ri${path === n.path ? " on" : ""}`}>
             {n.icon}
-            {n.path === "/review" && warn > 0 && <span className="badge" />}
+            {n.path === "/" && warn > 0 && <span className="badge" />}
             <span className="tip">{n.label}</span>
           </a>
         ))}
@@ -102,12 +105,10 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
           <PlanView data={data} />
         ) : path === "/device" && params.get("d") ? (
           <DeviceView data={data} id={params.get("d")!} onBack={() => go("/map", { d: params.get("d")! })} onSelect={(id) => go("/device", { d: id })} />
-        ) : path === "/review" ? (
-          <ReviewView data={data} focus={params.get("f") || undefined} onShow={showOnMap} />
         ) : path === "/settings" ? (
           <SettingsView data={data} session={session} />
         ) : (
-          <Home data={fresh!} />
+          <Home data={fresh!} focus={params.get("f") || undefined} onShow={showOnMap} />
         )}
       </main>
     </div>
@@ -169,7 +170,7 @@ function MapView({ data, selected, highlight, go, onNotesSaved }: { data: Networ
           onSelect={(id) => select(id)}
           onNotesSaved={onNotesSaved}
           onDetails={(id) => go("/device", { d: id })}
-          onFinding={(fid) => go("/review", { f: fid })}
+          onFinding={(fid) => go("/", { f: fid })}
         />
       ) : (
         <div />
