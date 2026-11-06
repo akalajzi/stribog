@@ -171,6 +171,8 @@ export interface NetworkModel {
   radios: Radio[];
   wan: Wan;
   planned: PlannedDevice[];
+  /** The router's time zone (/system/clock), when it reports one. */
+  timezone?: string;
   /** Management services (/ip service), defaults filled in. */
   services?: Service[];
   /** IPv4 firewall rules in router order, reduced to the fields the UI explains. */
@@ -765,7 +767,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
   for (const d of devices.values()) {
     if (d.zone !== "upstream" || d.id === "upstream") continue;
     const host = hosts.find((h) => normMac(h["mac-address"]) === d.mac);
-    if (host?.["on-interface"] && !/ether2|wan/i.test(portByName(host["on-interface"])?.comment ?? "") && portByName(host["on-interface"])?.zone === "upstream") {
+    if (host?.["on-interface"] && !/wan/i.test(portByName(host["on-interface"])?.comment ?? "") && portByName(host["on-interface"])?.zone === "upstream") {
       d.parent = routerId;
       d.via = { kind: "port", port: host["on-interface"], certainty: "read" };
     } else {
@@ -789,6 +791,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
   const sources = snap.devices.flatMap((d) => d.sources);
   return {
     site: ov.site ?? lanNet?.label ?? "Home",
+    timezone: single(cfg, "/system/clock")?.["time-zone-name"],
     generatedAt: snap.collectedAt,
     sources,
     hasState,

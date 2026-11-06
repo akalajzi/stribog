@@ -67,7 +67,7 @@ export function defaultSetupOptions(preset: SetupPreset = "home", ports?: string
       ? { subnet: "10.20.0.0/24", pool: "10.20.0.100-10.20.0.229", leaseTime: "8h" }
       : { subnet: "192.168.88.0/24", pool: "192.168.88.100-192.168.88.229", leaseTime: "1d" },
     dns: { mode: "router", upstreams: ["1.1.1.1", "9.9.9.9"] },
-    wifi: { enabled: true, ssid: office ? "Office" : "Home", security: "wpa2-wpa3", country: "Croatia", gen: "ax", width5: "20/40/80mhz", allowDfs: false },
+    wifi: { enabled: true, ssid: office ? "Office" : "Home", security: "wpa2-wpa3", country: "", gen: "ax", width5: "20/40/80mhz", allowDfs: false },
     guest: office
       ? { enabled: true, vlan: 20, subnet: "10.20.20.0/24", ssid: "Office-Guest", isolation: true }
       : { enabled: false, vlan: 20, subnet: "192.168.20.0/24", ssid: "Home-Guest", isolation: true },
@@ -75,7 +75,7 @@ export function defaultSetupOptions(preset: SetupPreset = "home", ports?: string
       ? { enabled: true, vlan: 30, subnet: "10.20.30.0/24", ssid: "Office-Devices", lanCanReach: true }
       : { enabled: false, vlan: 30, subnet: "192.168.30.0/24", ssid: "Home-IoT", lanCanReach: true },
     ntp: ["pool.ntp.org"],
-    timezone: "Europe/Zagreb",
+    timezone: "",
     nightlyExport: true,
   };
 }
@@ -174,7 +174,9 @@ export function generateSetup(input: SetupOptions): SetupResult {
   if (o.dns.mode === "lan-server" && !lanDns) notes.push("No valid LAN DNS server was given, so clients use the router for DNS.");
   const w = o.wifi;
   const bands = BAND[w.gen];
-  const country = w.country.trim() || "Croatia";
+  const country = w.country.trim();
+  const countryArg = country ? ` country=${rosQuote(country)}` : "";
+  if (w.enabled && !country) notes.push("No Wi-Fi country is set, so the radios keep their factory region, which may not allow your local channels or power. Fill in the country the router is in.");
 
   // ---- header ------------------------------------------------------------------------------
   const included = [
@@ -344,11 +346,11 @@ export function generateSetup(input: SetupOptions): SetupResult {
       ...(guestWifi ? [`add name=dp-guest bridge=bridge vlan-id=${guestWifi.vlan}${o.guest.isolation ? " client-isolation=yes" : ""} comment="Guest VLAN"`] : []),
       ...(iotWifi ? [`add name=dp-${iotName} bridge=bridge vlan-id=${iotWifi.vlan} comment=${rosQuote(`${iotLabel} VLAN`)}`] : []),
       "/interface wifi configuration",
-      `add name=cfg-main-2g ssid=${rosQuote(w.ssid.trim() || "Home")} country=${rosQuote(country)} security=sec-main datapath=dp-main channel=ch-2g mode=ap`,
-      `add name=cfg-main-5g ssid=${rosQuote(w.ssid.trim() || "Home")} country=${rosQuote(country)} security=sec-main datapath=dp-main channel=ch-5g mode=ap`,
+      `add name=cfg-main-2g ssid=${rosQuote(w.ssid.trim() || "Home")}${countryArg} security=sec-main datapath=dp-main channel=ch-2g mode=ap`,
+      `add name=cfg-main-5g ssid=${rosQuote(w.ssid.trim() || "Home")}${countryArg} security=sec-main datapath=dp-main channel=ch-5g mode=ap`,
     );
-    if (guestWifi) line(`add name=cfg-guest ssid=${rosQuote(guestWifi.ssid)} country=${rosQuote(country)} security=sec-guest datapath=dp-guest mode=ap`);
-    if (iotWifi) line(`add name=cfg-${iotName} ssid=${rosQuote(iotWifi.ssid)} country=${rosQuote(country)} security=sec-${iotName} datapath=dp-${iotName} mode=ap`);
+    if (guestWifi) line(`add name=cfg-guest ssid=${rosQuote(guestWifi.ssid)}${countryArg} security=sec-guest datapath=dp-guest mode=ap`);
+    if (iotWifi) line(`add name=cfg-${iotName} ssid=${rosQuote(iotWifi.ssid)}${countryArg} security=sec-${iotName} datapath=dp-${iotName} mode=ap`);
     const slaves2 = [guestWifi && "cfg-guest", iotWifi && `cfg-${iotName}`].filter(Boolean).join(",");
     const slaves5 = [guestWifi && "cfg-guest"].filter(Boolean).join(",");
     line(

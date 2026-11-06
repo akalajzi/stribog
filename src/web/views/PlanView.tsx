@@ -237,6 +237,7 @@ function initialOptions(data: NetworkPayload, preset: SetupPreset): SetupOptions
   o.apPorts = model.ports.filter((p) => p.deviceIds.some((id) => apIds.has(id)) || (p.planned && model.planned.find((x) => x.id === p.planned)?.kind === "ap")).map((p) => p.defaultName).filter((p) => p !== o.wan.port);
   const country = model.ssids.find((s) => s.country)?.country;
   if (country) o.wifi.country = country;
+  if (model.timezone && model.timezone !== "manual") o.timezone = model.timezone;
   if (model.wan.type === "pppoe") o.wan.type = "pppoe";
   return o;
 }
@@ -267,7 +268,7 @@ function NewSetup({ data }: { data: NetworkPayload }) {
 
         <Section title="Router">
           <Field label="Name"><input value={o.identity} onChange={(e) => set((d) => (d.identity = e.target.value))} /></Field>
-          <Field label="Time zone"><input value={o.timezone} onChange={(e) => set((d) => (d.timezone = e.target.value))} placeholder="Europe/Zagreb" /></Field>
+          <Field label="Time zone"><input value={o.timezone} onChange={(e) => set((d) => (d.timezone = e.target.value))} placeholder="Region/City, e.g. America/Chicago" /></Field>
         </Section>
 
         <Section title="Internet">

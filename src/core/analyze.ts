@@ -158,7 +158,7 @@ const legacyCompat: Rule = ({ cfg }) => {
     severity: "info",
     category: "internet",
     title: "Compatibility addresses for the old network are active",
-    summary: `${plural(addrs.length, "old address", "old addresses")} and ${plural(nat.length, "NAT rule")} keep old references (like 192.168.1.70) working while devices move.`,
+    summary: `${plural(addrs.length, "old address", "old addresses")} and ${plural(nat.length, "NAT rule")} keep references to the old addresses working while devices move.`,
     detail: ["Useful during migration, but they hide stale configuration. Once no device uses the old addresses, remove them so problems surface instead of being silently translated."],
     evidence: [...addrs.map((a) => `${a.address} on ${a.interface} — ${a.comment}`), ...nat.map((r) => `${r.chain} ${r.action} ${r["dst-address"] ?? ""} → ${r["to-addresses"] ?? ""} — ${r.comment}`)],
     fix: { where: "router", cli: `# When nothing uses the old addresses any more:\n/ip firewall nat remove [find comment~"Legacy"]\n/ip address remove [find comment~"Legacy compatibility"]` },
@@ -232,7 +232,7 @@ const privateMacReservations: Rule = ({ m }) => {
     title: `${plural(res.length, "reservation")} ${res.length === 1 ? "is" : "are"} tied to a private (random) MAC address`,
     summary: `Phones and laptops can rotate their private Wi-Fi address, and then a reservation silently stops matching. ${offline.length ? `${plural(offline.length, "of these is", "of these are")} not in use right now.` : ""}`.trim(),
     detail: [
-      "Anything that relies on the fixed address (AdGuard client profiles, firewall rules, port forwards) then applies to nobody, and the device takes a random address from the pool.",
+      "Anything that relies on the fixed address (DNS filter profiles, firewall rules, port forwards) then applies to nobody, and the device takes a random address from the pool.",
       "For devices that need a fixed identity, turn the private address off for this network only, or set it to “fixed”, then re-create the reservation.",
     ],
     evidence: [...res.map((d) => `${d.leaseComment ?? d.name}: ${d.mac} → ${d.ip} (${d.status})`), ...new Set(lookalikes)],

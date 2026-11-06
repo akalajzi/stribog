@@ -38,7 +38,7 @@ export const FW_GROUP_HINT: Record<FwGroup, string> = {
   other: "Custom chains and rules for the router's own outgoing traffic.",
 };
 
-/** Optional friendly names, e.g. { "lan-home": "Home LAN", "192.168.1.254": "the ISP router" }. */
+/** Optional friendly names, e.g. { "lan": "Home LAN", "192.0.2.1": "the ISP router" }. */
 export type FwNames = Record<string, string>;
 
 const PORTS: Record<string, string> = {
