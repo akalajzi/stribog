@@ -75,8 +75,8 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
       />
       <DeviceAbout key={`about-${d.id}`} d={d} onSaved={onNotesSaved} />
       {d.mac && (
-        <button className="btn details-btn" onClick={() => onDetails(d.id)}>
-          Details: traffic, who it talks to, history
+        <button className="btn pri details-btn" onClick={() => onDetails(d.id)} title="Traffic, who it talks to, and history">
+          Connection details
           <span aria-hidden>→</span>
         </button>
       )}
