@@ -13,11 +13,13 @@ interface Props {
   selected?: string;
   highlight?: string[];
   onSelect: (id?: string) => void;
+  /** Pixels on the right covered by a panel drawn over the map. */
+  covered?: number;
 }
 
 type View = { x: number; y: number; w: number; h: number };
 
-export function Topology({ data, selected, highlight, onSelect }: Props) {
+export function Topology({ data, selected, highlight, onSelect, covered = 0 }: Props) {
   const { layout, model, analysis } = data;
   const ref = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>();
@@ -51,6 +53,33 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
+
+  // A panel opened over the map must not hide what was clicked: slide the map just enough,
+  // smoothly, and never zoom it.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useEffect(() => {
+    const n = selected ? layout.nodes.find((x) => x.id === selected) : undefined;
+    const el = ref.current;
+    const v = viewRef.current;
+    if (!n || !el || !covered || !v) return;
+    const px = el.clientWidth / v.w;
+    const edge = el.clientWidth - covered - 120; // room for the node and its label
+    const sx = (n.x - v.x) * px;
+    if (sx <= edge) return;
+    const from = v.x;
+    const to = v.x + (sx - edge) / px;
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / 260);
+      const e = 1 - (1 - k) ** 3;
+      setView((cur) => (cur ? { ...cur, x: from + (to - from) * e } : cur));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [selected, covered, layout]);
 
   const toWorld = (cx: number, cy: number, v: View) => {
     const r = ref.current!.getBoundingClientRect();
@@ -204,14 +233,16 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
       )}
 
       <div className="legend">
-        <span><i style={{ borderColor: COLORS.mg }} />2.5G</span>
-        <span><i style={{ borderColor: COLORS.g1 }} />1G</span>
-        <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dashed" }} />5 GHz Wi-Fi</span>
-        <span><i style={{ borderColor: COLORS.w24, borderTopStyle: "dashed" }} />2.4 GHz Wi-Fi</span>
-        <span><i style={{ borderColor: COLORS.up, opacity: 0.6 }} />upstream</span>
-        <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dotted" }} />upstream side</span>
-        {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />planned</span>}
-        <span>· moving dots = traffic now: light ones to the device, coloured ones back</span>
+        <div className="legend-keys">
+          <span><i style={{ borderColor: COLORS.mg }} />2.5G</span>
+          <span><i style={{ borderColor: COLORS.g1 }} />1G</span>
+          <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dashed" }} />5 GHz Wi-Fi</span>
+          <span><i style={{ borderColor: COLORS.w24, borderTopStyle: "dashed" }} />2.4 GHz Wi-Fi</span>
+          <span><i style={{ borderColor: COLORS.up, opacity: 0.6 }} />upstream</span>
+          <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dotted" }} />upstream side</span>
+          {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />planned</span>}
+        </div>
+        <span className="legend-note">Moving dots are traffic now: light ones go to the device, coloured ones come back</span>
       </div>
       <div className="mapctl">
         <button title="Zoom in" onClick={() => zoom(0.8)}>+</button>

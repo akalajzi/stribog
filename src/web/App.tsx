@@ -137,6 +137,9 @@ function TopBar({ data, session }: { data: NetworkPayload; session: SessionInfo 
   );
 }
 
+/** The inspector's width; it is drawn over the map, so opening it never resizes the map. */
+const SIDE_W = 380;
+
 function MapView({ data, selected, highlight, go, onNotesSaved }: { data: NetworkPayload; selected?: string; highlight?: string[]; go: (p: string, q?: Record<string, string>) => void; onNotesSaved: () => void }) {
   const [sel, setSel] = useState(selected);
   useEffect(() => setSel(selected), [selected]);
@@ -146,7 +149,7 @@ function MapView({ data, selected, highlight, go, onNotesSaved }: { data: Networ
   };
   return (
     <div className={`mapwrap${sel ? "" : " noside"}`}>
-      <Topology data={data} selected={sel} highlight={highlight} onSelect={select} />
+      <Topology data={data} selected={sel} highlight={highlight} onSelect={select} covered={sel ? SIDE_W : 0} />
       {sel ? (
         <Inspector
           data={data}
