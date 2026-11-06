@@ -120,6 +120,11 @@ export function liveSession(): Session | undefined {
   return l && isAlive(l) && l.router ? l : undefined;
 }
 
+/** The router state in the files in use (a saved snapshot can carry its connection table). */
+export function filesState(): Record<string, import("../core/ros.ts").RosRecord[]> | undefined {
+  return filesCache?.snap.devices.find((d) => d.role === "router")?.state;
+}
+
 /** The demo's own router state (its connection table, DNS cache), for activity in the demo. */
 export function demoState(): Record<string, import("../core/ros.ts").RosRecord[]> | undefined {
   demoCache ??= fromFiles(DEMO_CONFIG, "demo");

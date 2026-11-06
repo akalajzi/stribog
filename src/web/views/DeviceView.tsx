@@ -39,7 +39,7 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
   if (!d) return <div className="page"><p className="muted">This device is no longer in the network.</p></div>;
   const h = act?.history;
   const step = h && h.samples.length > 1 ? medianStep(h.samples) : 60_000;
-  const moved = h ? totals(h.samples, step) : undefined;
+  const moved = h?.samples.length ? totals(h.samples, step) : undefined;
   const onlineShare = h && h.samples.length ? h.samples.filter((s) => s[1]).length / h.samples.length : undefined;
   const now = act?.now.flows ?? [];
   const parent = d.parent ? data.model.devices.find((x) => x.id === d.parent) : undefined;
@@ -86,7 +86,8 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
 
       <section className="card dv-sec">
         <div className="dv-sec-h"><h2>Talking to now</h2></div>
-        {act?.now.note ? <p className="faint">{act.now.note}</p> : now.length ? <FlowTable rows={now} onSelect={onSelect} /> : <p className="faint">No connections through the router right now.</p>}
+        {act?.now.note && !now.length ? <p className="faint">{act.now.note}</p> : now.length ? <FlowTable rows={now} onSelect={onSelect} /> : <p className="faint">No connections through the router right now.</p>}
+        {act?.now.note && now.length ? <p className="faint dv-foot">{act.now.note}</p> : null}
         {act?.now.noNames && <p className="faint dv-foot">{act.now.noNames}</p>}
         <p className="faint dv-foot">
           From the router's connection tracking: only traffic the router routes (to the internet or between networks) shows here, not devices talking to each other on the same LAN.

@@ -6,7 +6,7 @@ import { normMac } from "../core/net.ts";
 import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore, type Sample, type Talk } from "./history.ts";
-import { DEMO_CONFIG, demoState, getNetwork, getNetworkForAgent, liveSession, resolveConfigPath, setup } from "./provider.ts";
+import { DEMO_CONFIG, demoState, filesState, getNetwork, getNetworkForAgent, liveSession, resolveConfigPath, setup } from "./provider.ts";
 import { historyFor, recorderActive } from "./recorder.ts";
 import type { Session } from "./session.ts";
 
@@ -40,6 +40,10 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
     if (r) {
       const rest = new RouterOsRest({ url: r.url, user: r.user, password: r.password, insecure: r.encrypted });
       [conns, dns] = await Promise.all([rest.connections(), rest.dnsCache().catch(() => [] as RosRecord[])]);
+    } else if (filesState()?.["/ip/firewall/connection"]) {
+      conns = filesState()!["/ip/firewall/connection"]!;
+      dns = filesState()!["/ip/dns/cache"] ?? [];
+      note = "From the saved snapshot, not live.";
     } else note = "Sign in to the router to see who it is talking to right now.";
   }
   const flows = d.ip ? flowsFor(d.ip, conns, namesByAddress(dns), m) : [];
