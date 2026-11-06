@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { candidateUrls, LoginError, signIn } from "../src/server/session.ts";
 import { handleApi } from "../src/server/server.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const RESOURCE = { version: "7.20.4 (stable)", "board-name": "RB5009UPr+S+", uptime: "1d" };
 
@@ -195,6 +197,35 @@ describe("web API sessions", () => {
 
     expect((await call("DELETE", `/api/tokens/${created.info.id}`)).status).toBe(200);
     expect((await fetch(base + "/api/notes", { headers: auth })).status).toBe(401);
+  });
+
+  it("serves agents over MCP with a token: read the network, write notes", async () => {
+    const res = await post("/api/login", { user: "admin", password: "s3cret" });
+    const jar = { cookie: res.headers.get("set-cookie")!.split(";")[0]! };
+    const { token } = await (await post("/api/tokens", { name: "MCP test" }, jar)).json();
+
+    const unauth = await fetch(base + "/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect(unauth.status).toBe(401);
+
+    const client = new Client({ name: "test", version: "1" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp"), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
+    const tools = (await client.listTools()).tools.map((t) => t.name).sort();
+    expect(tools).toEqual(["get_change_log", "get_device", "get_network_overview", "get_review", "list_devices", "update_device_notes", "update_network_notes"]);
+
+    const text = (r: unknown) => JSON.parse((r as { content: { text: string }[] }).content[0]!.text);
+    const ov = text(await client.callTool({ name: "get_network_overview", arguments: {} }));
+    expect(ov).toMatchObject({ data: { mode: "live" }, router: { name: "maple-gw", version: "7.20.4" } });
+
+    const upd = await client.callTool({ name: "update_device_notes", arguments: { mac: "00:00:5e:00:53:99", name: "Garage Pi", labels: ["garage"], services: [{ name: "Home Assistant", port: 8123 }] } });
+    expect(text(upd)).toMatchObject({ mac: "00:00:5E:00:53:99", notes: { name: "Garage Pi", labels: ["garage"] } });
+    const bad = await client.callTool({ name: "update_device_notes", arguments: { mac: "nope", name: "x" } });
+    expect(bad.isError).toBe(true);
+
+    const dev = text(await client.callTool({ name: "get_device", arguments: { device: "Garage Pi" } }));
+    expect(dev).toMatchObject({ name: "Garage Pi", nameFrom: "user", services: [{ name: "Home Assistant", port: 8123 }] });
+    const log = text(await client.callTool({ name: "get_change_log", arguments: { limit: 1 } }));
+    expect(log[0].target).toBe("device:00:00:5E:00:53:99");
+    await client.close();
   });
 
   it("offers the demo network without a router", async () => {

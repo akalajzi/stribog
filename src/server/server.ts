@@ -6,6 +6,7 @@ import { extname, join, resolve } from "node:path";
 import { getNetwork, getNetworkForAgent, notesFor, setup, SignedOutError } from "./provider.ts";
 import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
+import { handleMcp } from "./mcp.ts";
 import { createSession, endSession, LoginError, sessionFrom, setSessionCookie, signIn, type Session } from "./session.ts";
 
 const DIST = resolve(import.meta.dirname, "../../dist");
@@ -29,7 +30,7 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
 export async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = new URL(req.url ?? "/", "http://x");
   const route = `${req.method} ${url.pathname}`;
-  if (!url.pathname.startsWith("/api/")) return false;
+  if (!url.pathname.startsWith("/api/") && url.pathname !== "/mcp") return false;
   try {
     const s = setup();
     // An agent token (Authorization: Bearer) or this app's own session cookie.
@@ -79,6 +80,15 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     }
 
     if (!signedIn) return send(res, 401, { error: "Sign in to see the network." }), true;
+
+    if (url.pathname === "/mcp") {
+      const body = req.method === "POST" ? await readBody(req) : undefined;
+      await handleMcp(req, res, body, {
+        network: () => (agent ? getNetworkForAgent() : getNetwork(session)),
+        notes: notesFor(session?.kind === "demo"),
+      });
+      return true;
+    }
 
     if (route === "GET /api/network") {
       if (agent) {
@@ -156,18 +166,22 @@ function sameOrigin(req: IncomingMessage): boolean {
   }
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(req: IncomingMessage, max = 256 * 1024): Promise<unknown> {
   let raw = "";
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 16_384) throw new Error("Request too large.");
+    if (raw.length > max) throw new Error("Request too large.");
   }
   try {
-    const v = JSON.parse(raw || "{}") as unknown;
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+    return JSON.parse(raw || "null") as unknown;
   } catch {
-    return {};
+    return undefined;
   }
+}
+
+async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const v = await readBody(req);
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
 if (import.meta.main ?? process.argv[1]?.endsWith("server.ts")) {
