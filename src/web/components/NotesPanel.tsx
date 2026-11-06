@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { KIND_LABEL, KINDS, type DeviceKind } from "../../core/classify.ts";
 import type { ServiceNote } from "../../core/ros.ts";
 import { fmtBps } from "../../core/net.ts";
+import { linkCounters } from "../../core/model.ts";
 import { saveDeviceNotes, type Device, type NetworkModel } from "../api.ts";
 import { bandColor } from "./DeviceArt.tsx";
 
@@ -272,9 +273,9 @@ export function DeviceConnections({ d, model, onSaved, onSelect }: { d: Device; 
           <div className="links">
             {links.map((l, i) => {
               const parent = model.devices.find((x) => x.id === l.parent);
-              const port = l.via?.kind === "port" && l.parent === model.routerId ? model.ports.find((p) => p.name === l.via?.port) : undefined;
-              const down = l.via?.kind === "wifi" ? l.via.downBps : port?.txBps;
-              const up = l.via?.kind === "wifi" ? l.via.upBps : port?.rxBps;
+              const c = linkCounters(model, l) ?? (l.via?.measured ? l.via : undefined);
+              const down = c?.downBps;
+              const up = c?.upBps;
               return (
                 <div key={l.mac} className="link-row">
                   <div className="link-head">
@@ -291,7 +292,7 @@ export function DeviceConnections({ d, model, onSaved, onSelect }: { d: Device; 
                     <span className="link-status" style={{ color: l.status === "online" ? "var(--ok)" : "var(--tx-3)" }}>{l.status}</span>
                   </div>
                   <div className="mono faint link-ids">{l.ip ?? "no address"} · {l.mac}</div>
-                  {l.status === "online" && (down !== undefined || up !== undefined) && <div className="mono faint link-ids">↓ {fmtBps(down ?? 0)} · ↑ {fmtBps(up ?? 0)} now</div>}
+                  {l.status === "online" && (down !== undefined || up !== undefined) && <div className="mono faint link-ids">↓ {fmtBps(down ?? 0)} · ↑ {fmtBps(up ?? 0)} {l.via?.measured ? "through the router, last minute" : "now"}</div>}
                   {l.leaseComment && <div className="faint link-note">“{l.leaseComment}”</div>}
                   {i > 0 && <button className="linkish" onClick={() => void split(l.mac)}>Not the same machine</button>}
                 </div>

@@ -185,8 +185,9 @@ export function layoutTopology(m: NetworkModel): Layout {
       label: wifiFromRouter ? undefined : [s.port, speedLabel(port?.speedMbps), port?.poeWatts ? `PoE ${port.poeWatts} W` : ""].filter(Boolean).join(" · "),
       labelAt: { x: x + 8, y: y2 - 14, anchor: "start" },
       // A planned device has no traffic yet, whatever its port is doing.
-      down: s.kind === "ghost" ? undefined : port?.txBps,
-      up: s.kind === "ghost" ? undefined : port?.rxBps,
+      // A port shared through a switch counts everyone behind it; then each device's own measure.
+      down: s.kind === "ghost" ? undefined : port && port.deviceIds.length <= 1 ? port.txBps : s.dev.via?.downBps,
+      up: s.kind === "ghost" ? undefined : port && port.deviceIds.length <= 1 ? port.rxBps : s.dev.via?.upBps,
     });
 
     // Devices behind this one: clusters side by side, each a small tree in its medium's colour.

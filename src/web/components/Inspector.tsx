@@ -5,7 +5,7 @@ import { SEV_VAR } from "./FindingCard.tsx";
 import { DeviceAbout, DeviceConnections, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
 import { UPSTREAM_GROUP } from "../../core/layout.ts";
 import { fmtBps } from "../../core/net.ts";
-import { connectionViews } from "../../core/model.ts";
+import { connectionViews, linkCounters } from "../../core/model.ts";
 
 export function SignalBars({ dbm }: { dbm?: number }) {
   const n = dbm === undefined ? 0 : dbm >= -55 ? 4 : dbm >= -62 ? 3 : dbm >= -70 ? 2 : 1;
@@ -49,10 +49,13 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
   // Traffic now: Wi-Fi from the registration table; a device on a router port from that port
   // (tx towards it); the router itself from its WAN port (rx is what comes in from the internet).
   const wanPort = d.id === model.routerId ? model.ports.find((p) => p.name === d.via?.port) : undefined;
+  // Without a counter of its own (wired behind an AP or a switch), what its connections moved
+  // through the router in the last minute.
+  const own = linkCounters(model, d);
   const traffic =
-    d.via?.kind === "wifi" ? { down: d.via.downBps, up: d.via.upBps, where: "on Wi-Fi" }
-    : port ? { down: port.txBps, up: port.rxBps, where: `on ${port.name}` }
-    : wanPort ? { down: wanPort.rxBps, up: wanPort.txBps, where: `internet, on ${wanPort.name}` }
+    wanPort ? { down: wanPort.rxBps, up: wanPort.txBps, where: `internet, on ${wanPort.name}` }
+    : own ? { down: own.downBps, up: own.upBps, where: d.via?.kind === "wifi" ? "on Wi-Fi" : `on ${d.via?.port}` }
+    : d.via?.measured ? { down: d.via.downBps, up: d.via.upBps, where: "through the router, last minute" }
     : undefined;
 
   return (

@@ -52,6 +52,11 @@ export interface Connection {
   downBps?: number;
   upBps?: number;
   radio?: string;
+  /**
+   * Where downBps/upBps come from when the router has no counter of this link: the connection
+   * table (traffic through the router only, averaged over the last minute).
+   */
+  measured?: "connections";
   certainty: Certainty;
 }
 
@@ -91,6 +96,18 @@ export interface Device {
   links?: DeviceLink[];
   /** How Stribog knows the connections are one machine: the same DHCP name (inferred), or a note. */
   linkedBy?: "hostname" | "user";
+}
+
+/**
+ * The router's own counters for one connection's traffic: its Wi-Fi registration, or a router
+ * port it has to itself (a port shared through a switch counts everyone behind it). Undefined
+ * when the router has no such counter, e.g. for a device wired to an access point.
+ */
+export function linkCounters(m: Pick<NetworkModel, "routerId" | "ports">, l: Pick<DeviceLink, "parent" | "via">): { downBps?: number; upBps?: number } | undefined {
+  if (l.via?.kind === "wifi" && !l.via.measured) return l.via.downBps !== undefined || l.via.upBps !== undefined ? { downBps: l.via.downBps, upBps: l.via.upBps } : undefined;
+  const port = l.via?.kind === "port" && l.parent === m.routerId ? m.ports.find((p) => p.name === l.via?.port) : undefined;
+  if (!port || port.deviceIds.length > 1) return undefined;
+  return port.txBps !== undefined || port.rxBps !== undefined ? { downBps: port.txBps, upBps: port.rxBps } : undefined;
 }
 
 /** A device's connections: its links, or the one it has. Devices without a MAC (the router's own view of itself, planned ones) have none. */

@@ -6,10 +6,11 @@ import { join, resolve } from "node:path";
 import { analyze, type Analysis } from "../core/analyze.ts";
 import { layoutTopology, type Layout } from "../core/layout.ts";
 import { expand, readConfig, snapshotFromFiles, type StribogConfig } from "../core/load.ts";
-import { buildModel, type NetworkModel } from "../core/model.ts";
+import { buildModel, connectionsOf, linkCounters, type NetworkModel } from "../core/model.ts";
 import { AuthError, RouterOsRest } from "../core/rest.ts";
 import type { Snapshot } from "../core/ros.ts";
 import { dataDir, NotesStore } from "./notes.ts";
+import { ratesNow } from "./rates.ts";
 import { defaultRouterAddress, isAlive, type RouterLogin, type Session } from "./session.ts";
 
 export interface NetworkPayload {
@@ -160,6 +161,23 @@ function fromFiles(path: string, mode: "files" | "demo"): Cached {
   return { at: Date.now(), snap, meta, payload: undefined as unknown as NetworkPayload, notes: Symbol() };
 }
 
+/**
+ * Connections the router has no counter for get the traffic the recorder measured in the
+ * connection table over the last minute, marked as such.
+ */
+function withMeasuredRates(m: NetworkModel) {
+  const r = ratesNow();
+  if (!r) return;
+  for (const l of m.devices.flatMap(connectionsOf)) {
+    if (!l.via || linkCounters(m, l)) continue;
+    const rate = r.byMac.get(l.mac);
+    if (!rate) continue;
+    l.via.downBps = rate.downBps;
+    l.via.upBps = rate.upBps;
+    l.via.measured = "connections";
+  }
+}
+
 // One router read at a time per session; a second tab or a quick reload joins the one in flight.
 const inFlight = new WeakMap<Session, Promise<NetworkPayload>>();
 
@@ -211,5 +229,6 @@ async function liveSnapshot(login: RouterLogin, s: Setup): Promise<Snapshot> {
 
 function build(snap: Snapshot, meta: Omit<NetworkPayload["meta"], "refreshedAt">): NetworkPayload {
   const model = buildModel(snap);
+  if (meta.mode === "live") withMeasuredRates(model);
   return { model, analysis: analyze(model, snap), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
 }

@@ -2,10 +2,11 @@
 // within the last 12 hours). It reads through that session's credentials, which stay in memory.
 
 import { flowsFor, namesByAddress, type Flow } from "../core/activity.ts";
-import { connectionsOf } from "../core/model.ts";
+import { connectionsOf, linkCounters } from "../core/model.ts";
 import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
+import { ratesNow, setRates } from "./rates.ts";
 import { getNetworkForAgent, liveSession, setup, type NetworkPayload } from "./provider.ts";
 import { join } from "node:path";
 
@@ -47,7 +48,6 @@ export async function tick(now = Date.now()) {
   const payload = await getNetworkForAgent();
   if (!payload || payload.meta.stale) return;
   const store = historyFor(setup().dataDir);
-  store.appendSamples(now, samplesOf(payload));
 
   const r = session.router;
   const rest = new RouterOsRest({ url: r.url, user: r.user, password: r.password, insecure: r.encrypted });
@@ -62,6 +62,18 @@ export async function tick(now = Date.now()) {
     if (flows.length) byMac.set(l.mac, flows);
   }
   store.addTalks(now, byMac);
+  // Per-connection rates over the interval; the first tick has no interval (everything a
+  // connection ever moved would count as now).
+  const dt = st.lastTick ? (now - st.lastTick) / 1000 : 0;
+  if (dt > 0 && dt < 180) {
+    const rates = new Map<string, { downBps: number; upBps: number }>();
+    for (const l of payload.model.devices.flatMap(connectionsOf)) {
+      const fl = byMac.get(l.mac) ?? [];
+      rates.set(l.mac, { downBps: (fl.reduce((t, f) => t + f.down, 0) * 8) / dt, upBps: (fl.reduce((t, f) => t + f.up, 0) * 8) / dt });
+    }
+    setRates({ at: now, byMac: rates });
+  }
+  store.appendSamples(now, samplesOf(payload, ratesNow(now)?.byMac));
   st.lastTick = now;
   if (now - st.lastPrune > 6 * 3600_000) {
     store.prune(now);
@@ -69,16 +81,16 @@ export async function tick(now = Date.now()) {
   }
 }
 
-/** Per device: online, traffic now (down, up) and Wi-Fi signal. */
-export function samplesOf(p: NetworkPayload): Record<string, [0 | 1, number | null, number | null, number | null]> {
+/**
+ * Per connection: online, traffic now (down, up) and Wi-Fi signal. Traffic comes from the
+ * router's counter of the link, else from what the connection table moved (`measured`).
+ */
+export function samplesOf(p: NetworkPayload, measured?: Map<string, { downBps: number; upBps: number }>): Record<string, [0 | 1, number | null, number | null, number | null]> {
   const out: Record<string, [0 | 1, number | null, number | null, number | null]> = {};
   const { model: m } = p;
-  for (const d of m.devices.flatMap(connectionsOf)) {
-    if (!d.mac) continue;
-    const port = d.via?.kind === "port" && d.parent === m.routerId ? m.ports.find((x) => x.name === d.via?.port) : undefined;
-    const down = d.via?.kind === "wifi" ? d.via.downBps : port?.txBps;
-    const up = d.via?.kind === "wifi" ? d.via.upBps : port?.rxBps;
-    out[d.mac] = [d.status === "online" ? 1 : 0, down ?? null, up ?? null, d.via?.signal ?? null];
+  for (const l of m.devices.flatMap(connectionsOf)) {
+    const c = linkCounters(m, l) ?? measured?.get(l.mac);
+    out[l.mac] = [l.status === "online" ? 1 : 0, c?.downBps ?? null, c?.upBps ?? null, l.via?.signal ?? null];
   }
   return out;
 }

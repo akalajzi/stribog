@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { fmtBps } from "../../core/net.ts";
+import { connectionsOf, linkCounters } from "../../core/model.ts";
 import { fetchActivity, type DeviceActivity, type NetworkPayload } from "../api.ts";
 import { Glyph } from "../components/DeviceArt.tsx";
 import "./device.css";
@@ -70,7 +71,7 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
       </div>
 
       <div className="dv-tiles">
-        <Tile label="Traffic now" value={trafficNow(d) ?? "—"} />
+        <Tile label="Traffic now" value={trafficNow(d, data.model) ?? "—"} />
         <Tile label={`Moved, last ${hours === 24 ? "24 hours" : "7 days"}`} value={moved ? `↓ ${fmtBytes(moved.down)} · ↑ ${fmtBytes(moved.up)}` : "—"} note={moved ? "from what Stribog recorded" : undefined} />
         <Tile label="Online" value={onlineShare === undefined ? "—" : `${Math.round(onlineShare * 100)}%`} note={onlineShare === undefined ? undefined : "of the recorded time"} />
         <Tile label="Talking to now" value={`${now.length}`} note={now.length ? `${now.filter((f) => f.scope === "internet").length} on the internet` : undefined} />
@@ -82,6 +83,11 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
           <Legend />
         </div>
         {error ? <p className="dv-error">{error}</p> : !h ? <p className="faint">Loading…</p> : h.samples.length < 2 ? <Empty h={h} /> : <TrafficChart h={h} step={step} />}
+        {d.id !== data.model.routerId && connectionsOf(d).some((l) => !linkCounters(data.model, l)) && (
+          <p className="faint">
+            The router has no counter of this device's own link{d.via?.kind === "port" && d.parent !== data.model.routerId ? " (it is wired to another device, not to the router)" : ""}, so traffic is what its connections moved through the router each minute. Traffic to devices on the same network is not counted.
+          </p>
+        )}
         {h && <Recording h={h} />}
       </section>
 
@@ -411,10 +417,11 @@ function OtherEnd({ f, onSelect }: { f: Flow | Talk; onSelect: (id: string) => v
 
 // ---- helpers ---------------------------------------------------------------------
 
-function trafficNow(d: NetworkPayload["model"]["devices"][number]): string | undefined {
-  const v = d.via;
-  if (v?.downBps === undefined && v?.upBps === undefined) return undefined;
-  return `↓ ${fmtBps(v?.downBps ?? 0)} · ↑ ${fmtBps(v?.upBps ?? 0)}`;
+/** All its connections together: the router's counters where it has them, else what moved through it. */
+function trafficNow(d: NetworkPayload["model"]["devices"][number], m: NetworkPayload["model"]): string | undefined {
+  const c = connectionsOf(d).map((l) => linkCounters(m, l) ?? (l.via?.measured ? l.via : undefined)).filter((x) => x && (x.downBps !== undefined || x.upBps !== undefined));
+  if (!c.length) return undefined;
+  return `↓ ${fmtBps(c.reduce((t, x) => t + (x!.downBps ?? 0), 0))} · ↑ ${fmtBps(c.reduce((t, x) => t + (x!.upBps ?? 0), 0))}`;
 }
 
 function medianStep(s: Sample[]): number {
