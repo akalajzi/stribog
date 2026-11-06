@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from "react";
-import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
+import { useOwnersNow, type Device, type LNode, type NetworkPayload, type OwnersNow, type Severity } from "../api.ts";
 import { GATEWAY_W, UPSTREAM_GROUP } from "../../core/layout.ts";
 import { fmtBps } from "../../core/net.ts";
 import { FULL, loadOf } from "../../core/capacity.ts";
@@ -40,6 +40,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
   const touch = () => (kept.touched = true);
   const [drag, setDrag] = useState<{ x: number; y: number; v: View; moved: boolean }>();
   const byId = useMemo(() => new Map(model.devices.map((d) => [d.id, d])), [model]);
+  const owners = useOwnersNow(data.meta.mode === "live" || data.meta.mode === "demo");
 
   const worst = useMemo(() => {
     const m = new Map<string, Severity>();
@@ -300,6 +301,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           Moving dots are traffic now: light ones go to the device, coloured ones come back. A red line is at {Math.round(FULL * 100)}% or more of what it can carry.
         </span>
       </div>
+      <OwnersPanel now={owners} onSelect={(id) => onSelect(id)} />
       <div className="mapctl">
         <button title="Zoom in" onClick={() => (touch(), zoom(0.8))}>+</button>
         <button title="Zoom out" onClick={() => (touch(), zoom(1.25))}>−</button>
@@ -327,6 +329,55 @@ function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
 const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
 
 /** "↓ 48 Mb/s ↑ 2.1 Mb/s" once a link carries at least 1 Mb/s, else nothing. */
+/** Who the whole network talks to on the internet right now, by network owner, busiest first. */
+function OwnersPanel({ now, onSelect }: { now?: OwnersNow; onSelect: (id: string) => void }) {
+  if (!now) return null;
+  const rows = now.owners.filter((o) => o.downBps + o.upBps >= 1000).slice(0, 7);
+  const max = Math.max(1, ...rows.map((o) => o.downBps + o.upBps));
+  return (
+    <div className="owners-now" onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} title={`From the router's connection table${now.seconds ? `, over the last ${Math.round(now.seconds)} seconds` : ""}. Owners from an offline database of internet networks.`}>
+      <small>On the internet now</small>
+      {!now.seconds ? (
+        <span className="faint">Measuring…</span>
+      ) : !rows.length ? (
+        <span className="faint">Quiet: nothing worth showing.</span>
+      ) : (
+        rows.map((o) => (
+          <div key={o.name} className="on-row">
+            <div className="on-name">
+              <b>{o.name}</b>
+              <span className="on-rate">
+                {fmtBps(o.downBps)}
+                <i> ↓</i>
+                {o.upBps >= 100_000 && (
+                  <>
+                    {" "}
+                    {fmtBps(o.upBps)}
+                    <i> ↑</i>
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="on-bar">
+              <i style={{ width: `${Math.max(2, ((o.downBps + o.upBps) / max) * 100)}%` }} />
+            </div>
+            <div className="on-who">
+              {o.devices.slice(0, 3).map((d, i) => (
+                <span key={d.id}>
+                  {i ? ", " : ""}
+                  <a href="#" onClick={(e) => (e.preventDefault(), onSelect(d.id))}>{d.name}</a>
+                </span>
+              ))}
+              {o.devices.length > 3 ? ` +${o.devices.length - 3}` : ""}
+            </div>
+          </div>
+        ))
+      )}
+      {!now.ownersKnown && <span className="faint">Owner names arrive once Stribog has its network database.</span>}
+    </div>
+  );
+}
+
 /** Everything going through the router to and from the internet right now, in big numbers beside the ISP's box. */
 function InternetNow({ data }: { data: NetworkPayload }) {
   const { model: m, layout } = data;

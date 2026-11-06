@@ -188,3 +188,45 @@ export function connFlow(ip: string, c: RosRecord): { direction: Flow["direction
   if (dst === ip || replySrc === ip) return { direction: "in", protocol, remote: src, port: dst === ip ? dstPort : replySrcPort, up: repl, down: orig, fasttracked };
   return undefined;
 }
+
+/** Traffic to one network owner from the whole home right now, and who in the home makes it. */
+export interface OwnerNow {
+  name: string;
+  asn?: number;
+  country?: string;
+  downBps: number;
+  upBps: number;
+  /** Devices talking to it, busiest first. */
+  devices: { id: string; name: string; bps: number }[];
+  connections: number;
+}
+
+/**
+ * The whole network's internet traffic by who runs the other end, as rates: `moved` is what each
+ * connection carried in the last `seconds` (see the recorder's deltas).
+ */
+export function networkByOwner(moved: RosRecord[], seconds: number, m: NetworkModel, ownerOf: (ip: string) => { asn: number; name: string; country?: string } | undefined): OwnerNow[] {
+  const groups = new Map<string, OwnerNow & { by: Map<string, { id: string; name: string; bytes: number }> }>();
+  const none = new Map<string, string[]>();
+  for (const d of m.devices) {
+    for (const l of connectionsOf(d)) {
+      if (!l.ip) continue;
+      for (const f of flowsFor(l.ip, moved, none, m)) {
+        if (f.scope !== "internet" || f.down + f.up === 0) continue;
+        const o = ownerOf(f.remote);
+        const name = o?.name ?? "Unknown network";
+        let g = groups.get(name);
+        if (!g) groups.set(name, (g = { name, asn: o?.asn, country: o?.country, downBps: 0, upBps: 0, devices: [], connections: 0, by: new Map() }));
+        g.downBps += (f.down * 8) / seconds;
+        g.upBps += (f.up * 8) / seconds;
+        g.connections += f.connections;
+        const who = g.by.get(d.id) ?? { id: d.id, name: d.name, bytes: 0 };
+        who.bytes += f.down + f.up;
+        g.by.set(d.id, who);
+      }
+    }
+  }
+  return [...groups.values()]
+    .map(({ by, ...g }) => ({ ...g, downBps: Math.round(g.downBps), upBps: Math.round(g.upBps), devices: [...by.values()].sort((a, b) => b.bytes - a.bytes).map((x) => ({ id: x.id, name: x.name, bps: Math.round((x.bytes * 8) / seconds) })) }))
+    .sort((a, b) => b.downBps + b.upBps - (a.downBps + a.upBps));
+}

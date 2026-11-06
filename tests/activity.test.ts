@@ -96,3 +96,27 @@ describe("recording", () => {
     expect(h.talks("00:00:5E:00:53:10", to - 30 * 3600_000, to)[0]!.names).toEqual(["backup.example.net"]);
   });
 });
+
+describe("the whole network by owner, now", () => {
+  it("adds up what every device moved to each network owner, as rates, with who made it", async () => {
+    const { networkByOwner } = await import("../src/core/activity.ts");
+    const { readConfig, snapshotFromFiles } = await import("../src/core/load.ts");
+    const { buildModel } = await import("../src/core/model.ts");
+    const { config, base } = readConfig(DEMO);
+    const snap = snapshotFromFiles(config, base);
+    const m = buildModel(snap);
+    const conns = snap.devices[0]!.state!["/ip/firewall/connection"]!;
+    const owner = (ip: string) => (ip.startsWith("198.51.100.") ? { asn: 64500, name: "Example Streaming Co." } : undefined);
+    const rows = networkByOwner(conns, 60, m, owner);
+    const top = rows[0]!;
+    expect(top.name).toBe("Example Streaming Co.");
+    expect(top.devices.map((d) => d.name)).toContain("Alex MacBook");
+    // The NAS's backup goes up to the same owner: both directions count.
+    expect(top.upBps).toBeGreaterThan(0);
+    expect(top.downBps).toBeGreaterThan(0);
+    expect(rows.find((r) => r.name === "Unknown network")).toBeDefined();
+    // Rates: bytes over the period, in bits per second.
+    const all = conns.reduce((t, c) => t + Number(c["orig-bytes"]) + Number(c["repl-bytes"]), 0);
+    expect(rows.reduce((t, r) => t + r.downBps + r.upBps, 0)).toBeLessThanOrEqual(Math.ceil((all * 8) / 60) + rows.length);
+  });
+});

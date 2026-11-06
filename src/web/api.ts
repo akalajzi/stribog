@@ -3,6 +3,7 @@ import { applyRates, type LiveRates } from "../core/live.ts";
 import { layoutTopology } from "../core/layout.ts";
 import type { NetworkPayload } from "../server/provider.ts";
 import type { IntegrationsInfo, SessionInfo } from "../server/server.ts";
+import type { OwnersNow } from "../server/live-owners.ts";
 import type { DeviceActivity } from "../server/device-activity.ts";
 
 export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo };
@@ -202,3 +203,34 @@ export function useLiveRates(data: NetworkPayload | undefined, on: boolean): Net
     return { ...data, model, layout: layoutTopology(model) };
   }, [data, rates, live]);
 }
+
+/** The whole network's internet traffic by network owner, read every few seconds while `on`. */
+export function useOwnersNow(on: boolean): OwnersNow | undefined {
+  const [now, setNow] = useState<OwnersNow>();
+  useEffect(() => {
+    if (!on) return;
+    let busy = false;
+    let stop = false;
+    const tick = async () => {
+      if (busy || document.hidden) return;
+      busy = true;
+      try {
+        const res = await fetch("/api/live/owners");
+        const r = res.ok ? ((await res.json()) as OwnersNow | null) : null;
+        if (!stop && r) setNow(r);
+      } catch {
+        // Shown again on the next read.
+      } finally {
+        busy = false;
+      }
+    };
+    void tick();
+    const t = setInterval(tick, 4000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [on]);
+  return now;
+}
+export type { OwnersNow };

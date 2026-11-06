@@ -221,6 +221,19 @@ pre.cli .c { color: var(--tx-3); }
 .mapctl button { width: 32px; height: 30px; display: grid; place-items: center; color: var(--tx-2); border: 0; background: none; cursor: pointer; }
 .mapctl button + button { border-top: 1px solid var(--hair); }
 .mapctl button:hover { background: var(--ink-3); color: var(--tx-1); }
+.owners-now { position: absolute; left: 18px; top: 16px; width: 280px; display: grid; gap: 10px; padding: 12px 14px 14px; border-radius: 12px; background: color-mix(in srgb, var(--ink-2) 90%, transparent); box-shadow: inset 0 0 0 1px var(--hair-2); font-size: 12px; color: var(--tx-2); z-index: 2; }
+.owners-now small { color: var(--tx-3); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; }
+.owners-now .faint { font-size: 12px; }
+.on-row { display: grid; gap: 4px; }
+.on-name { display: flex; align-items: baseline; gap: 8px; }
+.on-name b { flex: 1; min-width: 0; color: var(--tx-1); font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.on-rate { font-variant-numeric: tabular-nums; color: var(--tx-1); white-space: nowrap; }
+.on-rate i { font-style: normal; color: var(--tx-3); }
+.on-bar { height: 3px; border-radius: 2px; background: var(--ink-1); overflow: hidden; }
+.on-bar i { display: block; height: 100%; border-radius: 2px; background: var(--chart-down); transition: width .6s ease; }
+.on-who { color: var(--tx-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.on-who a { color: var(--tx-2); text-decoration: none; }
+.on-who a:hover { color: var(--tx-1); }
 .maptop { position: absolute; left: 18px; top: 16px; right: 18px; display: flex; gap: 10px; align-items: flex-start; justify-content: center; pointer-events: none; }
 .maptop > * { pointer-events: auto; }
 .mapwrap:not(.noside) .maptop { right: calc(var(--side-w) + 18px); }

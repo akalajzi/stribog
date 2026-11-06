@@ -9,6 +9,7 @@ import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
 import { deviceActivity } from "./device-activity.ts";
+import { ownersNow } from "./live-owners.ts";
 import { ensureRecorder } from "./recorder.ts";
 import { rdap } from "./owners.ts";
 import { addAdGuard, AdGuardError, adguards, connectAdGuard, dnsHandedOut, removeAdGuard } from "./adguard.ts";
@@ -107,6 +108,16 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         activity: (id, hours) => deviceActivity({ session, agent: !!agent, id, hours }),
       });
       return true;
+    }
+
+    // The whole network's internet traffic by who runs the other end, every few seconds.
+    if (route === "GET /api/live/owners") {
+      if (!session) return send(res, 200, null), true;
+      try {
+        return send(res, 200, (await ownersNow(session)) ?? null), true;
+      } catch (err) {
+        return send(res, 502, { error: err instanceof Error ? err.message : String(err) }), true;
+      }
     }
 
     // Traffic now, every couple of seconds, between full reads (live routers only).
