@@ -1,7 +1,7 @@
 node_modules/
 dist/
 # Real network snapshots, exports and local settings never go into git.
-data/
-stribog.config.json
+/data/
+/stribog.config.json
 *.local.json
 .DS_Store

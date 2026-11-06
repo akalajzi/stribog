@@ -1,0 +1,9 @@
+{
+  "sources": [
+    { "role": "router", "export": "router.rsc", "state": "state.json" },
+    { "role": "cap", "export": "ap-living.rsc" },
+    { "role": "cap", "export": "ap-upstairs.rsc" }
+  ],
+  "overrides": "overrides.json",
+  "sampleState": false
+}
