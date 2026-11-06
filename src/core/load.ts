@@ -1,9 +1,9 @@
-// Build a Snapshot from files on disk (exports, state JSON, overrides). Node only.
+// Build a Snapshot from files on disk (exports, state JSON, notes). Node only.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
-import { parseExport, scrub, type DeviceRole, type DeviceSnapshot, type Overrides, type RosRecord, type Snapshot } from "./ros.ts";
+import { parseExport, scrub, type DeviceRole, type DeviceSnapshot, type Notes, type RosRecord, type Snapshot } from "./ros.ts";
 
 export interface SourceSpec {
   role: DeviceRole;
@@ -15,7 +15,10 @@ export interface StribogConfig {
   sources?: SourceSpec[];
   /** A saved Snapshot (or DeviceSnapshot[]) JSON, as written by `stribog collect`. Appended to `sources`. */
   snapshot?: string;
-  overrides?: string;
+  /** A notes file to use instead of the one in the data directory (the demo ships its own). */
+  notes?: string;
+  /** Where Stribog keeps notes, the change log and agent tokens. Defaults to the platform's app-data directory. */
+  dataDir?: string;
   sampleState?: boolean;
   /** The router the web app signs in to. Its data replaces the `router` file source while someone is signed in. */
   router?: RouterSpec;
@@ -63,18 +66,18 @@ export function snapshotFromFiles(config: StribogConfig, base: string): Snapshot
   });
   const saved = config.snapshot ? loadSnapshot(expand(config.snapshot, base)) : undefined;
   if (saved) devices.push(...saved.devices);
-  const overrides = config.overrides ? (JSON.parse(readFileSync(expand(config.overrides, base), "utf8")) as Overrides) : saved?.overrides;
+  const notes = config.notes ? (JSON.parse(readFileSync(expand(config.notes, base), "utf8")) as Notes) : saved?.notes;
   const exportTimes = devices.map((d) => d.config.meta.exportedAt).filter(Boolean).sort();
   return {
     collectedAt: saved?.collectedAt ?? exportTimes.at(-1) ?? new Date().toISOString(),
     devices,
-    overrides,
+    notes,
     sampleState: config.sampleState,
   };
 }
 
 /** Read a saved snapshot: a full Snapshot or a bare DeviceSnapshot[]. Secrets are scrubbed again on the way in. */
-export function loadSnapshot(path: string): { collectedAt?: string; devices: DeviceSnapshot[]; overrides?: Overrides } {
+export function loadSnapshot(path: string): { collectedAt?: string; devices: DeviceSnapshot[]; notes?: Notes } {
   const raw = JSON.parse(readFileSync(path, "utf8")) as Snapshot | DeviceSnapshot[];
   const list = Array.isArray(raw) ? raw : (raw.devices ?? []);
   const clean = (menus: Record<string, RosRecord[]> | undefined) =>
@@ -87,5 +90,5 @@ export function loadSnapshot(path: string): { collectedAt?: string; devices: Dev
       sources: d.sources?.length ? d.sources : [{ kind: "rest", label: path }],
     }),
   );
-  return Array.isArray(raw) ? { devices } : { collectedAt: raw.collectedAt, devices, overrides: raw.overrides };
+  return Array.isArray(raw) ? { devices } : { collectedAt: raw.collectedAt, devices, notes: raw.notes };
 }

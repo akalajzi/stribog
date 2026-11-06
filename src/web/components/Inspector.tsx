@@ -50,7 +50,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding }: { data: Ne
           <>
             {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
             {d.kindCertainty === "inferred" && d.kind !== "unknown" ? <span className="cert">probably</span> : null}
-            {d.room ? ` · ${d.room}` : ""} ·{" "}
+            {" · "}
             <span style={{ color: d.status === "online" ? "var(--ok)" : d.status === "offline" ? "var(--tx-3)" : "var(--tx-2)" }}>{d.status}</span>
           </>
         }

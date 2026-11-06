@@ -32,7 +32,7 @@ describe("demo snapshot loading", () => {
     expect(snap.devices[0]!.state?._about).toBeUndefined();
     expect(snap.collectedAt).toBe("2026-11-02 03:32:15");
     expect(snap.sampleState).toBe(false);
-    expect(snap.overrides?.site).toBe("Maple Street");
+    expect(snap.notes?.site).toBe("Maple Street");
     expect(m.sources.map((s) => s.kind)).toEqual(["export", "fixture", "export", "export"]);
   });
 
@@ -54,12 +54,12 @@ describe("demo model: router and WAN", () => {
     expect(m.wan).toMatchObject({ iface: "ether1", type: "dhcp", address: "203.0.113.47", gateway: "203.0.113.1", addressKind: "public", doubleNat: false });
   });
 
-  it("puts the ONT from overrides between the internet and the router", () => {
+  it("puts the ONT from notes between the internet and the router", () => {
     expect(must(m.devices.find((d) => d.id === "upstream"))).toMatchObject({ kind: "isp", name: "ONT (bridge mode)", parent: "internet", zone: "upstream" });
     expect(m.devices.filter((d) => d.zone === "upstream" && d.mac)).toEqual([]);
   });
 
-  it("uses the site name from overrides and knows it has live state", () => {
+  it("uses the site name from notes and knows it has live state", () => {
     expect(m.site).toBe("Maple Street");
     expect(m.hasState).toBe(true);
     expect(m.sampleState).toBe(false);
@@ -264,7 +264,7 @@ describe("saved snapshots", () => {
     const { config, base } = readConfig(DEMO);
     const caps = config.sources!.filter((s) => s.role === "cap").map((s) => ({ ...s, export: resolve(base, s.export!) }));
 
-    const s1 = snapshotFromFiles({ sources: caps, snapshot: "snap.json", overrides: resolve(base, config.overrides!) }, dir);
+    const s1 = snapshotFromFiles({ sources: caps, snapshot: "snap.json", notes: resolve(base, config.notes!) }, dir);
     expect(s1.devices.map((d) => d.role)).toEqual(["cap", "cap", "router"]);
     expect(s1.collectedAt).toBe("2026-11-05T10:00:00.000Z");
     expect(JSON.stringify(s1)).not.toContain("leaked");

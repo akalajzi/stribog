@@ -80,7 +80,7 @@ const HELP = `${c.bold("stribog")} ${c.dim("— a calm, honest review of a Mikro
 
 ${c.bold("Usage")}
   stribog audit [--config stribog.config.json] [--json] [--fix]
-  stribog audit --export router.rsc [--cap ap.rsc ...] [--state state.json] [--overrides overrides.json]
+  stribog audit --export router.rsc [--cap ap.rsc ...] [--state state.json] [--notes notes.json]
   stribog collect --url https://192.168.88.1 --user stribog [--password-file file] [--insecure] --out snapshot.json
   stribog serve [--port 4517] [--host 127.0.0.1]
   stribog help
@@ -130,7 +130,7 @@ async function main(argv: string[]) {
         export: { type: "string" },
         cap: { type: "string", multiple: true },
         state: { type: "string" },
-        overrides: { type: "string" },
+        notes: { type: "string" },
         url: { type: "string" },
         user: { type: "string", short: "u" },
         "password-file": { type: "string" },
@@ -180,15 +180,15 @@ async function load(flags: Flags): Promise<Loaded> {
         { role: "router", export: flags.export as string, state: flags.state as string | undefined },
         ...((flags.cap as string[] | undefined) ?? []).map((p) => ({ role: "cap" as const, export: p })),
       ],
-      overrides: flags.overrides as string | undefined,
+      notes: flags.notes as string | undefined,
     };
     for (const s of config.sources!) [s.export, s.state].filter((p): p is string => !!p).forEach(exists);
-    if (config.overrides) exists(config.overrides);
+    if (config.notes) exists(config.notes);
     const snap = snapshotFromFiles(config, cwd);
     const model = buildModel(snap);
     return { model, analysis: analyze(model, snap), label: flags.export as string, demo: false, sample: false };
   }
-  if (flags.state || flags.cap || flags.overrides) fail("--cap, --state and --overrides go with --export", 2);
+  if (flags.state || flags.cap || flags.notes) fail("--cap, --state and --notes go with --export", 2);
 
   // Same path as the server, so the CLI and the web app always agree.
   if (flags.config) {

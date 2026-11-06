@@ -43,27 +43,48 @@ export interface DeviceSnapshot {
 export interface Snapshot {
   collectedAt: string;
   devices: DeviceSnapshot[];
-  overrides?: Overrides;
+  notes?: Notes;
   /** True when runtime state is sample data rather than read from a router. */
   sampleState?: boolean;
 }
 
 /** What only the user can know: names, kinds, rooms, intent. Keyed by upper-case MAC. */
-export interface Overrides {
+/**
+ * What people (or their agents) tell Stribog that the router cannot know. Everything else comes
+ * from the router. Stored by the server; keyed by MAC address for devices.
+ */
+export interface Notes {
+  /** Name of the network as a whole. */
   site?: string;
-  devices?: Record<string, DeviceOverride>;
+  /** Free-form notes about the network. */
+  notes?: string;
   upstream?: { name?: string; model?: string; isp?: string };
   networks?: Record<string, { role?: NetworkRole; label?: string }>;
+  devices?: Record<string, DeviceNotes>;
   planned?: PlannedDevice[];
 }
 
-export interface DeviceOverride {
+export interface DeviceNotes {
   name?: string;
   kind?: string;
-  room?: string;
-  owner?: string;
+  labels?: string[];
+  /** One or two sentences: what it is and what it is for. */
+  description?: string;
+  /** What runs on it, so people and agents know what depends on it. */
+  services?: ServiceNote[];
+  notes?: string;
   /** Hardware that can only use 2.4 GHz (many printers and IoT devices). */
   only24?: boolean;
+  /** When these notes last changed (ISO time). */
+  updatedAt?: string;
+}
+
+export interface ServiceNote {
+  name: string;
+  port?: number;
+  protocol?: string;
+  url?: string;
+  note?: string;
 }
 
 export interface PlannedDevice {

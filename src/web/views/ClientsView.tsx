@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Device, Finding, NetworkPayload, Severity } from "../api.ts";
-import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
+import { KIND_LABEL, KINDS, type DeviceKind } from "../../core/classify.ts";
 import { CliBlock, SEV_VAR } from "../components/FindingCard.tsx";
 import { COLORS, Glyph, bandColor } from "../components/DeviceArt.tsx";
 import { SignalBars } from "../components/Inspector.tsx";
@@ -340,7 +340,6 @@ function Cable() {
 
 // ---------------------------------------------------------------------------
 
-const KINDS = (Object.keys(KIND_LABEL) as DeviceKind[]).filter((k) => !["internet", "isp", "unknown"].includes(k));
 
 function introReason(d: Device): string {
   if (d.nameSource === "mac") return d.privateMac ? "Private address, nothing else known" : "Named from its MAC address";

@@ -55,6 +55,11 @@ export function sessionFrom(req: IncomingMessage): Session | undefined {
   return s;
 }
 
+/** Still signed in: present and not idle for too long. Does not count as activity. */
+export function isAlive(s: Session): boolean {
+  return store.get(s.id) === s && Date.now() - s.seenAt <= IDLE_MS;
+}
+
 export function setSessionCookie(res: ServerResponse, s: Session | undefined) {
   res.setHeader("set-cookie", s ? `${COOKIE}=${s.id}; Path=/; HttpOnly; SameSite=Strict` : `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
 }

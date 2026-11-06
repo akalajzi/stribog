@@ -316,7 +316,7 @@ const band24Clients: Rule = ({ clients }) => {
         ],
         evidence: [`${d.via?.ssid ?? "?"} on ${d.via?.radio ?? "?"}: ${sig ?? "?"} dBm, tx ${d.via?.txRate ?? "?"}, rx ${d.via?.rxRate ?? "?"}`],
         devices: [d.id],
-        fix: sig !== undefined && sig < -65 ? { where: "plan", steps: [`Place the next access point closer to ${d.name}${d.room ? ` (${d.room})` : ""}.`] } : undefined,
+        fix: sig !== undefined && sig < -65 ? { where: "plan", steps: [`Place the next access point closer to ${d.name}.`] } : undefined,
       };
     return {
       id: `wifi-24-capable-${d.mac}`,

@@ -101,7 +101,7 @@ describe("web API sessions", () => {
     const port = (router.address() as { port: number }).port;
     const dir = mkdtempSync(join(tmpdir(), "stribog-"));
     snapFile = join(dir, "live.json");
-    writeFileSync(join(dir, "stribog.config.json"), JSON.stringify({ router: { url: `http://127.0.0.1:${port}` }, debug: { saveSnapshot: "live.json" } }));
+    writeFileSync(join(dir, "stribog.config.json"), JSON.stringify({ router: { url: `http://127.0.0.1:${port}` }, debug: { saveSnapshot: "live.json" }, dataDir: "data" }));
     process.env.STRIBOG_CONFIG = join(dir, "stribog.config.json");
 
     app = createServer(async (req, res) => {
@@ -164,6 +164,37 @@ describe("web API sessions", () => {
 
     await post("/api/logout", {}, jar);
     expect((await fetch(base + "/api/network", { headers: jar })).status).toBe(401);
+  });
+
+  it("lets a signed-in person keep notes and connect an agent with the same rights", async () => {
+    const res = await post("/api/login", { user: "admin", password: "s3cret" });
+    const jar = { cookie: res.headers.get("set-cookie")!.split(";")[0]! };
+    const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = jar) =>
+      fetch(base + path, { method, headers: { "content-type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+    const saved = await (await call("PATCH", "/api/notes/devices/00:00:5E:00:53:10", { name: "Family NAS", labels: ["storage"] })).json();
+    expect(saved).toMatchObject({ name: "Family NAS", labels: ["storage"] });
+    expect((await call("PATCH", "/api/notes/devices/00:00:5E:00:53:10", { room: "Hall" })).status).toBe(400);
+
+    // An agent token: shown once, then works without the cookie.
+    const created = await (await call("POST", "/api/tokens", { name: "My agent" })).json();
+    expect(created.token).toMatch(/^stb_/);
+    const auth = { authorization: `Bearer ${created.token}` };
+    expect(await (await fetch(base + "/api/notes", { headers: auth })).json()).toMatchObject({ devices: { "00:00:5E:00:53:10": { name: "Family NAS" } } });
+    const byAgent = await call("PATCH", "/api/notes/devices/00:00:5E:00:53:10", { services: [{ name: "DNS", port: 53 }] }, { ...auth, origin: "http://elsewhere.example" });
+    expect(byAgent.status).toBe(200);
+    const net = await (await fetch(base + "/api/network", { headers: auth })).json();
+    expect(net.meta.mode).toBe("live");
+    // Agents cannot mint or list tokens, and a wrong token is refused outright.
+    expect((await call("GET", "/api/tokens", undefined, auth)).status).toBe(403);
+    expect((await fetch(base + "/api/notes", { headers: { authorization: "Bearer stb_nope" } })).status).toBe(401);
+
+    const log = await (await fetch(base + "/api/notes/audit", { headers: jar })).json();
+    expect(log.map((e: { target: string }) => e.target)).toEqual(["device:00:00:5E:00:53:10", "device:00:00:5E:00:53:10"]);
+    expect(log[0].after.services).toEqual([{ name: "DNS", port: 53 }]);
+
+    expect((await call("DELETE", `/api/tokens/${created.info.id}`)).status).toBe(200);
+    expect((await fetch(base + "/api/notes", { headers: auth })).status).toBe(401);
   });
 
   it("offers the demo network without a router", async () => {

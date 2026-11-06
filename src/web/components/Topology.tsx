@@ -237,7 +237,7 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
     }
     default: {
       const dns = lan?.dhcp?.dns.includes(d.ip ?? "-") ? "DNS for LAN" : "";
-      return [d.ip ?? "", [dns, d.room].filter(Boolean).join(" · ")];
+      return [d.ip ?? "", [dns, ...(d.labels ?? []).slice(0, 2)].filter(Boolean).join(" · ")];
     }
   }
 }

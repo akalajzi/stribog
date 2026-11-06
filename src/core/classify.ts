@@ -43,6 +43,9 @@ export const KIND_LABEL: Record<DeviceKind, string> = {
   unknown: "Unknown device",
 };
 
+/** Kinds a person can give a device (the rest are Stribog's own: the internet, the ISP box, unknown). */
+export const KINDS = (Object.keys(KIND_LABEL) as DeviceKind[]).filter((k) => !["internet", "isp", "unknown"].includes(k));
+
 // Order matters: more specific words first.
 const KEYWORDS: [RegExp, DeviceKind][] = [
   [/\b(bambu|p1s|p1p|x1c?|a1 ?mini|prusa|creality|ender|voron|3d ?print)/i, "printer3d"],

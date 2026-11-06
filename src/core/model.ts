@@ -25,12 +25,14 @@ import {
   menu,
   prop,
   single,
+  type DeviceNotes,
   type DeviceSnapshot,
   type NetworkRole,
-  type Overrides,
+  type Notes,
   type PlannedDevice,
   type RosConfig,
   type RosRecord,
+  type ServiceNote,
   type Snapshot,
   type SourceInfo,
 } from "./ros.ts";
@@ -71,8 +73,11 @@ export interface Device {
   managed?: boolean;
   parent?: string;
   via?: Connection;
-  room?: string;
-  owner?: string;
+  /** From notes: labels, a short description, what runs on it, and free-form notes. */
+  labels?: string[];
+  description?: string;
+  services?: ServiceNote[];
+  notes?: string;
   only24?: boolean;
   lastSeen?: string;
   facts: string[];
@@ -262,7 +267,7 @@ const portSort = (a: string, b: string) => {
 };
 
 export function buildModel(snap: Snapshot): NetworkModel {
-  const ov: Overrides = snap.overrides ?? {};
+  const ov: Notes = snap.notes ?? {};
   const routerSnap = snap.devices.find((d) => d.role === "router");
   const capSnaps = snap.devices.filter((d) => d.role === "cap");
   const cfg = routerSnap?.config;
@@ -531,7 +536,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
       zone: "lan",
       status: cap.remote ? (/ok|run/i.test(cap.remote.state ?? "ok") ? "online" : "offline") : hasState ? "unknown" : "unknown",
       managed: true,
-      room: ovd?.room,
+      ...noteFields(ovd),
       facts: [`Managed by CAPsMAN on the router`, c ? `Update channel ${prop(single(c, "/system/package/update"), "channel", "stable")}` : ""].filter(Boolean),
     });
   }
@@ -693,8 +698,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
       network: networkOfIp(ip) ?? (host?.bridge ? networks.find((n) => n.bridge === host.bridge)?.id : undefined),
       zone: "lan",
       status: "unknown",
-      room: ovd?.room,
-      owner: ovd?.owner,
+      ...noteFields(ovd),
       lastSeen: ls?.["last-seen"],
       facts: [],
     };
@@ -832,6 +836,17 @@ function labelFor(name: string, comment: string | undefined, role: NetworkRole):
   const c = comment?.replace(/\s*\d+\.\d+\.\d+\.\d+\/\d+\s*/, "").trim();
   if (c && c.length <= 24) return c;
   return name.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+/** The descriptive parts of a device's notes, as they appear on the device. */
+function noteFields(n: DeviceNotes | undefined): Pick<Device, "labels" | "description" | "services" | "notes"> {
+  if (!n) return {};
+  return {
+    ...(n.labels?.length ? { labels: n.labels } : {}),
+    ...(n.description ? { description: n.description } : {}),
+    ...(n.services?.length ? { services: n.services } : {}),
+    ...(n.notes ? { notes: n.notes } : {}),
+  };
 }
 
 function upstreamFromComment(comment?: string): string | undefined {
