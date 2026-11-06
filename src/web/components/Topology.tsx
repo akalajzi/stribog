@@ -342,12 +342,12 @@ function InternetNow({ data }: { data: NetworkPayload }) {
   const zone = layout.zones.find((z) => at.x > z.x && at.x < z.x + z.w && at.y > z.y && at.y < z.y + z.h);
   const x = zone ? zone.x - 28 : at.x - 64;
   // A big, light number with a small, quiet unit: read at a glance, not as a log line.
-  const line = (y: number, arrow: string, bps: number) => {
+  const line = (y: number, arrow: string, bps: number, size: number) => {
     const [num, unit] = fmtBps(bps).split(" ");
     // Numbers right-aligned, then direction and unit in one small column, so both lines line up.
     return (
       <g>
-        <text x={x - 44} y={y} textAnchor="end" fontSize={34} fontWeight={300} letterSpacing="-0.02em" fill={color} style={{ fontVariantNumeric: "tabular-nums" }}>{num}</text>
+        <text x={x - 44} y={y} textAnchor="end" fontSize={size} fontWeight={300} letterSpacing="-0.02em" fill={color} style={{ fontVariantNumeric: "tabular-nums" }}>{num}</text>
         <text x={x - 38} y={y} fontSize={12} fill="var(--tx-3)">
           <tspan>{arrow}</tspan>
           <tspan dx={3}>{unit}</tspan>
@@ -359,8 +359,9 @@ function InternetNow({ data }: { data: NetworkPayload }) {
     <g className="internet-now" fontFamily="Inter, SF Pro Text, -apple-system, sans-serif">
       <title>{`Through the router's internet port ${wan.name}${cap ? ` (${fmtBps(cap)})` : ""}, as it reads now`}</title>
       <text x={x} y={at.y - 34} textAnchor="end" fontSize={10.5} fontWeight={600} letterSpacing="0.09em" fill="var(--tx-3)">INTERNET NOW</text>
-      {line(at.y + 2, "↓", wan.rxBps ?? 0)}
-      {line(at.y + 42, "↑", wan.txBps ?? 0)}
+      {/* Download is what a home watches; upload sits under it, smaller. */}
+      {line(at.y + 2, "↓", wan.rxBps ?? 0, 34)}
+      {line(at.y + 32, "↑", wan.txBps ?? 0, 22)}
     </g>
   );
 }
