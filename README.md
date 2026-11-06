@@ -99,6 +99,12 @@ The page also lists who a device mostly talks to, by network owner (Cloudflare, 
 
 Stribog records once a minute while someone is signed in to the router, for up to 12 hours after the last visit, using the credentials it already holds in memory. History lives in the data directory under `history/` and is kept for 30 days. A device behind a RouterOS container's veth interface is named after the container.
 
+### Integrations
+
+Other things on your network that know what devices do can be connected in Settings → Integrations. Stribog reads them and shows what they know beside what the router reports; it never changes their settings.
+
+- **AdGuard Home.** Its query log says which names each device looks up. A device's details list the domains it looked up over the period (grouped by registered domain, with what the block lists stopped), and AdGuard's answers name the addresses in its traffic, which the router cannot do when devices ask AdGuard rather than the router. Stribog suggests the DNS server the router hands out. Like the router's, the AdGuard password stays in memory only: connect again after Stribog restarts. The demo reads a built-in sample log.
+
 ### Agents (MCP)
 
 Under **Settings → Agents**, create a token for an AI agent. It is shown once; Stribog keeps only its hash. The agent connects to `http://<stribog>/mcp` (Streamable HTTP) with `Authorization: Bearer <token>`, for example:

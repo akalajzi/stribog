@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import { byOwner, flowsFor, namesByAddress, type Flow, type OwnerShare } from "../core/activity.ts";
 import { AsnDb, asnDb, reverseName } from "./owners.ts";
+import { adguard, demoDnsLog, deviceLookups, withNames, type DnsUse } from "./adguard.ts";
 import { normMac } from "../core/net.ts";
 import { connectionsOf } from "../core/model.ts";
 import { RouterOsRest } from "../core/rest.ts";
@@ -18,6 +19,8 @@ export interface DeviceActivity {
   history: { from: number; to: number; samples: Sample[]; talks: Talk[]; since?: string; recording: boolean };
   /** Top talkers by network owner, now and over the period. `ready` is false while the owner database is still coming. */
   owners: { now: OwnerShare[]; recorded: OwnerShare[]; ready: boolean };
+  /** The names it looked up, when a DNS server's log is connected (AdGuard Home). */
+  dns?: DnsUse;
 }
 
 const DEMO_HISTORY = resolve(import.meta.dirname, "../../fixtures/demo/history");
@@ -55,19 +58,27 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
       note = "From the saved snapshot, not live.";
     } else note = "Sign in to the router to see who it is talking to right now.";
   }
-  const names = namesByAddress(dns);
+  // History: what the recorder kept. The demo ships a day of it, ending when its data was taken.
+  const store = demo ? new HistoryStore(DEMO_HISTORY) : historyFor(setup().dataDir);
+  const to = demo ? Date.parse(m.generatedAt.replace(" ", "T")) : Date.now();
+  const from = to - o.hours * 3600_000;
+
+  // What it looked up, from the DNS server's log when one is connected; its answers name the other ends.
+  const log = demo ? demoDnsLog : adguard();
+  const ips = links.flatMap((l) => (l.ip ? [l.ip] : []));
+  const looked = log && ips.length ? await deviceLookups(log, ips, from, to) : undefined;
+  const names = withNames(namesByAddress(dns), looked?.names ?? new Map());
   const flows = mergeFlows(links.flatMap((l) => (l.ip ? flowsFor(l.ip, conns, names, m) : [])));
   // An empty cache usually means devices ask another DNS server, so the router has no names to give.
   const lan = m.networks.find((n) => n.role === "lan");
   const dnsServer = lan?.dhcp?.dns.find((ip) => ip !== lan.gateway);
   const dnsName = dnsServer ? (m.devices.find((x) => connectionsOf(x).some((l) => l.ip === dnsServer))?.name ?? dnsServer) : undefined;
-  const noNames = conns.length && !dns.length ? `The router's DNS cache is empty${dnsName ? `: devices here ask ${dnsName} for names, not the router` : ""}, so the other ends show as addresses.` : undefined;
-
-  // History: what the recorder kept. The demo ships a day of it, ending when its data was taken.
-  const store = demo ? new HistoryStore(DEMO_HISTORY) : historyFor(setup().dataDir);
-  const to = demo ? Date.parse(m.generatedAt.replace(" ", "T")) : Date.now();
-  const from = to - o.hours * 3600_000;
+  const noNames =
+    conns.length && !dns.length && !looked?.names.size
+      ? `The router's DNS cache is empty${dnsName ? `: devices here ask ${dnsName} for names, not the router` : ""}, so the other ends show as addresses.${log ? "" : " If that is AdGuard Home, connect it in Settings to see names."}`
+      : undefined;
   const talks = macs.length ? store.talks(macs, from, to) : [];
+  for (const t of talks) if (!t.names?.length && looked?.names.has(t.remote)) t.names = looked.names.get(t.remote);
 
   // Who runs the other ends: the offline ASN database, and reverse DNS for the busiest few.
   const db = demo ? await (demoAsn ??= AsnDb.load(DEMO_ASN)) : asnDb(setup().dataDir);
@@ -93,6 +104,7 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
       recording: !demo && recorderActive(),
     },
     owners: { now: byOwner(flows).slice(0, 10), recorded: byOwner(talks).slice(0, 10), ready: !!db },
+    dns: looked?.use,
   };
 }
 

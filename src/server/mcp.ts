@@ -122,7 +122,7 @@ function buildServer(ctx: McpContext): McpServer {
     {
       title: "Device activity",
       description:
-        "Who a device talks to and how much: its top talkers by network owner (e.g. Apple, Google, Cloudflare, from an offline ASN database), its connections through the router right now (other end, DNS or reverse-DNS name when known, the network's owner, port and what the port is usually for, bytes each way), what it talked to over the last hours as recorded, and its traffic and online history. Only routed traffic is visible (internet and between networks), not traffic between devices on the same LAN. Useful to work out what an unknown device is; say it is a guess when you do.",
+        "Who a device talks to and how much: its top talkers by network owner (e.g. Apple, Google, Cloudflare, from an offline ASN database), its connections through the router right now (other end, DNS or reverse-DNS name when known, the network's owner, port and what the port is usually for, bytes each way), what it talked to over the last hours as recorded, its traffic and online history, and, when AdGuard Home is connected in Stribog, the domains it looked up (with what the block lists stopped). Only routed traffic is visible (internet and between networks), not traffic between devices on the same LAN. Useful to work out what an unknown device is; say it is a guess when you do.",
       inputSchema: { device: z.string().describe("MAC address, IP address or name."), hours: z.number().int().min(1).max(720).optional().describe("How far back, default 24.") },
       annotations: read,
     },
@@ -151,6 +151,7 @@ function buildServer(ctx: McpContext): McpServer {
           peakBps: peak,
           talks: a.history.talks.slice(0, 40),
         },
+        lookedUp: a.dns && { ...a.dns, from: new Date(a.dns.from).toISOString(), to: new Date(a.dns.to).toISOString(), domains: a.dns.domains.slice(0, 40).map((d) => ({ ...d, names: d.names.slice(0, 5) })) },
       });
     }),
   );

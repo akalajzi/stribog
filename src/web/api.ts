@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { NetworkPayload } from "../server/provider.ts";
-import type { SessionInfo } from "../server/server.ts";
+import type { IntegrationsInfo, SessionInfo } from "../server/server.ts";
 import type { DeviceActivity } from "../server/device-activity.ts";
 
-export type { NetworkPayload, SessionInfo, DeviceActivity };
+export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo };
 export type { Analysis, Finding, Severity, Category } from "../core/analyze.ts";
 export type { Device, NetworkModel, Port, Network, Ssid, Radio } from "../core/model.ts";
 export type { Layout, LNode, LLink } from "../core/layout.ts";
@@ -38,6 +38,9 @@ export const listTokens = () => api<TokenInfo[]>("/api/tokens");
 export const createToken = (name: string) => api<{ token: string; info: TokenInfo }>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) });
 export const revokeToken = (id: string) => api<{ ok: true }>(`/api/tokens/${id}`, { method: "DELETE" });
 export const fetchActivity = (id: string, hours: number) => api<DeviceActivity>(`/api/devices/${encodeURIComponent(id)}/activity?hours=${hours}`);
+export const fetchIntegrations = () => api<IntegrationsInfo>("/api/integrations");
+export const connectAdGuard = (address: string, user: string, password: string) => api<{ ok: true }>("/api/integrations/adguard", { method: "POST", body: JSON.stringify({ address, user, password }) });
+export const disconnectAdGuard = () => api<{ ok: true }>("/api/integrations/adguard", { method: "DELETE" });
 export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
 
 export type Theme = "dark" | "light" | "system";

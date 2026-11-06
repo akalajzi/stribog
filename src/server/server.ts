@@ -10,6 +10,8 @@ import { handleMcp } from "./mcp.ts";
 import { deviceActivity } from "./device-activity.ts";
 import { ensureRecorder } from "./recorder.ts";
 import { rdap } from "./owners.ts";
+import { adguard, AdGuardError, adguardError, connectAdGuard, setAdGuard } from "./adguard.ts";
+import { connectionsOf } from "../core/model.ts";
 import { isPrivateIp } from "../core/net.ts";
 import { createSession, endSession, LoginError, sessionFrom, setSessionCookie, signIn, type Session } from "./session.ts";
 
@@ -17,6 +19,23 @@ const DIST = resolve(import.meta.dirname, "../../dist");
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".png": "image/png", ".json": "application/json" };
 
 /** What the browser needs to know before showing anything: signed in or not, and how to sign in. */
+/** Other sources Stribog reads, for Settings. Never includes a password. */
+export interface IntegrationsInfo {
+  adguard: {
+    connected: boolean;
+    url?: string;
+    user?: string;
+    encrypted?: boolean;
+    version?: string;
+    /** The last read failed. */
+    error?: string;
+    /** The demo reads a built-in sample instead. */
+    sample?: boolean;
+    /** The DNS server the router hands out, when it is not the router: probably the one to connect. */
+    suggested?: { address: string; name?: string };
+  };
+}
+
 export interface SessionInfo {
   signedIn: boolean;
   kind?: "router" | "demo" | "files";
@@ -149,6 +168,40 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         if (err instanceof NotesError) return send(res, 400, { error: err.message }), true;
         throw err;
       }
+    }
+
+    // ---- integrations: other sources, connected by a signed-in person only ----
+    if (url.pathname.startsWith("/api/integrations")) {
+      if (agent) return send(res, 403, { error: "Agents cannot manage integrations." }), true;
+      const demo = session?.kind === "demo";
+      if (route === "GET /api/integrations") {
+        const a = adguard();
+        const m = (await getNetwork(session).catch(() => undefined))?.model;
+        const lan = m?.networks.find((n) => n.role === "lan");
+        const dnsIp = lan?.dhcp?.dns.find((ip) => ip !== lan.gateway);
+        const owner = dnsIp ? m?.devices.find((d) => connectionsOf(d).some((l) => l.ip === dnsIp)) : undefined;
+        const info: IntegrationsInfo = {
+          adguard: demo
+            ? { connected: true, sample: true }
+            : a
+              ? { connected: true, url: a.login.url, user: a.login.user, encrypted: a.login.encrypted, version: a.login.version, error: adguardError() }
+              : { connected: false, suggested: dnsIp ? { address: dnsIp, name: owner?.name } : undefined },
+        };
+        return send(res, 200, info), true;
+      }
+      if (demo) return send(res, 403, { error: "The demo network has a sample AdGuard Home log built in." }), true;
+      if (route === "POST /api/integrations/adguard") {
+        const body = await readJson(req);
+        try {
+          setAdGuard(await connectAdGuard(String(body.address ?? ""), String(body.user ?? "").trim(), String(body.password ?? "")));
+          return send(res, 200, { ok: true }), true;
+        } catch (err) {
+          if (!(err instanceof AdGuardError)) throw err;
+          if (err.status === 401) await new Promise((r) => setTimeout(r, 1000));
+          return send(res, err.status, { error: err.message }), true;
+        }
+      }
+      if (route === "DELETE /api/integrations/adguard") return setAdGuard(undefined), send(res, 200, { ok: true }), true;
     }
 
     // ---- agent tokens: managed by a signed-in person only ----

@@ -7,6 +7,7 @@ import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
 import { ratesNow, setRates } from "./rates.ts";
+import { recentNames, withNames } from "./adguard.ts";
 import { getNetworkForAgent, liveSession, setup, type NetworkPayload } from "./provider.ts";
 import { join } from "node:path";
 
@@ -54,11 +55,13 @@ export async function tick(now = Date.now()) {
   const [conns, dns] = await Promise.all([rest.connections(), rest.dnsCache().catch(() => [] as RosRecord[])]);
   const moved = deltas(conns, st.prev);
   const names = namesByAddress(dns);
+  // Names each device was given by AdGuard Home, when connected: the router never sees those lookups.
+  const asked = await recentNames(now);
   const byMac = new Map<string, Flow[]>();
   // Kept per connection (MAC): a machine's connections are grouped when read, so a changed grouping is never baked in.
   for (const l of payload.model.devices.flatMap(connectionsOf)) {
     if (!l.mac || !l.ip) continue;
-    const flows = flowsFor(l.ip, moved, names, payload.model).filter((f) => f.down + f.up > 0);
+    const flows = flowsFor(l.ip, moved, withNames(names, asked(l.ip)), payload.model).filter((f) => f.down + f.up > 0);
     if (flows.length) byMac.set(l.mac, flows);
   }
   store.addTalks(now, byMac);

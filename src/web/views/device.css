@@ -49,3 +49,5 @@
 .dv-whois { display: grid; gap: 2px; margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--ink-1); box-shadow: inset 0 0 0 1px var(--hair); font-size: 12px; }
 .dv-whois a { color: var(--tx-3); }
 @media (max-width: 900px) { .dv-owners { grid-template-columns: minmax(0, 1fr); } }
+.dv-dns-sum { margin: 0; color: var(--tx-2); }
+.dv-dns-sum b { color: var(--tx-1); font-weight: 600; }

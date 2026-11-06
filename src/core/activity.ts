@@ -16,7 +16,7 @@ export interface Flow {
   remote: string;
   /** For "out", the remote port; for "in", the device's own port that was reached. */
   port?: number;
-  /** What the router's DNS cache says the remote is called, first the name that was asked for. */
+  /** What the remote is called, from the router's DNS cache or a connected DNS server's log; first the name that was asked for. */
   names?: string[];
   /** A device on this network, when the other end is one. */
   remoteDevice?: { id: string; name: string };

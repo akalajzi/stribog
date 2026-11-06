@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createToken, fetchAudit, getTheme, listTokens, revokeToken, setTheme, type AuditEntry, type NetworkPayload, type SessionInfo, type Theme, type TokenInfo } from "../api.ts";
+import { connectAdGuard, createToken, disconnectAdGuard, fetchAudit, fetchIntegrations, getTheme, listTokens, revokeToken, setTheme, type AuditEntry, type IntegrationsInfo, type NetworkPayload, type SessionInfo, type Theme, type TokenInfo } from "../api.ts";
 import "./settings.css";
 
 export function SettingsView({ data, session }: { data: NetworkPayload; session: SessionInfo }) {
@@ -7,6 +7,7 @@ export function SettingsView({ data, session }: { data: NetworkPayload; session:
     <div className="page settings">
       <h1>Settings</h1>
       <Appearance />
+      <Integrations />
       <Agents demo={session.kind === "demo"} />
       <History data={data} />
     </div>
@@ -30,6 +31,99 @@ function Appearance() {
         ))}
       </div>
       <p className="faint">Kept in this browser only.</p>
+    </section>
+  );
+}
+
+/** Other sources Stribog can read when you connect them: for now, AdGuard Home's query log. */
+function Integrations() {
+  const [info, setInfo] = useState<IntegrationsInfo>();
+  const [error, setError] = useState<string>();
+  const [form, setForm] = useState({ address: "", user: "", password: "" });
+  const [busy, setBusy] = useState(false);
+  const load = () => fetchIntegrations().then(setInfo, (e: Error) => setError(e.message));
+  useEffect(() => void load(), []);
+  const a = info?.adguard;
+  useEffect(() => {
+    if (a?.suggested && !form.address) setForm((f) => ({ ...f, address: a.suggested!.address }));
+  }, [a?.suggested?.address]);
+
+  const connect = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await connectAdGuard(form.address, form.user, form.password);
+      setForm((f) => ({ ...f, password: "" }));
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <section className="card st-sec">
+      <h2>Integrations</h2>
+      <p>
+        Other things on your network that know what devices do. Stribog reads them when you connect them and shows what they know beside what the router reports. It does not change their settings.
+      </p>
+      <div className="st-int">
+        <div className="st-int-h">
+          <b>AdGuard Home</b>
+          <span className={a?.connected && !a.error ? "ok" : "faint"}>{!a ? "" : a.sample ? "sample log" : a.connected ? (a.error ? "connected, last read failed" : "connected") : "not connected"}</span>
+        </div>
+        <p className="faint">
+          Its query log says which names each device looks up: what an app or a gadget is talking to, before any traffic flows, and what the block lists stopped. Stribog also uses its answers to name the
+          addresses in a device's traffic.
+        </p>
+        {!a ? null : a.sample ? (
+          <p className="faint">The demo network reads a sample of a query log built into Stribog.</p>
+        ) : a.connected ? (
+          <>
+            <div className="kv">
+              <span>Address</span>
+              <span className="tx mono">{a.url}{a.encrypted ? "" : <span className="cert">not encrypted</span>}</span>
+              <span>Signed in as</span>
+              <span className="tx">{a.user}</span>
+              {a.version && <><span>Version</span><span className="tx mono">{a.version}</span></>}
+            </div>
+            {a.error && <p className="st-error">{a.error}</p>}
+            <p className="faint">The password stays in Stribog's memory, like the router's: after Stribog restarts, connect again.</p>
+            <div><button className="btn ghost sm" onClick={() => void disconnectAdGuard().then(load, (e: Error) => setError(e.message))}>Disconnect</button></div>
+          </>
+        ) : (
+          <form
+            className="st-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void connect();
+            }}
+          >
+            <label>
+              <span>Address</span>
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. 192.168.1.10 or http://adguard.lan:3000" required />
+            </label>
+            <label>
+              <span>User name</span>
+              <input value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="username" required />
+            </label>
+            <label>
+              <span>Password</span>
+              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="current-password" />
+            </label>
+            <div className="st-form-foot">
+              <button className="btn pri" disabled={busy}>{busy ? "Connecting…" : "Connect"}</button>
+              {a.suggested && (
+                <span className="faint">
+                  The router tells devices to ask {a.suggested.name ? <b>{a.suggested.name}</b> : null} <span className="mono">{a.suggested.address}</span> for names: probably this one. The password
+                  stays in Stribog's memory only.
+                </span>
+              )}
+            </div>
+          </form>
+        )}
+        {error && <p className="st-error">{error}</p>}
+      </div>
     </section>
   );
 }

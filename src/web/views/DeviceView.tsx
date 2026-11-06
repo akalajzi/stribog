@@ -92,6 +92,7 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
       </section>
 
       {act && <Owners act={act} hours={hours} />}
+      {act?.dns && <LookedUp dns={act.dns} hours={hours} />}
 
       <section className="card dv-sec">
         <div className="dv-sec-h"><h2>Talking to now</h2></div>
@@ -318,6 +319,88 @@ function OwnerList({ title, rows }: { title: string; rows: OwnerShare[] }) {
       )}
     </div>
   );
+}
+
+// ---- names it looked up -----------------------------------------------------------
+
+function LookedUp({ dns, hours }: { dns: NonNullable<DeviceActivity["dns"]>; hours: number }) {
+  const [all, setAll] = useState(false);
+  const period = hours === 24 ? "24 hours" : "7 days";
+  const rows = all ? dns.domains : dns.domains.slice(0, 15);
+  const short = dns.keptMs && dns.keptMs < dns.to - dns.from ? `${dns.source} keeps its log for ${fmtSpan(dns.keptMs)}, so older lookups are gone.` : "";
+  return (
+    <section className="card dv-sec">
+      <div className="dv-sec-h">
+        <h2>Looked up, last {period}</h2>
+        <span className="faint">names it asked {dns.source} for</span>
+      </div>
+      {dns.error ? (
+        <p className="dv-error">Could not read {dns.source}: {dns.error}</p>
+      ) : dns.anonymised ? (
+        <p className="faint">{dns.source} hides which device asked (its log anonymises client addresses), so lookups cannot be shown per device.</p>
+      ) : !dns.total ? (
+        <p className="faint">No lookups from this device in this period.</p>
+      ) : (
+        <>
+          <p className="dv-dns-sum">
+            <b>{dns.total.toLocaleString()}</b> lookups of <b>{dns.domains.length.toLocaleString()}</b> domain{dns.domains.length === 1 ? "" : "s"}
+            {dns.blocked ? <> · <b>{dns.blocked.toLocaleString()}</b> blocked</> : null}
+            {dns.truncated ? <span className="faint"> · the most recent only</span> : null}
+          </p>
+          <div className="dv-tablewrap">
+            <table className="t dv-t">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th className="num">Lookups</th>
+                  <th className="num">Blocked</th>
+                  <th>Last</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((d) => (
+                  <tr key={d.domain}>
+                    <td>
+                      <div>{d.domain}</div>
+                      {(d.names.length > 1 || d.names[0] !== d.domain) && (
+                        <div className="faint dv-end-sub mono" title={d.names.join("\n")}>
+                          {d.names.slice(0, 3).join(", ")}
+                          {d.names.length > 3 ? ` +${d.names.length - 3}` : ""}
+                        </div>
+                      )}
+                    </td>
+                    <td className="num mono">{d.count.toLocaleString()}</td>
+                    <td className="num mono">{d.blocked ? (d.blocked === d.count ? "all" : d.blocked.toLocaleString()) : ""}</td>
+                    <td className="faint">{ago(Date.parse(d.last), dns.to)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {dns.domains.length > 15 && (
+            <button className="linkish" onClick={() => setAll(!all)}>{all ? "Show the top 15" : `Show all ${dns.domains.length}`}</button>
+          )}
+        </>
+      )}
+      <p className="faint dv-foot">
+        From the query log of {dns.source}. A lookup means something on the device asked for the name, not that traffic followed; one visit usually asks several times (IPv4, IPv6). Domains group names by their
+        registered name, a guess from the shape of the name. {short}
+      </p>
+    </section>
+  );
+}
+
+function fmtSpan(ms: number): string {
+  const h = ms / 3600_000;
+  return h < 48 ? `${Math.round(h)} hours` : `${Math.round(h / 24)} days`;
+}
+
+function ago(t: number, now: number): string {
+  const m = Math.max(0, Math.round((now - t) / 60_000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
 }
 
 // ---- tables ------------------------------------------------------------------
