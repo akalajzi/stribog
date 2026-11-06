@@ -224,6 +224,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
                 <rect className="hit" x={n.kind === "router" ? -GATEWAY_W / 2 - 150 : -70} y={-42} width={n.kind === "router" ? GATEWAY_W + 160 : 140} height={n.label === "below" ? 130 : 86} />
                 {art}
                 <Labels n={n} name={d.name} lines={lines} sev={sev} />
+                {d.services?.length ? <ServicePills n={n} services={d.services} /> : null}
               </g>
             );
           })}
@@ -328,6 +329,57 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
       return [d.ip ?? "", [...also, dns, ...(d.labels ?? []).slice(0, 2)].filter(Boolean).slice(0, 2).join(" · ")];
     }
   }
+}
+
+/**
+ * What runs on a device, from its notes, as small pills under its labels. As many as fit
+ * under the label, then "+N"; a pill with a link opens it.
+ */
+function ServicePills({ n, services }: { n: LNode; services: NonNullable<Device["services"]> }) {
+  if (n.label !== "below" && n.label !== "right") return null;
+  // About as wide as a name under a device, so neighbours' pills never meet.
+  const MAX = n.label === "below" ? 150 : 190;
+  const GAP = 4;
+  const widthOf = (t: string) => Math.ceil(t.length * 6.1 + 14);
+  const shown: { s: (typeof services)[number]; w: number; cut: boolean }[] = [];
+  let used = 0;
+  for (const [i, s] of services.entries()) {
+    const w = widthOf(s.name);
+    const rest = services.length - i - 1;
+    const more = rest ? widthOf(`+${rest}`) + GAP : 0;
+    if (used + w + more > MAX && shown.length) break;
+    shown.push({ s, w: Math.min(w, MAX), cut: w > MAX });
+    used += w + GAP;
+  }
+  const hidden = services.length - shown.length;
+  const items = [...shown.map((x) => ({ label: x.s.name, w: x.w, cut: x.cut, url: x.s.url, title: [x.s.name, x.s.port ? `port ${x.s.port}${x.s.protocol ? `/${x.s.protocol}` : ""}` : "", x.s.note ?? ""].filter(Boolean).join(" · ") })), ...(hidden ? [{ label: `+${hidden}`, w: widthOf(`+${hidden}`), cut: false, url: undefined, title: services.slice(shown.length).map((s) => s.name).join(", ") }] : [])];
+  const total = items.reduce((t, x) => t + x.w, 0) + GAP * (items.length - 1);
+  let x = n.label === "below" ? -total / 2 : n.kind === "tv" || n.kind === "iot" ? 40 : 44;
+  const y = n.label === "below" ? 95 : 35;
+  return (
+    <g className="svc-pills">
+      {items.map((it, i) => {
+        const at = x;
+        x += it.w + GAP;
+        const pill = (
+          <g>
+            <title>{it.title}</title>
+            <rect x={at} y={y} width={it.w} height={17} rx={8.5} fill="var(--ink-2)" stroke="var(--hair-2)" />
+            <text x={at + it.w / 2} y={y + 12} textAnchor="middle" fontSize={10.5} fill={it.url ? "var(--tx-1)" : "var(--tx-2)"}>
+              {it.cut ? `${it.label.slice(0, Math.floor((it.w - 20) / 6.1))}…` : it.label}
+            </text>
+          </g>
+        );
+        return it.url ? (
+          <a key={i} href={it.url} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>
+            {pill}
+          </a>
+        ) : (
+          <g key={i}>{pill}</g>
+        );
+      })}
+    </g>
+  );
 }
 
 function SevDot({ sev, x, y }: { sev?: Severity; x: number; y: number }) {

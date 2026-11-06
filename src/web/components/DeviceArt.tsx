@@ -227,6 +227,22 @@ export function DeviceArt({ kind, status, accent = COLORS.g1, ghost }: { kind: s
           <Led x={0} y={0} c={on ? COLORS.g1 : COLORS.tx3} r={1.4} />
         </g>
       );
+    case "robot":
+      return (
+        <g>
+          <Shadow w={40} y={30} />
+          <path d="M0 -30 V-23" stroke="#9aa0aa" strokeWidth={1.6} strokeLinecap="round" />
+          <circle cy={-31} r={2.2} fill={on ? accent : COLORS.tx3} />
+          <rect x={-17} y={-23} width={34} height={22} rx={7} fill="url(#plasticTop)" />
+          <rect x={-12} y={-18} width={24} height={12} rx={4} fill="#0d1119" />
+          <circle cx={-5} cy={-12} r={2} fill={on ? COLORS.ok : COLORS.tx3} />
+          <circle cx={5} cy={-12} r={2} fill={on ? COLORS.ok : COLORS.tx3} />
+          <rect x={-13} y={1} width={26} height={21} rx={5} fill="url(#plastic)" />
+          <path d="M-8 9 H8" stroke="#5d636d" strokeWidth={2} strokeLinecap="round" />
+          <rect x={-15} y={22} width={10} height={6} rx={2} fill="#2a2f38" />
+          <rect x={5} y={22} width={10} height={6} rx={2} fill="#2a2f38" />
+        </g>
+      );
     default:
       return (
         <Box w={44} h={40}>
@@ -299,6 +315,7 @@ export function Glyph({ kind, size = 16, color = "currentColor" }: { kind: strin
       case "internet": return <><circle cx={12} cy={12} r={8.5} {...p} /><path d="M3.5 12h17M12 3.5c2.6 2.6 3.6 5.4 3.6 8.5s-1 5.9-3.6 8.5c-2.6-2.6-3.6-5.4-3.6-8.5s1-5.9 3.6-8.5z" {...p} /></>;
       case "console": return <><path d="M7 9h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 14h-5l-1.1 1.8A3 3 0 0 1 3 14v-1a4 4 0 0 1 4-4z" {...p} /><path d="M8 11.5v2M7 12.5h2M16 12h.01" {...p} /></>;
       case "camera": return <><rect x={3} y={7} width={13} height={10} rx={2} {...p} /><path d="m16 11 5-3v8l-5-3" {...p} /></>;
+      case "robot": return <><rect x={5} y={6} width={14} height={10} rx={3} {...p} /><path d="M12 6V3M9.5 11h.01M14.5 11h.01M8 16v3M16 16v3" {...p} /></>;
       case "iot": return <><circle cx={12} cy={12} r={3} {...p} /><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4" {...p} /></>;
       default: return <><rect x={4} y={4} width={16} height={16} rx={4} {...p} /><path d="M10 10a2 2 0 1 1 2.7 1.9c-.5.2-.7.6-.7 1.1M12 16h.01" {...p} /></>;
     }

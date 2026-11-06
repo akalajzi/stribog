@@ -703,7 +703,7 @@ const segmentation: Rule = ({ m }) => {
   const hasGuest = nets.some((n) => n.role === "guest");
   const hasIot = nets.some((n) => n.role === "iot");
   const lanDevices = m.devices.filter((d) => d.zone === "lan" && d.mac && !d.managed);
-  const iot = lanDevices.filter((d) => ["tv", "printer", "printer3d", "iot", "camera", "console"].includes(d.kind));
+  const iot = lanDevices.filter((d) => ["tv", "printer", "printer3d", "iot", "robot", "camera", "console"].includes(d.kind));
   const valuable = lanDevices.filter((d, _, all) => ["nas", "server"].includes(d.kind) && !all.some((o) => o !== d && ["nas", "server"].includes(o.kind) && d.name.startsWith(o.name + " ")));
   const out: Finding[] = [];
   if (!hasIot && iot.length && valuable.length)

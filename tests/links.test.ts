@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { connectionsOf, connectionViews, buildModel, linkCounters } from "../src/core/model.ts";
+import { kindFromText } from "../src/core/classify.ts";
 import { parseExport, type Notes, type RosRecord } from "../src/core/ros.ts";
 import { HistoryStore } from "../src/server/history.ts";
 import { NotesError, NotesStore } from "../src/server/notes.ts";
@@ -78,6 +79,10 @@ describe("one machine, several connections", () => {
     // It is still a Wi-Fi client where radios and signal are concerned.
     expect(connectionViews(m.devices).find((x) => x.mac === RADIO)).toMatchObject({ id: d.id, via: { kind: "wifi", signal: -61 } });
     expect(m.ports.find((p) => p.name === "ether2")!.deviceIds).toEqual([d.id]);
+  });
+
+  it("guesses a robot from its name", () => {
+    expect(kindFromText("Rover in the garage")).toBe("robot");
   });
 
   it("does not guess a kind from what a reservation note says about where a device is", () => {

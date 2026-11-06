@@ -20,6 +20,7 @@ export type DeviceKind =
   | "console"
   | "camera"
   | "iot"
+  | "robot"
   | "unknown";
 
 export const KIND_LABEL: Record<DeviceKind, string> = {
@@ -40,6 +41,7 @@ export const KIND_LABEL: Record<DeviceKind, string> = {
   console: "Game console",
   camera: "Camera",
   iot: "Smart device",
+  robot: "Robot",
   unknown: "Unknown device",
 };
 
@@ -62,6 +64,7 @@ const KEYWORDS: [RegExp, DeviceKind][] = [
   [/\b(desktop|pc|workstation|imac)/i, "desktop"],
   [/\b(playstation|ps5|ps4|xbox|switch ?oled|nintendo|steam ?deck)/i, "console"],
   [/\b(camera|cam\b|doorbell|reolink|hikvision)/i, "camera"],
+  [/\b(robot|rover)/i, "robot"],
   [/\b(esp|shelly|tasmota|sonoff|tuya|hue|nest|echo|alexa|homepod|sensor|plug|bulb|vacuum|roborock)/i, "iot"],
 ];
 

@@ -30,6 +30,11 @@ describe("NotesStore", () => {
     expect(store.get().devices).toEqual({});
   });
 
+  it("accepts every kind a person can choose, robots included", () => {
+    const { store } = fresh();
+    expect(store.updateDevice(MAC, { kind: "robot" })).toMatchObject({ kind: "robot" });
+  });
+
   it("refuses unknown fields, bad kinds, ports and URLs with a plain reason", () => {
     const { store } = fresh();
     expect(() => store.updateDevice(MAC, { room: "Hall" })).toThrow(/Unknown field “room”/);
