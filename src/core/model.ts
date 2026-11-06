@@ -244,6 +244,8 @@ export interface NetworkModel {
   services?: Service[];
   /** IPv4 firewall rules in router order, reduced to the fields the UI explains. */
   firewall?: { filter: FwRule[]; nat: FwRule[] };
+  /** The router's own load, from /system/resource (live reads only). */
+  system?: { cpuLoad?: number; uptime?: string; memoryUsed?: number };
 }
 
 export interface Service {
@@ -291,6 +293,19 @@ function fwRule(r: RosRecord): FwRule {
   if (isTrue(r.disabled)) out.disabled = true;
   for (const k of FW_FIELDS) if (r[k]) out[k] = r[k];
   return out;
+}
+
+function systemOf(res: RosRecord | undefined): NetworkModel["system"] {
+  if (!res) return undefined;
+  const num = (k: string) => (res[k] !== undefined && res[k] !== "" && Number.isFinite(Number(res[k])) ? Number(res[k]) : undefined);
+  // REST gives bytes; exports and older tools "812.4MiB".
+  const bytes = (k: string) => {
+    const m = /^([\d.]+)\s*(KiB|MiB|GiB)?$/.exec(res[k] ?? "");
+    return m ? Number(m[1]) * ({ KiB: 1024, MiB: 1024 ** 2, GiB: 1024 ** 3 }[m[2] ?? ""] ?? 1) : undefined;
+  };
+  const free = bytes("free-memory");
+  const total = bytes("total-memory");
+  return { cpuLoad: num("cpu-load"), uptime: res.uptime, memoryUsed: free !== undefined && total ? Math.round((1 - free / total) * 100) : undefined };
 }
 
 /** RouterOS defaults: exports only list services that differ from these. */
@@ -924,6 +939,7 @@ export function buildModel(snap: Snapshot, opts: { vendors?: VendorRegistry } = 
     wan,
     planned: ov.planned ?? [],
     services: servicesOf(cfg),
+    system: systemOf(stateMenu("/system/resource")[0]),
     // Dynamic rules (the live fasttrack counter, UPnP) are not part of the configuration.
     firewall: cfg
       ? { filter: menu(cfg, "/ip/firewall/filter").filter((r) => !isTrue(r.dynamic)).map(fwRule), nat: menu(cfg, "/ip/firewall/nat").filter((r) => !isTrue(r.dynamic)).map(fwRule) }
