@@ -19,6 +19,27 @@ function download(name: string, text: string) {
 }
 
 export function PlanView({ data }: { data: NetworkPayload }) {
+  // A router that already has networks is a working setup: say what this page is for before it opens.
+  const configured = data.model.networks.length > 0;
+  const [sure, setSure] = useState(!configured);
+  if (!sure)
+    return (
+      <div className="scroll">
+        <div className="page pv">
+          <div className="card pv-gate">
+            <h1>Start over?</h1>
+            <p>
+              {data.model.site} is already set up. This page writes a script for a router that has been <b>reset with no configuration</b>, to build everything again from scratch. Stribog never applies
+              it, so nothing changes unless you paste it yourself; pasted onto the router as it is now, it would clash with the current setup.
+            </p>
+            <div className="pv-gate-b">
+              <a className="btn" href="#/settings">Back</a>
+              <button className="btn ghost" onClick={() => setSure(true)}>I am starting over</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   return (
     <div className="scroll">
       <div className="page pv">

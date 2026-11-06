@@ -11,6 +11,7 @@ export function SettingsView({ data, session }: { data: NetworkPayload; session:
         <Integrations />
         <Agents demo={session.kind === "demo"} />
         <History data={data} />
+        <StartOver />
       </div>
     </div>
   );
@@ -165,6 +166,20 @@ function Integrations() {
         )}
         {error && <p className="st-error">{error}</p>}
       </div>
+    </section>
+  );
+}
+
+/** The setup generator, kept here so a working network does not have it one click away. */
+function StartOver() {
+  return (
+    <section className="card st-sec">
+      <h2>Start over</h2>
+      <p>
+        A clean setup script for a router that has been reset with no configuration. Stribog only writes the script; it never applies it. Pasted onto a router that is already set up, it would clash with
+        what is there.
+      </p>
+      <a className="btn sm" href="#/plan" style={{ justifySelf: "start" }}>Open the setup generator</a>
     </section>
   );
 }

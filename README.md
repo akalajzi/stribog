@@ -12,7 +12,7 @@ Stribog signs in to a RouterOS router with the same user and password as WinBox 
 - **Wi-Fi**: networks, a channel map per band (including where a planned access point would have to go), and every client on a signal scale.
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
 - **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.
-- **New setup**: a generator for a clean, opinionated home or small-office setup, as a script to review.
+- **New setup** (in Settings, under Start over): a generator for a clean, opinionated home or small-office setup, as a script to review, for a router reset with no configuration. On a router that is already set up it asks first.
 
 Stribog never changes anything on the router. Whatever you change, you apply yourself.
 

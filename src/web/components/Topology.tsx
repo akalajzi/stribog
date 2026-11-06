@@ -20,6 +20,11 @@ interface Props {
 
 type View = { x: number; y: number; w: number; h: number };
 
+/** The "on the internet now" box above the Internet node, in map units (it zooms with the map). */
+const OWNERS_W = 1000;
+const OWNERS_H = 300;
+const OWNERS_GAP = 70;
+
 /**
  * Where the map was looked at, kept across data refreshes and visits to other pages. Until
  * someone pans or zooms, the map fits the network; after that it stays where they left it.
@@ -40,7 +45,8 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
   const touch = () => (kept.touched = true);
   const [drag, setDrag] = useState<{ x: number; y: number; v: View; moved: boolean }>();
   const byId = useMemo(() => new Map(model.devices.map((d) => [d.id, d])), [model]);
-  const owners = useOwnersNow(data.meta.mode === "live" || data.meta.mode === "demo");
+  const showOwners = data.meta.mode === "live" || data.meta.mode === "demo";
+  const owners = useOwnersNow(showOwners);
 
   const worst = useMemo(() => {
     const m = new Map<string, Severity>();
@@ -59,7 +65,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
     if (!el) return;
     kept.size = { w: el.clientWidth, h: el.clientHeight };
     const r = el.clientWidth / Math.max(1, el.clientHeight);
-    const b = layout.bounds;
+    const b = withOwnersBox(layout, showOwners);
     if (b.w / b.h > r) setView({ x: b.x, w: b.w, h: b.w / r, y: b.y - (b.w / r - b.h) / 2 });
     else setView({ y: b.y, h: b.h, w: b.h * r, x: b.x - (b.h * r - b.w) / 2 });
   };
@@ -69,7 +75,8 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
     fit();
   };
   // New data arrives every refresh with a new layout: fit it only while nobody has moved the map.
-  const boundsKey = `${layout.bounds.x},${layout.bounds.y},${layout.bounds.w},${layout.bounds.h}`;
+  const fb = withOwnersBox(layout, showOwners);
+  const boundsKey = `${fb.x},${fb.y},${fb.w},${fb.h}`;
   useEffect(() => {
     if (!kept.touched || !kept.view) fit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -283,6 +290,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           })}
 
           <InternetNow data={data} />
+          {showOwners && <OwnersBox layout={layout} now={owners} onSelect={(id) => onSelect(id)} />}
           {router && lan && <title>{lan.label}</title>}
         </svg>
       )}
@@ -301,7 +309,6 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           Moving dots are traffic now: light ones go to the device, coloured ones come back. A red line is at {Math.round(FULL * 100)}% or more of what it can carry.
         </span>
       </div>
-      <OwnersPanel now={owners} onSelect={(id) => onSelect(id)} />
       <div className="mapctl">
         <button title="Zoom in" onClick={() => (touch(), zoom(0.8))}>+</button>
         <button title="Zoom out" onClick={() => (touch(), zoom(1.25))}>−</button>
@@ -329,52 +336,57 @@ function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
 const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
 
 /** "↓ 48 Mb/s ↑ 2.1 Mb/s" once a link carries at least 1 Mb/s, else nothing. */
+/** The map's bounds with room for the owners box above the Internet node. */
+function withOwnersBox(layout: NetworkPayload["layout"], show: boolean): NetworkPayload["layout"]["bounds"] {
+  const b = layout.bounds;
+  const n = layout.nodes.find((x) => x.id === "internet");
+  if (!show || !n) return b;
+  const top = Math.min(b.y, n.y - OWNERS_GAP - OWNERS_H - 20);
+  const left = Math.min(b.x, n.x - OWNERS_W / 2 - 20);
+  const right = Math.max(b.x + b.w, n.x + OWNERS_W / 2 + 20);
+  return { x: left, y: top, w: right - left, h: b.y + b.h - top };
+}
+
 /** Who the whole network talks to on the internet right now, by network owner, busiest first. */
-function OwnersPanel({ now, onSelect }: { now?: OwnersNow; onSelect: (id: string) => void }) {
-  if (!now) return null;
-  const rows = now.owners.filter((o) => o.downBps + o.upBps >= 1000).slice(0, 7);
+function OwnersBox({ layout, now, onSelect }: { layout: NetworkPayload["layout"]; now?: OwnersNow; onSelect: (id: string) => void }) {
+  const n = layout.nodes.find((x) => x.id === "internet");
+  if (!n) return null;
+  const rows = (now?.owners ?? []).filter((o) => o.downBps + o.upBps >= 1000).slice(0, 6);
   const max = Math.max(1, ...rows.map((o) => o.downBps + o.upBps));
   return (
-    <div className="owners-now" onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} title={`From the router's connection table${now.seconds ? `, over the last ${Math.round(now.seconds)} seconds` : ""}. Owners from an offline database of internet networks.`}>
-      <small>On the internet now</small>
-      {!now.seconds ? (
-        <span className="faint">Measuring…</span>
-      ) : !rows.length ? (
-        <span className="faint">Quiet: nothing worth showing.</span>
-      ) : (
-        rows.map((o) => (
-          <div key={o.name} className="on-row">
-            <div className="on-name">
+    <foreignObject x={n.x - OWNERS_W / 2} y={n.y - OWNERS_GAP - OWNERS_H} width={OWNERS_W} height={OWNERS_H}>
+      <div
+        className="owners-box"
+        onPointerDown={(e) => e.stopPropagation()}
+        title={`From the router's connection table${now?.seconds ? `, over the last ${Math.round(now.seconds)} seconds` : ""}. Owners from an offline database of internet networks.`}
+      >
+        <small>On the internet now</small>
+        {!now ? null : !now.seconds ? (
+          <span className="faint">Measuring…</span>
+        ) : !rows.length ? (
+          <span className="faint">Quiet: nothing worth showing.</span>
+        ) : (
+          rows.map((o) => (
+            <div key={o.name} className="ob-row">
               <b>{o.name}</b>
-              <span className="on-rate">
-                {fmtBps(o.downBps)}
-                <i> ↓</i>
-                {o.upBps >= 100_000 && (
-                  <>
-                    {" "}
-                    {fmtBps(o.upBps)}
-                    <i> ↑</i>
-                  </>
-                )}
+              <span className="ob-who">
+                {o.devices.slice(0, 3).map((d, i) => (
+                  <span key={d.id}>
+                    {i ? ", " : ""}
+                    <a href="#" onClick={(e) => (e.preventDefault(), onSelect(d.id))}>{d.name}</a>
+                  </span>
+                ))}
+                {o.devices.length > 3 ? ` +${o.devices.length - 3}` : ""}
               </span>
+              <span className="ob-bar"><i style={{ width: `${Math.max(2, ((o.downBps + o.upBps) / max) * 100)}%` }} /></span>
+              <span className="ob-rate">{fmtBps(o.downBps)}<i> ↓</i></span>
+              <span className="ob-rate up">{o.upBps >= 10_000 ? <>{fmtBps(o.upBps)}<i> ↑</i></> : null}</span>
             </div>
-            <div className="on-bar">
-              <i style={{ width: `${Math.max(2, ((o.downBps + o.upBps) / max) * 100)}%` }} />
-            </div>
-            <div className="on-who">
-              {o.devices.slice(0, 3).map((d, i) => (
-                <span key={d.id}>
-                  {i ? ", " : ""}
-                  <a href="#" onClick={(e) => (e.preventDefault(), onSelect(d.id))}>{d.name}</a>
-                </span>
-              ))}
-              {o.devices.length > 3 ? ` +${o.devices.length - 3}` : ""}
-            </div>
-          </div>
-        ))
-      )}
-      {!now.ownersKnown && <span className="faint">Owner names arrive once Stribog has its network database.</span>}
-    </div>
+          ))
+        )}
+        {now && !now.ownersKnown && <span className="faint">Owner names arrive once Stribog has its network database.</span>}
+      </div>
+    </foreignObject>
   );
 }
 

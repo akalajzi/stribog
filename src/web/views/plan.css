@@ -1,6 +1,11 @@
 /* Setup & fix plan view. Prefix: pv- */
 
 .pv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.pv-gate { max-width: 560px; display: grid; gap: 14px; padding: 24px; margin-top: 40px; }
+.pv-gate h1 { margin: 0; }
+.pv-gate p { margin: 0; line-height: 1.55; color: var(--tx-2); }
+.pv-gate b { color: var(--tx-1); font-weight: 500; }
+.pv-gate-b { display: flex; gap: 8px; }
 .pv-tabs { margin-top: 4px; flex: none; }
 .pv-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
 .pv-split.setup { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); }

@@ -18,7 +18,6 @@ const NAV: { path: string; label: string; icon: ReactNode }[] = [
   { path: "/wifi", label: "Wi-Fi", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 9.5a13 13 0 0 1 18 0M6 13a8 8 0 0 1 12 0M9 16.5a3.5 3.5 0 0 1 6 0" /><circle cx="12" cy="19.5" r=".8" fill="currentColor" /></svg> },
   { path: "/clients", label: "Clients", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="13" height="10" rx="1.5" /><rect x="15.5" y="9" width="5.5" height="10" rx="1.3" /><path d="M6 19h7" /></svg> },
   { path: "/network", label: "LAN & internet", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="4" width="18" height="5" rx="1.5" /><rect x="3" y="11" width="18" height="5" rx="1.5" opacity=".6" /><rect x="3" y="18" width="18" height="2.5" rx="1" opacity=".35" /></svg> },
-  { path: "/plan", label: "New setup", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M5 4h14v16H5z" /><path d="M9 9h6M9 13h6M9 17h3" /></svg> },
 ];
 
 export function App() {
