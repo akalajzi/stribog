@@ -6,6 +6,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Flow } from "../core/activity.ts";
+import type { FullLink } from "../core/capacity.ts";
+import type { FullHistory } from "../core/analyze.ts";
 
 export const KEEP_DAYS = 30;
 
@@ -22,8 +24,37 @@ const day = (t: number) => new Date(t).toISOString().slice(0, 10);
 export class HistoryStore {
   constructor(readonly dir: string) {}
 
-  private file(kind: "samples" | "talks", d: string) {
-    return join(this.dir, `${kind}-${d}.${kind === "samples" ? "jsonl" : "json"}`);
+  private file(kind: "samples" | "talks" | "full", d: string) {
+    return join(this.dir, `${kind}-${d}.${kind === "talks" ? "json" : "jsonl"}`);
+  }
+
+  /** Links at their limit at this minute's sample, if any. */
+  appendFull(t: number, links: FullLink[]) {
+    if (!links.length) return;
+    mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    appendFileSync(this.file("full", day(t)), JSON.stringify({ t, l: links }) + "\n", { mode: 0o600 });
+  }
+
+  /** Per link, how many recorded minutes found it at its limit over [from, to], and its peak. */
+  fullLinks(from: number, to: number): FullHistory[] {
+    const by = new Map<string, FullHistory>();
+    for (const d of this.days(from, to)) {
+      const f = this.file("full", d);
+      if (!existsSync(f)) continue;
+      for (const line of readFileSync(f, "utf8").split("\n")) {
+        if (!line) continue;
+        const { t, l } = JSON.parse(line) as { t: number; l: FullLink[] };
+        if (t < from || t > to) continue;
+        for (const x of l) {
+          const h = by.get(x.id) ?? { id: x.id, label: x.label, deviceIds: x.deviceIds, capacity: x.capacity, estimate: x.estimate, minutes: 0, peak: 0, peakAt: t, last: t };
+          h.minutes++;
+          if (x.share > h.peak) Object.assign(h, { peak: x.share, peakAt: t, label: x.label, capacity: x.capacity });
+          h.last = Math.max(h.last, t);
+          by.set(x.id, h);
+        }
+      }
+    }
+    return [...by.values()].sort((a, b) => b.minutes - a.minutes);
   }
 
   appendSamples(t: number, byMac: Record<string, [0 | 1, number | null, number | null, number | null]>) {

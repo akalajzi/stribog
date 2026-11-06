@@ -157,7 +157,7 @@ export function rateMbps(v: string | undefined): number | undefined {
 
 /** Throughput in plain units: "740 kb/s", "48 Mb/s", "1.2 Gb/s". */
 export function fmtBps(bps: number): string {
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(bps >= 1e10 ? 0 : 1)} Gb/s`;
+  if (bps >= 1e9) return `${(bps / 1e9).toFixed(bps >= 1e10 ? 0 : 1).replace(/\.0$/, "")} Gb/s`;
   if (bps >= 1e6) return `${(bps / 1e6).toFixed(bps >= 1e7 ? 0 : 1)} Mb/s`;
   if (bps >= 1e3) return `${Math.round(bps / 1e3)} kb/s`;
   return `${Math.round(bps)} b/s`;

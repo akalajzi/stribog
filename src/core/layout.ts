@@ -5,6 +5,7 @@
 // Devices behind an access point sit below it in one cluster per medium (cable, each Wi-Fi band),
 // each with its own line in that medium's colour.
 
+import { portCapacity, wifiCapacity, type Capacity } from "./capacity.ts";
 import type { Device, NetworkModel, Port } from "./model.ts";
 import type { Band } from "./net.ts";
 
@@ -35,6 +36,8 @@ export interface LLink {
   /** Rough length of the way traffic travels, px, so dots move at the same speed on long and short links. */
   len: number;
   reverse?: boolean;
+  /** What the link can carry, when known: a cable's speed, or an estimate for Wi-Fi. */
+  capacity?: Capacity;
 }
 
 
@@ -188,6 +191,8 @@ export function layoutTopology(m: NetworkModel): Layout {
       // A port shared through a switch counts everyone behind it; then each device's own measure.
       down: s.kind === "ghost" ? undefined : port && port.deviceIds.length <= 1 ? port.txBps : s.dev.via?.downBps,
       up: s.kind === "ghost" ? undefined : port && port.deviceIds.length <= 1 ? port.rxBps : s.dev.via?.upBps,
+      // A port shared through a switch carries more than this device's traffic: no limit to compare with.
+      capacity: s.kind === "ghost" ? undefined : wifiFromRouter ? wifiCapacity(s.dev) : port && port.deviceIds.length <= 1 ? portCapacity(port) : undefined,
     });
 
     // Devices behind this one: clusters side by side, each a small tree in its medium's colour.
@@ -227,6 +232,7 @@ export function layoutTopology(m: NetworkModel): Layout {
             labelAt: { x: cx + 7, y: branchY(r) + 20, anchor: "start" },
             down: d.via?.downBps,
             up: d.via?.upBps,
+            capacity: d.via?.kind === "wifi" ? wifiCapacity(d) : undefined,
           });
         });
       }
@@ -262,8 +268,10 @@ export function layoutTopology(m: NetworkModel): Layout {
       medium: "wan",
       label: [wanPort, speedLabel(ports.find((p) => p.name === wanPort)?.speedMbps), m.wan.doubleNat === true ? "double NAT" : ""].filter(Boolean).join(" · "),
       labelAt: { x: Math.max(gx, wx) + 14, y: (fromY + gy - 34) / 2 + 6, anchor: "start" },
+      // The WAN port's tx goes up to the ISP and rx comes down, the other way round from a LAN port.
       down: wanP?.rxBps,
       up: wanP?.txBps,
+      capacity: portCapacity(wanP),
     });
   }
 

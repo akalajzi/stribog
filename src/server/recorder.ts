@@ -3,6 +3,7 @@
 
 import { flowsFor, namesByAddress, type Flow } from "../core/activity.ts";
 import { connectionsOf, linkCounters } from "../core/model.ts";
+import { fullLinks } from "../core/capacity.ts";
 import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
@@ -77,6 +78,8 @@ export async function tick(now = Date.now()) {
     setRates({ at: now, byMac: rates });
   }
   store.appendSamples(now, samplesOf(payload, ratesNow(now)?.byMac));
+  // Links at their limit this minute, for the review's "where the network runs out".
+  store.appendFull(now, fullLinks(payload.model));
   st.lastTick = now;
   if (now - st.lastPrune > 6 * 3600_000) {
     store.prune(now);

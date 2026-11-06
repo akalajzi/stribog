@@ -11,10 +11,11 @@
 
 import { connectionViews, type Device, type NetworkModel, type Radio } from "./model.ts";
 import { inPool, isPrivateMac } from "./net.ts";
+import { FULL } from "./capacity.ts";
 import { enabled, isTrue, list, menu, prop, single, type RosConfig, type Snapshot } from "./ros.ts";
 
 export type Severity = "critical" | "warning" | "suggestion" | "info" | "pass";
-export type Category = "internet" | "dns-dhcp" | "wifi" | "security" | "segmentation" | "maintenance" | "hardware";
+export type Category = "internet" | "dns-dhcp" | "wifi" | "security" | "segmentation" | "maintenance" | "hardware" | "capacity";
 
 export interface Finding {
   id: string;
@@ -71,7 +72,29 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   segmentation: "Separation",
   maintenance: "Maintenance",
   hardware: "Ports & power",
+  capacity: "Capacity",
 };
+
+/** A link that recorded minutes found at its limit (see capacity.ts), over the review's period. */
+export interface FullHistory {
+  id: string;
+  label: string;
+  deviceIds: string[];
+  capacity: string;
+  estimate?: boolean;
+  /** Recorded minutes at or above the limit. */
+  minutes: number;
+  peak: number;
+  peakAt: number;
+  last: number;
+}
+
+/** What the recorder saw over time, for checks that need more than one read. */
+export interface History {
+  /** Links at their limit over the last `days` days. */
+  full?: FullHistory[];
+  days?: number;
+}
 
 interface Ctx {
   m: NetworkModel;
@@ -80,11 +103,12 @@ interface Ctx {
   dev: (id?: string) => Device | undefined;
   clients: Device[];
   lan?: NetworkModel["networks"][number];
+  history: History;
 }
 
 type Rule = (c: Ctx) => Finding | Finding[] | undefined;
 
-export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
+export function analyze(model: NetworkModel, snap: Snapshot, history: History = {}): Analysis {
   const cfg = snap.devices.find((d) => d.role === "router")?.config;
   const ctx: Ctx = {
     m: model,
@@ -93,6 +117,7 @@ export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
     dev: (id) => model.devices.find((d) => d.id === id),
     clients: model.devices.filter((d) => d.mac && !d.managed),
     lan: model.networks.find((n) => n.role === "lan"),
+    history,
   };
   const findings: Finding[] = [];
   for (const rule of RULES) {
@@ -765,6 +790,25 @@ const linkSpeeds: Rule = ({ m }) => {
   }));
 };
 
+/** Where the network runs out: links the recorder found at their limit, minute after minute. */
+const fullLinksRule: Rule = ({ m, history }) => {
+  const days = history.days ?? 7;
+  const when = (t: number) => new Date(t).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: m.timezone || undefined });
+  const span = (min: number) => (min < 90 ? plural(min, "minute") : `${Math.round(min / 6) / 10} hours`);
+  return (history.full ?? [])
+    .filter((h) => h.minutes >= 3)
+    .map((h) => ({
+      id: `full-${h.id}`,
+      severity: "suggestion" as const,
+      category: "capacity" as const,
+      title: `${h.label} was at its limit for ${span(h.minutes)} in the last ${plural(days, "day")}`,
+      summary: `At ${Math.round(FULL * 100)}% or more of what it can carry (${h.capacity}) in ${plural(h.minutes, "recorded minute")}; at most ${Math.round(h.peak * 100)}%.${h.estimate ? " Wi-Fi limits are estimates from the link rate." : ""}`,
+      detail: ["Stribog samples traffic once a minute while it records, so this counts minutes caught at the limit; bursts in between are not seen. A link that is often full is the part of the network to make faster first."],
+      evidence: [`Peak ${Math.round(h.peak * 100)}% on ${when(h.peakAt)}`, `Last at its limit on ${when(h.last)}`],
+      devices: h.deviceIds,
+    }));
+};
+
 const RULES: Rule[] = [
   doubleNat,
   upstreamDevices,
@@ -798,6 +842,7 @@ const RULES: Rule[] = [
   lanOnlyTools,
   ntp,
   hwOffload,
+  fullLinksRule,
 ];
 
 export const isPrivate = isPrivateMac;

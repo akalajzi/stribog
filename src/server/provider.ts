@@ -11,6 +11,7 @@ import { AuthError, RouterOsRest } from "../core/rest.ts";
 import type { Snapshot } from "../core/ros.ts";
 import { dataDir, NotesStore } from "./notes.ts";
 import { ratesNow } from "./rates.ts";
+import { HistoryStore } from "./history.ts";
 import { vendorDb } from "./vendors.ts";
 import { defaultRouterAddress, isAlive, type RouterLogin, type Session } from "./session.ts";
 
@@ -228,6 +229,12 @@ async function liveSnapshot(login: RouterLogin, s: Setup): Promise<Snapshot> {
   return { collectedAt: new Date().toISOString(), devices: [router, ...files.devices] };
 }
 
+/** What the recorder saw over the last week, for the review's checks over time. */
+function recorded(days = 7) {
+  const now = Date.now();
+  return { full: new HistoryStore(join(setup().dataDir, "history")).fullLinks(now - days * 86_400_000, now), days };
+}
+
 /** The router data each payload was built from: advice on a finding shows its configuration. */
 const SNAPS = new WeakMap<NetworkModel, Snapshot>();
 export function snapshotOf(p: NetworkPayload): Snapshot | undefined {
@@ -238,7 +245,7 @@ function build(snap: Snapshot, meta: Omit<NetworkPayload["meta"], "refreshedAt">
   // Makers from the IEEE registry for real networks; the demo's addresses are documentation ones.
   const model = buildModel(snap, { vendors: meta.mode === "demo" ? undefined : vendorDb(setup().dataDir)?.lookup });
   if (meta.mode === "live") withMeasuredRates(model);
-  const payload: NetworkPayload = { model, analysis: analyze(model, snap), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
+  const payload: NetworkPayload = { model, analysis: analyze(model, snap, meta.mode === "demo" ? {} : recorded()), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
   SNAPS.set(model, snap);
   return payload;
 }

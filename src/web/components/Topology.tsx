@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEven
 import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
 import { GATEWAY_W, UPSTREAM_GROUP } from "../../core/layout.ts";
 import { fmtBps } from "../../core/net.ts";
+import { FULL, loadOf } from "../../core/capacity.ts";
 import { connectionViews } from "../../core/model.ts";
 import { ArtDefs, COLORS, DeviceArt, GatewayArt, mediumColor } from "./DeviceArt.tsx";
 
@@ -153,7 +154,10 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           })}
 
           {layout.links.map((l) => {
-            const c = mediumColor(l.medium);
+            // A link at its limit is red, whatever its medium: that is where the network runs out.
+            const load = loadOf(l.down, l.up, l.capacity);
+            const full = load !== undefined && load >= FULL;
+            const c = full ? "var(--bad)" : mediumColor(l.medium);
             // Cable is solid and heavier; Wi-Fi is dashed in its band colour; planned and legacy are dotted.
             const wifi = l.medium.startsWith("wifi");
             const dashed = l.medium === "planned" ? "2 6" : l.medium === "legacy" ? "2 5" : wifi ? "7 6" : undefined;
@@ -167,11 +171,18 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
                 <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.95 : 0.45) : 1} strokeWidth={wifi ? 2.2 : dashed ? 1.6 : width} strokeDasharray={wifi ? "8 6" : dashed} strokeLinecap="round" />
                 {l.route && <path id={`${l.id}:route`} d={l.route} fill="none" stroke="none" />}
                 <Flow pathId={l.route ? `${l.id}:route` : l.id} len={l.len} down={l.down} up={l.up} color={c} />
-                {(l.label || busy(l)) && l.labelAt && (
+                {full && <path d={l.d} fill="none" stroke="var(--bad)" strokeWidth={10} opacity={0.22} filter="url(#soft)" />}
+                {(l.label || busy(l) || full) && l.labelAt && (
                   // Port and speed on the first line, traffic now under it, so neighbours stay apart.
-                  <text x={l.labelAt.x} y={l.labelAt.y} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
+                  <text x={l.labelAt.x} y={l.labelAt.y} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={full ? 1 : l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
                     {l.label && <tspan>{l.label}</tspan>}
                     {busy(l) && <tspan x={l.labelAt.x} dy={l.label ? 13 : 0}>{busy(l)}</tspan>}
+                    {full && (
+                      <tspan x={l.labelAt.x} dy={l.label || busy(l) ? 13 : 0} fontWeight={700}>
+                        {Math.round(load! * 100)}% of {l.capacity!.estimate ? "about " : ""}{fmtBps(Math.max(l.capacity!.down ?? 0, l.capacity!.up ?? 0))}
+                        <title>{`At its limit: ${l.capacity!.label}.${l.capacity!.estimate ? " Wi-Fi limits are estimates." : ""}`}</title>
+                      </tspan>
+                    )}
                   </text>
                 )}
               </g>
@@ -243,8 +254,11 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dotted" }} />upstream side</span>
           {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />planned</span>}
         </div>
-        <span className="legend-note">Moving dots are traffic now: light ones go to the device, coloured ones come back</span>
+        <span className="legend-note">
+          Moving dots are traffic now: light ones go to the device, coloured ones come back. A red line is at {Math.round(FULL * 100)}% or more of what it can carry.
+        </span>
       </div>
+      <InternetNow data={data} />
       <div className="mapctl">
         <button title="Zoom in" onClick={() => zoom(0.8)}>+</button>
         <button title="Zoom out" onClick={() => zoom(1.25)}>−</button>
@@ -272,6 +286,25 @@ function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
 const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
 
 /** "↓ 48 Mb/s ↑ 2.1 Mb/s" once a link carries at least 1 Mb/s, else nothing. */
+/** Everything going through the router to and from the internet right now, in big numbers. */
+function InternetNow({ data }: { data: NetworkPayload }) {
+  const m = data.model;
+  const router = m.devices.find((d) => d.id === m.routerId);
+  const wan = m.ports.find((p) => p.name === router?.via?.port);
+  if (wan?.rxBps === undefined && wan?.txBps === undefined) return null;
+  // The WAN port's rx comes down from the internet, its tx goes up.
+  const load = loadOf(wan.rxBps, wan.txBps, wan.speedMbps ? { down: wan.speedMbps * 1e6, up: wan.speedMbps * 1e6, label: "" } : undefined);
+  return (
+    <div className={`mapnow${load !== undefined && load >= FULL ? " full" : ""}`} title={`Through the router's internet port ${wan.name}${wan.speedMbps ? ` (${fmtBps(wan.speedMbps * 1e6)})` : ""}, as it reads now`}>
+      <small>Internet now</small>
+      <div>
+        <span><i>↓</i>{fmtBps(wan.rxBps ?? 0)}</span>
+        <span><i>↑</i>{fmtBps(wan.txBps ?? 0)}</span>
+      </div>
+    </div>
+  );
+}
+
 function busy(l: { down?: number; up?: number }): string {
   if ((l.down ?? 0) + (l.up ?? 0) < 1e6) return "";
   return [l.down ? `↓ ${fmtBps(l.down)}` : "", l.up ? `↑ ${fmtBps(l.up)}` : ""].filter(Boolean).join(" ");
