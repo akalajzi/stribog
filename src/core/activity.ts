@@ -88,6 +88,14 @@ export function namesByAddress(cache: RosRecord[]): Map<string, string[]> {
   return out;
 }
 
+/** Addresses that are nobody in particular: broadcast to the whole LAN, or multicast. */
+export function specialAddress(ip: string): string | undefined {
+  if (ip === "255.255.255.255") return "everyone on the network (broadcast)";
+  const first = Number(ip.split(".")[0]);
+  if (first >= 224 && first <= 239) return "a group of devices (multicast)";
+  return undefined;
+}
+
 /** A device's flows right now, grouped by the other end and port, biggest first. */
 export function flowsFor(ip: string, conns: RosRecord[], names: Map<string, string[]>, m: NetworkModel): Flow[] {
   const lans = m.networks.filter((n) => n.role !== "wan" && n.cidr).map((n) => n.cidr!);
@@ -99,13 +107,14 @@ export function flowsFor(ip: string, conns: RosRecord[], names: Map<string, stri
     let f = groups.get(key);
     if (!f) {
       const dev = m.devices.find((d) => d.ip === one.remote && d.mac);
-      const local = lans.some((cidr) => inCidr(one.remote, cidr)) || (isPrivateIp(one.remote) && !!dev);
+      const special = specialAddress(one.remote);
+      const local = !!special || lans.some((cidr) => inCidr(one.remote, cidr)) || (isPrivateIp(one.remote) && !!dev);
       f = {
         direction: one.direction,
         protocol: one.protocol,
         remote: one.remote,
         port: one.port,
-        names: names.get(one.remote),
+        names: special ? [special] : names.get(one.remote),
         remoteDevice: dev ? { id: dev.id, name: dev.name } : undefined,
         scope: local ? "local" : "internet",
         service: serviceOf(one.protocol, one.port),
@@ -125,9 +134,13 @@ export function flowsFor(ip: string, conns: RosRecord[], names: Map<string, stri
 
 /** One tracked connection seen from the device at `ip`, or undefined when it is not involved. */
 export function connFlow(ip: string, c: RosRecord): { direction: Flow["direction"]; protocol: string; remote: string; port?: number; down: number; up: number; fasttracked: boolean } | undefined {
+  // Ports come inside the address ("192.0.2.7:443") or, with a field list, in their own fields.
+  const port = (v?: string) => (v && /^\d+$/.test(v) ? Number(v) : undefined);
   const [src] = splitAddr(c["src-address"]);
-  const [dst, dstPort] = splitAddr(c["dst-address"]);
-  const [replySrc, replySrcPort] = splitAddr(c["reply-src-address"]);
+  const [dst, dstIn] = splitAddr(c["dst-address"]);
+  const [replySrc, replySrcIn] = splitAddr(c["reply-src-address"]);
+  const dstPort = dstIn ?? port(c["dst-port"]);
+  const replySrcPort = replySrcIn ?? port(c["reply-src-port"]);
   const orig = Number(c["orig-bytes"] ?? 0) || 0;
   const repl = Number(c["repl-bytes"] ?? 0) || 0;
   const protocol = (c.protocol ?? "?").toLowerCase();

@@ -87,6 +87,7 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
       <section className="card dv-sec">
         <div className="dv-sec-h"><h2>Talking to now</h2></div>
         {act?.now.note ? <p className="faint">{act.now.note}</p> : now.length ? <FlowTable rows={now} onSelect={onSelect} /> : <p className="faint">No connections through the router right now.</p>}
+        {act?.now.noNames && <p className="faint dv-foot">{act.now.noNames}</p>}
         <p className="faint dv-foot">
           From the router's connection tracking: only traffic the router routes (to the internet or between networks) shows here, not devices talking to each other on the same LAN.
           {now.some((f) => f.fasttracked) ? " Some connections are fast-tracked, so the router counts only part of their bytes." : ""} Port names are what a port is usually for.

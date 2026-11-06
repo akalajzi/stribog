@@ -43,6 +43,16 @@ describe("who a device talks to", () => {
     expect(f).toMatchObject({ direction: "in", remote: "198.51.100.9", port: 443, down: 100, up: 9000 });
   });
 
+  it("reads ports from their own fields when addresses come without them", () => {
+    const f = connFlow("192.168.50.101", { protocol: "tcp", "src-address": "192.168.50.101", "src-port": "50122", "dst-address": "198.51.100.20", "dst-port": "443", "orig-bytes": "10", "repl-bytes": "20" });
+    expect(f).toMatchObject({ remote: "198.51.100.20", port: 443 });
+  });
+
+  it("calls broadcast and multicast local, and says what they are", () => {
+    const flows = flowsFor("192.168.50.2", [{ protocol: "udp", "src-address": "192.168.50.2:5246", "dst-address": "255.255.255.255:5246", "orig-bytes": "210", "repl-bytes": "0" }, { protocol: "udp", "src-address": "192.168.50.2:5353", "dst-address": "224.0.0.251:5353", "orig-bytes": "90", "repl-bytes": "0" }], new Map(), m);
+    expect(flows.map((f) => [f.scope, f.names?.[0]])).toEqual([["local", "everyone on the network (broadcast)"], ["local", "a group of devices (multicast)"]]);
+  });
+
   it("ignores connections that do not involve the device", () => {
     expect(flowsFor("192.168.50.99", st["/ip/firewall/connection"]!, new Map(), m)).toEqual([]);
   });

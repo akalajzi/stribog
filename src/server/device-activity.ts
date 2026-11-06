@@ -12,7 +12,7 @@ import type { Session } from "./session.ts";
 
 export interface DeviceActivity {
   device: { id: string; name: string; ip?: string; mac?: string };
-  now: { at: string; flows: Flow[]; note?: string };
+  now: { at: string; flows: Flow[]; note?: string; noNames?: string };
   history: { from: number; to: number; samples: Sample[]; talks: Talk[]; since?: string; recording: boolean };
 }
 
@@ -43,6 +43,11 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
     } else note = "Sign in to the router to see who it is talking to right now.";
   }
   const flows = d.ip ? flowsFor(d.ip, conns, namesByAddress(dns), m) : [];
+  // An empty cache usually means devices ask another DNS server, so the router has no names to give.
+  const lan = m.networks.find((n) => n.role === "lan");
+  const dnsServer = lan?.dhcp?.dns.find((ip) => ip !== lan.gateway);
+  const dnsName = dnsServer ? (m.devices.find((x) => x.ip === dnsServer)?.name ?? dnsServer) : undefined;
+  const noNames = conns.length && !dns.length ? `The router's DNS cache is empty${dnsName ? `: devices here ask ${dnsName} for names, not the router` : ""}, so the other ends show as addresses.` : undefined;
 
   // History: what the recorder kept. The demo ships a day of it, ending when its data was taken.
   const store = demo ? new HistoryStore(DEMO_HISTORY) : historyFor(setup().dataDir);
@@ -50,7 +55,7 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
   const from = to - o.hours * 3600_000;
   return {
     device: { id: d.id, name: d.name, ip: d.ip, mac: d.mac },
-    now: { at: payload.meta.refreshedAt, flows, note },
+    now: { at: payload.meta.refreshedAt, flows, note, noNames },
     history: {
       from,
       to,

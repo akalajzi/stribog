@@ -250,7 +250,7 @@ export class RouterOsRest {
    * (it can be large), trimmed to the fields Stribog uses. Only routed traffic is tracked.
    */
   async connections(): Promise<RosRecord[]> {
-    const fields = [".id", "protocol", "src-address", "dst-address", "reply-src-address", "reply-dst-address", "orig-bytes", "repl-bytes", "orig-packets", "repl-packets", "tcp-state", "timeout", "connection-type", "fasttrack"];
+    const fields = [".id", "protocol", "src-address", "dst-address", "reply-src-address", "reply-dst-address", "src-port", "dst-port", "reply-src-port", "reply-dst-port", "orig-bytes", "repl-bytes", "orig-packets", "repl-packets", "tcp-state", "timeout", "connection-type", "fasttrack"];
     const rows = await this.call("POST", "/ip/firewall/connection/print", { ".proplist": fields }).catch(() => [] as RosRecord[]);
     return rows.length ? rows : this.get("/ip/firewall/connection");
   }
