@@ -70,6 +70,19 @@ describe("NotesStore", () => {
   });
 });
 
+describe("accepted findings", () => {
+  it("keeps the title and reason, logs it, and reopens", () => {
+    const { store } = fresh();
+    store.acceptFinding("seg-no-guest", "No guest Wi-Fi", "  we never have guests ");
+    expect(store.get().accepted).toEqual({ "seg-no-guest": { title: "No guest Wi-Fi", reason: "we never have guests", at: expect.any(String) } });
+    expect(store.audit()[0]).toMatchObject({ target: "finding:seg-no-guest", before: null });
+    store.reopenFinding("seg-no-guest");
+    expect(store.get().accepted).toBeUndefined();
+    expect(store.audit()[0]).toMatchObject({ target: "finding:seg-no-guest", after: null });
+    expect(() => store.acceptFinding("no spaces please", "x")).toThrow(NotesError);
+  });
+});
+
 describe("TokenStore", () => {
   it("shows a token once, stores only its hash, and can revoke it", () => {
     const dir = mkdtempSync(join(tmpdir(), "stribog-tokens-"));

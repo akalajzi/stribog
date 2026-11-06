@@ -39,6 +39,11 @@ export function App() {
 function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSignOut: () => void; onSignedOut: (reason: string) => void }) {
   const { data, error, loading, reload, refetch } = useNetwork(onSignedOut);
   const [path, params, go] = useRoute();
+  // Notes changed somewhere (a finding accepted, say): the review depends on them.
+  useEffect(() => {
+    addEventListener("stribog:notes-changed", refetch);
+    return () => removeEventListener("stribog:notes-changed", refetch);
+  }, [refetch]);
 
   if (!data)
     return (

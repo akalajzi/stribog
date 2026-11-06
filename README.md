@@ -4,7 +4,7 @@ A calm, honest control room for MikroTik home networks.
 
 Stribog signs in to a RouterOS router with the same user and password as WinBox or WebFig (or reads `/export` files) and shows you:
 
-- **Review**: how the network is set up, what is solid and what is fragile. Every finding explains why it matters in plain words, with the evidence. The review only diagnoses: how to fix something depends on the rest of the network, so each finding hands an AI agent a request with the configuration involved (see Agents below).
+- **Review**: how the network is set up, what is solid and what is fragile. Every finding explains why it matters in plain words, with the evidence. The review only diagnoses: how to fix something depends on the rest of the network, so each finding hands an AI agent a request with the configuration involved (see Agents below). A finding that is fine on your network (a weak signal on a device nobody uses, no guest Wi-Fi when you have no guests) can be **accepted**, with a reason: it stops counting in the score until it changes, and opens again when it does.
 - **Topology**: a tidy map with drawings of the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), each with its own line in that colour, strongest signal first.
 - **Wi-Fi**: networks, a channel map per band (including where a planned access point would have to go), and every client on a signal scale.
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
@@ -113,7 +113,7 @@ Under **Settings → Agents**, create a token for an AI agent. It is shown once;
 claude mcp add --transport http stribog http://127.0.0.1:4517/mcp --header "Authorization: Bearer stb_…"
 ```
 
-An agent has the same rights as a person for notes, and sees the network through the most recent signed-in session (or its last read, marked stale, when nobody is signed in). Tools: `get_network_overview`, `list_devices`, `get_device`, `get_device_activity`, `update_device_notes`, `update_network_notes`, `get_review`, `get_fix_request`, `get_change_log`. The token also works for the HTTP API above.
+An agent has the same rights as a person for notes, and sees the network through the most recent signed-in session (or its last read, marked stale, when nobody is signed in). Tools: `get_network_overview`, `list_devices`, `get_device`, `get_device_activity`, `update_device_notes`, `update_network_notes`, `get_review`, `get_fix_request`, `accept_finding`, `reopen_finding`, `get_change_log`. The token also works for the HTTP API above.
 
 Fixes come from the agent, not from Stribog. `get_fix_request` (also the prompt `fix_finding`) gives it one finding with its evidence, the network, the devices involved, your notes, the configuration the check read (secrets hidden) and what a good answer contains: whether it is a real problem here, the options, exact commands that touch only the items involved, how to check and how to undo, and the risk of losing access. In the app, **Copy request for an agent** on a finding copies the same text for an agent that is not connected.
 

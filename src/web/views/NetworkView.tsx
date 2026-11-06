@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { isOpen } from "../../core/analyze.ts";
 import type { Device, NetworkPayload, Network, Port } from "../api.ts";
 import { FindingCard, SEV_VAR } from "../components/FindingCard.tsx";
 import { COLORS, Glyph, speedColor } from "../components/DeviceArt.tsx";
@@ -21,7 +22,7 @@ export function NetworkView({ data, onSelect }: { data: NetworkPayload; onSelect
   const dev = (id?: string) => model.devices.find((d) => d.id === id);
   const lan = model.networks.find((n) => n.role === "lan");
   const findings = analysis.findings.filter((f) => RELATED.has(f.category));
-  const open = findings.filter((f) => f.severity !== "pass");
+  const open = findings.filter(isOpen);
   const good = findings.filter((f) => f.severity === "pass");
 
   // Friendly names for the firewall sentences: interfaces, networks and known addresses.

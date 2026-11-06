@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fetchFixRequest, type Finding, type Severity } from "../api.ts";
+import { acceptFinding, fetchFixRequest, reopenFinding, type Finding, type Severity } from "../api.ts";
 import { CATEGORY_LABEL } from "../../core/analyze.ts";
 
 export const SEV_LABEL: Record<Severity, string> = { critical: "Fix now", warning: "Worth fixing", suggestion: "Idea", info: "Note", pass: "Good" };
@@ -34,7 +34,7 @@ export function FindingCard({ f, open: openProp, onShow, deviceName }: { f: Find
   const [open, setOpen] = useState(!!openProp);
   const expandable = f.severity !== "pass" || !!(f.detail?.length || f.evidence?.length);
   return (
-    <div className={`finding${open ? " open" : ""}`} id={`f-${f.id}`}>
+    <div className={`finding${open ? " open" : ""}${f.accepted ? " accepted" : ""}`} id={`f-${f.id}`}>
       <button className="head" onClick={() => expandable && setOpen(!open)} style={{ cursor: expandable ? "pointer" : "default" }}>
         <span className="ind" style={{ background: SEV_VAR[f.severity], boxShadow: f.severity === "info" ? "none" : `0 0 0 3px color-mix(in srgb, ${SEV_VAR[f.severity]} 18%, transparent)` }} />
         <span>
@@ -42,12 +42,18 @@ export function FindingCard({ f, open: openProp, onShow, deviceName }: { f: Find
           <p>{f.summary}</p>
         </span>
         <span className="meta">
+          {f.accepted && <span className="chip">Accepted</span>}
           <span className="chip">{CATEGORY_LABEL[f.category]}</span>
           {expandable && <span style={{ transform: open ? "rotate(90deg)" : "none", transition: ".15s", display: "inline-block" }}>›</span>}
         </span>
       </button>
       {open && expandable && (
         <div className="body">
+          {f.changedSinceAccepted && (
+            <div className="acc-note">
+              You accepted this on {day(f.changedSinceAccepted.at)}, when it said “{f.changedSinceAccepted.title}”{f.changedSinceAccepted.reason ? ` (${f.changedSinceAccepted.reason})` : ""}. It has changed since, so it counts again.
+            </div>
+          )}
           {f.detail?.map((p, i) => <p key={i}>{p}</p>)}
           {f.evidence?.length ? (
             <div className="ev">
@@ -55,7 +61,8 @@ export function FindingCard({ f, open: openProp, onShow, deviceName }: { f: Find
               {f.evidence.map((e, i) => <div key={i}>{e}</div>)}
             </div>
           ) : null}
-          {f.severity !== "pass" && <AskAgent id={f.id} />}
+          {f.severity !== "pass" && !f.accepted && <AskAgent id={f.id} />}
+          {f.severity !== "pass" && <Accept f={f} />}
           {onShow && f.devices?.length ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn sm" onClick={() => onShow(f)}>Show on map</button>
@@ -101,6 +108,57 @@ function AskAgent({ id }: { id: string }) {
       </div>
       {state !== "idle" && state !== "busy" && state !== "copied" && <p className="st-error">{state}</p>}
       <p className="faint">Check what the agent suggests before you change anything. Stribog never applies changes.</p>
+    </div>
+  );
+}
+
+const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
+
+/** Tell the app the notes changed, so it reads the network (and the review) again. */
+const notesChanged = () => dispatchEvent(new Event("stribog:notes-changed"));
+
+/** "Fine here": the finding stops counting until it changes. Kept in the notes, with the reason. */
+function Accept({ f }: { f: Finding }) {
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string>();
+  const run = (p: Promise<unknown>) =>
+    p.then(
+      () => (setAsking(false), setReason(""), notesChanged()),
+      (e: Error) => setError(e.message),
+    );
+  if (f.accepted)
+    return (
+      <div className="acc">
+        <span>
+          Accepted on {day(f.accepted.at)}
+          {f.accepted.reason ? <>: “{f.accepted.reason}”</> : null}. It does not count in the score until it changes.
+        </span>
+        <button className="btn ghost sm" onClick={() => void run(reopenFinding(f.id))}>Reopen</button>
+        {error && <span className="st-error">{error}</span>}
+      </div>
+    );
+  return (
+    <div className="acc">
+      {asking ? (
+        <form
+          className="acc-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(acceptFinding(f.id, reason || undefined));
+          }}
+        >
+          <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why it is fine here (optional), e.g. nobody uses it" maxLength={500} />
+          <button className="btn sm">Accept</button>
+          <button type="button" className="btn ghost sm" onClick={() => setAsking(false)}>Cancel</button>
+        </form>
+      ) : (
+        <>
+          <button className="btn ghost sm" onClick={() => setAsking(true)}>Accept</button>
+          <span className="faint">Fine as it is here? It stops counting until it changes.</span>
+        </>
+      )}
+      {error && <span className="st-error">{error}</span>}
     </div>
   );
 }

@@ -49,7 +49,7 @@ export function ClientsView({ data, onSelect }: { data: NetworkPayload; onSelect
   const findingsOf = useMemo(() => {
     const m = new Map<string, Finding[]>();
     for (const f of analysis.findings) {
-      if (f.severity === "pass") continue;
+      if (f.severity === "pass" || f.accepted) continue;
       for (const id of f.devices ?? []) m.set(id, [...(m.get(id) ?? []), f]);
     }
     for (const list of m.values()) list.sort((a, b) => SEV_RANK.indexOf(a.severity) - SEV_RANK.indexOf(b.severity));

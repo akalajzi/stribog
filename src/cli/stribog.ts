@@ -261,9 +261,10 @@ function report({ model: m, analysis: a, label, demo, sample, error }: Loaded, d
     return n ? SEV[s].color(txt) : c.dim(txt);
   });
   out.push(`  ${counts.join(c.dim("   "))}`);
+  if (a.accepted) out.push(c.dim(`  ${a.accepted} accepted in notes, not counted: ${a.findings.filter((f) => f.accepted).map((f) => f.id).join(", ")}`));
 
   for (const sev of ORDER) {
-    const group = a.findings.filter((f) => f.severity === sev);
+    const group = a.findings.filter((f) => f.severity === sev && !f.accepted);
     if (!group.length) continue;
     out.push("");
     out.push(`  ${SEV[sev].color(c.bold(SEV[sev].label.toUpperCase()))}`);

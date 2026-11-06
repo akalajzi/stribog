@@ -210,7 +210,7 @@ describe("web API sessions", () => {
     const client = new Client({ name: "test", version: "1" });
     await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp"), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(["get_change_log", "get_device", "get_device_activity", "get_fix_request", "get_network_overview", "get_review", "list_devices", "update_device_notes", "update_network_notes"]);
+    expect(tools).toEqual(["accept_finding", "get_change_log", "get_device", "get_device_activity", "get_fix_request", "get_network_overview", "get_review", "list_devices", "reopen_finding", "update_device_notes", "update_network_notes"]);
 
     const text = (r: unknown) => JSON.parse((r as { content: { text: string }[] }).content[0]!.text);
 

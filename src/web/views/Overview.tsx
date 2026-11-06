@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Category, Finding, NetworkPayload, Severity } from "../api.ts";
-import { CATEGORY_LABEL } from "../../core/analyze.ts";
+import { CATEGORY_LABEL, isOpen } from "../../core/analyze.ts";
 import { FindingCard, SEV_LABEL, SEV_VAR } from "../components/FindingCard.tsx";
 
 const ORDER: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
@@ -27,13 +27,13 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 
 export function Overview({ data, onShow }: { data: NetworkPayload; onShow: (f: Finding) => void }) {
   const { model, analysis } = data;
-  const [sev, setSev] = useState<Severity | "open">("open");
+  const [sev, setSev] = useState<Severity | "open" | "accepted">("open");
   const [cat, setCat] = useState<Category | "all">("all");
   const name = (id: string) => model.devices.find((d) => d.id === id)?.name ?? id;
 
   const visible = useMemo(
     () =>
-      analysis.findings.filter((f) => (sev === "open" ? f.severity !== "pass" : f.severity === sev) && (cat === "all" || f.category === cat)),
+      analysis.findings.filter((f) => (sev === "open" ? isOpen(f) : sev === "accepted" ? !!f.accepted : f.severity === sev && !f.accepted) && (cat === "all" || f.category === cat)),
     [analysis, sev, cat],
   );
   const cats = [...new Set(analysis.findings.map((f) => f.category))];
@@ -42,7 +42,7 @@ export function Overview({ data, onShow }: { data: NetworkPayload; onShow: (f: F
   const online = model.devices.filter((d) => d.mac && d.status === "online" && d.zone === "lan");
   const wifi = online.filter((d) => d.via?.kind === "wifi");
   const aps = model.devices.filter((d) => d.kind === "ap");
-  const top = analysis.findings.filter((f) => f.severity === "critical" || f.severity === "warning");
+  const top = analysis.findings.filter((f) => !f.accepted && (f.severity === "critical" || f.severity === "warning"));
 
   return (
     <div className="scroll">
@@ -90,7 +90,7 @@ export function Overview({ data, onShow }: { data: NetworkPayload; onShow: (f: F
 
         <div className="sec-title">Review <em className="faint">{visible.length} shown</em></div>
         <div className="filters" style={{ marginBottom: 14 }}>
-          <button className={`fchip${sev === "open" ? " on" : ""}`} onClick={() => setSev("open")}>Everything to look at <span className="n">{analysis.findings.length - analysis.counts.pass}</span></button>
+          <button className={`fchip${sev === "open" ? " on" : ""}`} onClick={() => setSev("open")}>Everything to look at <span className="n">{analysis.findings.filter(isOpen).length}</span></button>
           {ORDER.map((s) =>
             analysis.counts[s] ? (
               <button key={s} className={`fchip${sev === s ? " on" : ""}`} onClick={() => setSev(s)}>
@@ -98,6 +98,11 @@ export function Overview({ data, onShow }: { data: NetworkPayload; onShow: (f: F
                 {SEV_LABEL[s]} <span className="n">{analysis.counts[s]}</span>
               </button>
             ) : null,
+          )}
+          {analysis.accepted > 0 && (
+            <button className={`fchip${sev === "accepted" ? " on" : ""}`} onClick={() => setSev("accepted")} title="Findings you accepted as fine here. They do not count in the score until they change.">
+              Accepted <span className="n">{analysis.accepted}</span>
+            </button>
           )}
           <span style={{ width: 1, height: 18, background: "var(--hair-2)", margin: "0 4px" }} />
           <button className={`fchip${cat === "all" ? " on" : ""}`} onClick={() => setCat("all")}>All areas</button>

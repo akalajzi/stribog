@@ -62,6 +62,16 @@ export interface Notes {
   networks?: Record<string, { role?: NetworkRole; label?: string }>;
   devices?: Record<string, DeviceNotes>;
   planned?: PlannedDevice[];
+  /** Review findings the owner has accepted, by finding id: they stop counting until they change. */
+  accepted?: Record<string, AcceptedFinding>;
+}
+
+export interface AcceptedFinding {
+  /** The finding's title when it was accepted: a different title means it changed, and it opens again. */
+  title: string;
+  /** Why it is fine here ("nobody uses that device", "no guests"). */
+  reason?: string;
+  at: string;
 }
 
 export interface DeviceNotes {

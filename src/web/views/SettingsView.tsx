@@ -260,6 +260,7 @@ function History({ data }: { data: NetworkPayload }) {
   }, [data.meta.refreshedAt]);
   const nameOf = (target: string) => {
     if (target === "network") return "The network";
+    if (target.startsWith("finding:")) return `Review: ${data.analysis.findings.find((f) => f.id === target.slice(8))?.title ?? target.slice(8)}`;
     const mac = target.replace(/^device:/, "");
     return data.model.devices.find((d) => d.mac === mac)?.name ?? mac;
   };
@@ -287,6 +288,10 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyl
 function describe(e: AuditEntry): string {
   const b = (e.before ?? {}) as Record<string, unknown>;
   const a = (e.after ?? {}) as Record<string, unknown>;
+  if (e.target.startsWith("finding:")) {
+    const why = (e.after as { reason?: string } | null)?.reason;
+    return e.after ? `accepted${why ? `: “${why}”` : ""}` : "reopened";
+  }
   if (!e.before) return "notes added";
   if (!e.after) return "notes removed";
   const keys = [...new Set([...Object.keys(b), ...Object.keys(a)])].filter((k) => k !== "updatedAt" && JSON.stringify(b[k]) !== JSON.stringify(a[k]));

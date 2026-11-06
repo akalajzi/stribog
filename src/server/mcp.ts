@@ -11,6 +11,7 @@ import { normMac } from "../core/net.ts";
 import { NotesError, type NotesStore } from "./notes.ts";
 import { snapshotOf, type NetworkPayload } from "./provider.ts";
 import { adviceRequest } from "../core/advice.ts";
+import { isOpen } from "../core/analyze.ts";
 import type { DeviceActivity } from "./device-activity.ts";
 
 export interface McpContext {
@@ -113,7 +114,7 @@ function buildServer(ctx: McpContext): McpServer {
       const p = await network();
       const d = findDevice(p.model, device);
       if (!d) return fail(`No device matches “${device}”. Use list_devices to see what exists.`);
-      const findings = p.analysis.findings.filter((f) => f.severity !== "pass" && f.devices?.includes(d.id)).map((f) => ({ id: f.id, severity: f.severity, title: f.title, summary: f.summary }));
+      const findings = p.analysis.findings.filter((f) => isOpen(f) && f.devices?.includes(d.id)).map((f) => ({ id: f.id, severity: f.severity, title: f.title, summary: f.summary }));
       return json({ ...brief(d, p.model), vendor: d.vendor, model: d.model, version: d.version, reserved: d.reserved, leaseComment: d.leaseComment, lastSeen: d.lastSeen, facts: d.facts, findings });
     }),
   );
@@ -190,7 +191,8 @@ function buildServer(ctx: McpContext): McpServer {
     "get_review",
     {
       title: "Review findings",
-      description: "Stribog's review of the setup: what is fragile or wrong, worst first, with evidence. Diagnosis only, no fixes: use get_fix_request with a finding's id for everything needed to advise on fixing it.",
+      description:
+        "Stribog's review of the setup: what is fragile or wrong, worst first, with evidence. Diagnosis only, no fixes: use get_fix_request with a finding's id for everything needed to advise on fixing it. Findings the owner accepted are listed apart and do not count in the score.",
       inputSchema: { includePassed: z.boolean().optional().describe("Also list what is already good.") },
       annotations: read,
     },
@@ -200,9 +202,38 @@ function buildServer(ctx: McpContext): McpServer {
         score: analysis.score,
         grade: analysis.grade,
         counts: analysis.counts,
-        findings: analysis.findings.filter((f) => includePassed || f.severity !== "pass"),
+        findings: analysis.findings.filter((f) => !f.accepted && (includePassed || f.severity !== "pass")),
+        accepted: analysis.findings.filter((f) => f.accepted).map((f) => ({ id: f.id, title: f.title, ...f.accepted })),
       });
     }),
+  );
+
+  server.registerTool(
+    "accept_finding",
+    {
+      title: "Accept a review finding",
+      description:
+        "Mark a finding as accepted because it is fine on this network (\"nobody uses that device\", \"we do not want a guest network\"). It stops counting in the score until it changes. Do this only when the owner says so, and give their reason. Logged like any note.",
+      inputSchema: { finding: z.string().describe("The finding's id, from get_review."), reason: z.string().optional().describe("Why it is fine here, in the owner's words.") },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    guard(async ({ finding, reason }: { finding: string; reason?: string }) => {
+      const f = (await network()).analysis.findings.find((x) => x.id === finding);
+      if (!f || f.severity === "pass") return fail(`No finding “${finding}” to accept. Use get_review to see the current ones.`);
+      ctx.notes.acceptFinding(finding, f.title, reason);
+      return json({ accepted: finding, title: f.title, reason });
+    }),
+  );
+
+  server.registerTool(
+    "reopen_finding",
+    {
+      title: "Reopen an accepted finding",
+      description: "Make an accepted finding count again.",
+      inputSchema: { finding: z.string().describe("The finding's id.") },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    guard(async ({ finding }: { finding: string }) => (ctx.notes.reopenFinding(finding), json({ reopened: finding }))),
   );
 
   // Advice on a finding: the agent gets the context, Stribog never writes the fix itself.

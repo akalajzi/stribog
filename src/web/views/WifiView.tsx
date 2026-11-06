@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { isOpen } from "../../core/analyze.ts";
 import type { Device, Finding, NetworkPayload, Radio, Severity } from "../api.ts";
 import type { Band } from "../../core/net.ts";
 import { isDfs } from "../../core/net.ts";
@@ -55,7 +56,7 @@ export function WifiView({ data, onSelect }: { data: NetworkPayload; onSelect: (
   const devName = (id: string) => model.devices.find((d) => d.id === id)?.name ?? id;
 
   const wifiFindings = analysis.findings.filter((f) => f.category === "wifi");
-  const open = wifiFindings.filter((f) => f.severity !== "pass").sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
+  const open = wifiFindings.filter(isOpen).sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
   const good = wifiFindings.filter((f) => f.severity === "pass");
   const bands = BANDS.filter((b) => model.radios.some((r) => r.band === b));
   const onShow = (f: Finding) => f.devices?.[0] && onSelect(f.devices[0]);

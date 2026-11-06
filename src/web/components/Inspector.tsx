@@ -229,7 +229,7 @@ function Header({ kind, title, sub, onClose }: { kind: string; title: React.Reac
 }
 
 function Related({ data, id, onFinding, extra = [] }: { data: NetworkPayload; id: string; onFinding: (fid: string) => void; extra?: NetworkPayload["analysis"]["findings"] }) {
-  const fs = [...data.analysis.findings.filter((f) => f.devices?.includes(id)), ...extra].filter((f, i, a) => a.findIndex((x) => x.id === f.id) === i);
+  const fs = [...data.analysis.findings.filter((f) => f.devices?.includes(id)), ...extra].filter((f, i, a) => !f.accepted && a.findIndex((x) => x.id === f.id) === i);
   if (!fs.length) return null;
   return (
     <div>

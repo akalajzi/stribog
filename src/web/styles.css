@@ -187,6 +187,13 @@ pre.cli .c { color: var(--tx-3); }
 .finding .ev { display: grid; gap: 4px; }
 .finding .ev div { font: 11.5px/1.5 var(--mono); color: var(--tx-2); padding-left: 12px; border-left: 2px solid var(--hair-2); }
 .finding .ask { display: grid; gap: 8px; }
+.finding .acc { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--tx-2); padding-top: 10px; border-top: 1px solid var(--hair); }
+.finding .acc .faint { font-size: 12px; }
+.finding .acc-form { display: flex; gap: 8px; flex: 1; min-width: 0; }
+.finding .acc-form input { flex: 1; min-width: 0; height: 28px; padding: 0 10px; border-radius: 7px; border: 0; outline: 0; font: inherit; font-size: 12.5px; color: var(--tx-1); background: var(--ink-1); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.finding .acc-note { padding: 8px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; color: var(--tx-1); background: var(--ink-1); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.finding.accepted .head h4, .finding.accepted .head p { color: var(--tx-3); }
+.finding.accepted .ind { opacity: .35; box-shadow: none !important; }
 .finding .ask p { margin: 0; color: var(--tx-2); font-size: 12.5px; line-height: 1.5; }
 .finding .ask .faint { font-size: 12px; }
 .finding .ask-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }

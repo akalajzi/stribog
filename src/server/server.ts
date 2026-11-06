@@ -134,6 +134,24 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return send(res, 200, { text: adviceRequest({ finding: f, model: p.model, snap, notes: snap.notes }) }), true;
     }
 
+    // Accepting a finding: a note like any other, logged, with the same rights for people and agents.
+    const acc = /^\/api\/review\/([^/]+)\/accept$/.exec(url.pathname);
+    if (acc && (req.method === "PUT" || req.method === "DELETE")) {
+      const id = decodeURIComponent(acc[1]!);
+      const notes = notesFor(session?.kind === "demo");
+      try {
+        if (req.method === "DELETE") return notes.reopenFinding(id), send(res, 200, { ok: true }), true;
+        const p = agent ? await getNetworkForAgent() : await getNetwork(session);
+        const f = p?.analysis.findings.find((x) => x.id === id);
+        if (!f || f.severity === "pass") return send(res, 404, { error: "No such finding to accept right now." }), true;
+        notes.acceptFinding(id, f.title, (await readJson(req)).reason);
+        return send(res, 200, { ok: true }), true;
+      } catch (err) {
+        if (err instanceof NotesError) return send(res, 400, { error: err.message }), true;
+        throw err;
+      }
+    }
+
     const act = /^\/api\/devices\/([^/]+)\/activity$/.exec(url.pathname);
     if (act && req.method === "GET") {
       const hours = Math.min(24 * 30, Math.max(1, Number(url.searchParams.get("hours")) || 24));

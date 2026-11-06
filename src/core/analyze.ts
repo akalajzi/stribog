@@ -22,13 +22,22 @@ export interface Finding {
   devices?: string[];
   /** Configuration the check read, as "<device> <menu>" ("router /ip/service"): what an agent needs to see to advise on it. */
   reads?: string[];
+  /** The owner accepted it (notes): it does not count. */
+  accepted?: { reason?: string; at: string };
+  /** Accepted once, but it has changed since: it counts again. */
+  changedSinceAccepted?: { title: string; reason?: string; at: string };
 }
+
+/** Something to look at: not good already, and not accepted by the owner. */
+export const isOpen = (f: Finding) => f.severity !== "pass" && !f.accepted;
 
 export interface Analysis {
   score: number;
   grade: "great" | "good" | "fair" | "poor";
   findings: Finding[];
+  /** Open findings by severity; accepted ones are counted in `accepted` instead. */
   counts: Record<Severity, number>;
+  accepted: number;
 }
 
 export const CATEGORY_LABEL: Record<Category, string> = {
@@ -78,14 +87,22 @@ export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
       findings.push({ id: `rule-error-${findings.length}`, severity: "info", category: "maintenance", title: "A check could not run", summary: String(err) });
     }
   }
+  // What the owner accepted stops counting, as long as it still says the same.
+  for (const f of findings) {
+    const a = f.severity === "pass" ? undefined : snap.notes?.accepted?.[f.id];
+    if (!a) continue;
+    if (a.title === f.title) f.accepted = { reason: a.reason, at: a.at };
+    else f.changedSinceAccepted = a;
+  }
   const order: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
   findings.sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
-  const counts = Object.fromEntries(order.map((s) => [s, findings.filter((f) => f.severity === s).length])) as Record<Severity, number>;
+  const counted = findings.filter((f) => !f.accepted);
+  const counts = Object.fromEntries(order.map((s) => [s, counted.filter((f) => f.severity === s).length])) as Record<Severity, number>;
   // Suggestions are ideas, not faults: they can never sink the score on their own.
-  const penalty = findings.reduce((n, f) => n + (f.severity === "suggestion" ? 0 : WEIGHT[f.severity]), 0) + Math.min(SUGGESTION_CAP, counts.suggestion * WEIGHT.suggestion);
+  const penalty = counted.reduce((n, f) => n + (f.severity === "suggestion" ? 0 : WEIGHT[f.severity]), 0) + Math.min(SUGGESTION_CAP, counts.suggestion * WEIGHT.suggestion);
   const score = Math.max(0, Math.round(100 - penalty));
   const grade = score >= 85 ? "great" : score >= 65 ? "good" : score >= 40 ? "fair" : "poor";
-  return { score, grade, findings, counts };
+  return { score, grade, findings, counts, accepted: findings.length - counted.length };
 }
 
 /** The configuration with reads of its menus noted in `seen`. */

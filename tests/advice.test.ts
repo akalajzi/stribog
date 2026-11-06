@@ -48,3 +48,28 @@ describe("a request for advice", () => {
     expect(menuText("/system/scheduler", [])).toContain("nothing configured");
   });
 });
+
+describe("accepting a finding", () => {
+  const f = a.findings.find((x) => x.severity === "warning")!;
+  const withNotes = (accepted: Record<string, { title: string; reason?: string; at: string }>) => {
+    const s = { ...snap, notes: { ...snap.notes, accepted } };
+    return analyze(buildModel(s), s);
+  };
+
+  it("stops counting it while it says the same", () => {
+    const b = withNotes({ [f.id]: { title: f.title, reason: "nobody uses it", at: "2026-11-06T12:00:00Z" } });
+    const g = b.findings.find((x) => x.id === f.id)!;
+    expect(g.accepted).toEqual({ reason: "nobody uses it", at: "2026-11-06T12:00:00Z" });
+    expect(b.accepted).toBe(1);
+    expect(b.counts.warning).toBe(a.counts.warning - 1);
+    expect(b.score).toBeGreaterThan(a.score);
+  });
+
+  it("counts it again once it has changed", () => {
+    const b = withNotes({ [f.id]: { title: "something it used to say", at: "2026-11-06T12:00:00Z" } });
+    const g = b.findings.find((x) => x.id === f.id)!;
+    expect(g.accepted).toBeUndefined();
+    expect(g.changedSinceAccepted?.title).toBe("something it used to say");
+    expect(b.score).toBe(a.score);
+  });
+});

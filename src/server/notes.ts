@@ -92,6 +92,28 @@ export class NotesStore {
     return notes;
   }
 
+  /** Accept a review finding: it stops counting until its title changes. */
+  acceptFinding(id: string, title: string, reason?: unknown): Notes {
+    if (!/^[\w:.@-]{1,160}$/.test(id)) throw new NotesError(`“${id}” is not a finding id.`);
+    const why = reason === undefined || reason === null ? undefined : text(reason, "reason", LIMITS.description);
+    const notes = structuredClone(this.get());
+    const before = notes.accepted?.[id] ?? null;
+    notes.accepted = { ...notes.accepted, [id]: { title: title.slice(0, 300), ...(why ? { reason: why } : {}), at: new Date().toISOString() } };
+    this.save(notes, { target: `finding:${id}`, before, after: notes.accepted[id]! });
+    return notes;
+  }
+
+  /** Count a finding again. */
+  reopenFinding(id: string): Notes {
+    const notes = structuredClone(this.get());
+    const before = notes.accepted?.[id];
+    if (!before) return notes;
+    delete notes.accepted![id];
+    if (!Object.keys(notes.accepted!).length) delete notes.accepted;
+    this.save(notes, { target: `finding:${id}`, before, after: null });
+    return notes;
+  }
+
   audit(limit = 200): AuditEntry[] {
     if (!this.auditPath || !existsSync(this.auditPath)) return [];
     return readFileSync(this.auditPath, "utf8")

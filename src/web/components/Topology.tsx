@@ -29,7 +29,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
   const worst = useMemo(() => {
     const m = new Map<string, Severity>();
     for (const f of analysis.findings) {
-      if (f.severity === "pass" || f.severity === "info") continue;
+      if (f.severity === "pass" || f.severity === "info" || f.accepted) continue;
       for (const id of f.devices ?? []) {
         const cur = m.get(id);
         if (!cur || SEV_RANK.indexOf(f.severity) < SEV_RANK.indexOf(cur)) m.set(id, f.severity);
