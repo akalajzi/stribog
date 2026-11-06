@@ -9,6 +9,8 @@ import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
 import { deviceActivity } from "./device-activity.ts";
 import { ensureRecorder } from "./recorder.ts";
+import { rdap } from "./owners.ts";
+import { isPrivateIp } from "../core/net.ts";
 import { createSession, endSession, LoginError, sessionFrom, setSessionCookie, signIn, type Session } from "./session.ts";
 
 const DIST = resolve(import.meta.dirname, "../../dist");
@@ -114,6 +116,18 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const hours = Math.min(24 * 30, Math.max(1, Number(url.searchParams.get("hours")) || 24));
       const a = await deviceActivity({ session, agent: !!agent, id: decodeURIComponent(act[1]!), hours });
       return a ? send(res, 200, a) : send(res, 404, { error: "No such device." }), true;
+    }
+
+    // Registry record for one public address: the only lookup that sends an address out, on request.
+    if (route === "GET /api/lookup/rdap") {
+      const ip = url.searchParams.get("ip") ?? "";
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || isPrivateIp(ip)) return send(res, 400, { error: "Give one public IPv4 address." }), true;
+      if (session?.kind === "demo") return send(res, 200, { network: "EXAMPLE", organisation: "Documentation range (RFC 5737): no real owner", link: `https://rdap.org/ip/${ip}` }), true;
+      try {
+        return send(res, 200, await rdap(ip)), true;
+      } catch (err) {
+        return send(res, 502, { error: `Could not ask the registry: ${err instanceof Error ? err.message : String(err)}` }), true;
+      }
     }
 
     // ---- notes: same rights for people and agents ----

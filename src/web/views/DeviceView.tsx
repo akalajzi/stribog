@@ -8,6 +8,7 @@ import "./device.css";
 type Flow = DeviceActivity["now"]["flows"][number];
 type Talk = DeviceActivity["history"]["talks"][number];
 type Sample = DeviceActivity["history"]["samples"][number];
+type OwnerShare = DeviceActivity["owners"]["now"][number];
 
 const RANGES = [
   { hours: 24, label: "24 hours" },
@@ -83,6 +84,8 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
         {error ? <p className="dv-error">{error}</p> : !h ? <p className="faint">Loading…</p> : h.samples.length < 2 ? <Empty h={h} /> : <TrafficChart h={h} step={step} />}
         {h && <Recording h={h} />}
       </section>
+
+      {act && <Owners act={act} hours={hours} />}
 
       <section className="card dv-sec">
         <div className="dv-sec-h"><h2>Talking to now</h2></div>
@@ -258,6 +261,59 @@ function TrafficChart({ h, step }: { h: DeviceActivity["history"]; step: number 
   );
 }
 
+// ---- top talkers by network owner --------------------------------------------------
+
+function Owners({ act, hours }: { act: DeviceActivity; hours: number }) {
+  const { now, recorded, ready } = act.owners;
+  if (!now.length && !recorded.length) return null;
+  return (
+    <section className="card dv-sec">
+      <div className="dv-sec-h">
+        <h2>Mostly talks to</h2>
+        <span className="faint">by network owner, top 10</span>
+      </div>
+      <div className="dv-owners">
+        <OwnerList title="Right now" rows={now} />
+        <OwnerList title={`Last ${hours === 24 ? "24 hours" : "7 days"}`} rows={recorded} />
+      </div>
+      <p className="faint dv-foot">
+        {ready
+          ? "Owners come from a free offline database of internet networks (iptoasn.com), refreshed weekly on this machine; the addresses a device talks to are not sent anywhere for it."
+          : "Looking up network owners for the first time: Stribog is downloading a free database of internet networks (about 9 MB). Reload in a minute."}
+      </p>
+    </section>
+  );
+}
+
+function OwnerList({ title, rows }: { title: string; rows: OwnerShare[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.down + r.up));
+  return (
+    <div className="dv-ownerlist">
+      <h3>{title}</h3>
+      {!rows.length ? (
+        <p className="faint">Nothing in this period.</p>
+      ) : (
+        rows.map((r) => (
+          <div key={`${r.asn ?? r.name}`} className="dv-owner" title={`↓ ${fmtBytes(r.down)} · ↑ ${fmtBytes(r.up)}`}>
+            <div className="dv-owner-name">
+              <b>{r.name}</b>
+              <span className="faint mono">{[r.asn ? `AS${r.asn}` : "", r.country ?? ""].filter(Boolean).join(" · ")}</span>
+            </div>
+            <div className="dv-owner-bar">
+              <i style={{ width: `${Math.max(1.5, ((r.down + r.up) / max) * 100)}%` }} />
+              <span className="mono">{fmtBytes(r.down + r.up)} · {r.share < 0.01 ? "<1" : Math.round(r.share * 100)}%</span>
+            </div>
+            <div className="faint dv-owner-sub">
+              {r.addresses} address{r.addresses === 1 ? "" : "es"}
+              {r.ports.length ? ` · ${r.ports.join(", ")}` : ""}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ---- tables ------------------------------------------------------------------
 
 function FlowTable({ rows, history, onSelect }: { rows: (Flow | Talk)[]; history?: boolean; onSelect: (id: string) => void }) {
@@ -278,15 +334,7 @@ function FlowTable({ rows, history, onSelect }: { rows: (Flow | Talk)[]; history
           {rows.map((f) => (
             <tr key={`${f.direction}|${f.protocol}|${f.remote}|${f.port}`}>
               <td>
-                {f.remoteDevice ? (
-                  <a href="#" onClick={(e) => (e.preventDefault(), onSelect(f.remoteDevice!.id))}>{f.remoteDevice.name}</a>
-                ) : f.names?.length ? (
-                  <span title={f.names.join(" → ")}>{f.names[0]}</span>
-                ) : (
-                  <span className="faint">no name known</span>
-                )}
-                <span className="mono faint"> {f.remote}</span>
-                {f.direction === "in" ? <span className="cert">incoming</span> : null}
+                <OtherEnd f={f} onSelect={onSelect} />
               </td>
               <td>{f.scope === "internet" ? "Internet" : "This network"}</td>
               <td>
@@ -304,6 +352,59 @@ function FlowTable({ rows, history, onSelect }: { rows: (Flow | Talk)[]; history
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** The other end: a device here, the name the router resolved, its reverse-DNS name, or its network's owner. */
+function OtherEnd({ f, onSelect }: { f: Flow | Talk; onSelect: (id: string) => void }) {
+  const [who, setWho] = useState<{ organisation?: string; network?: string; range?: string; country?: string; abuse?: string; link?: string; error?: string }>();
+  const [busy, setBusy] = useState(false);
+  const primary = f.remoteDevice ? undefined : (f.names?.[0] ?? f.ptr ?? f.owner?.name);
+  const lookup = async () => {
+    setBusy(true);
+    const res = await fetch(`/api/lookup/rdap?ip=${encodeURIComponent(f.remote)}`);
+    setWho(await res.json().catch(() => ({ error: `HTTP ${res.status}` })));
+    setBusy(false);
+  };
+  return (
+    <div className="dv-end">
+      <div>
+        {f.remoteDevice ? (
+          <a href="#" onClick={(e) => (e.preventDefault(), onSelect(f.remoteDevice!.id))}>{f.remoteDevice.name}</a>
+        ) : primary ? (
+          <span title={f.names?.join(" → ")}>{primary}</span>
+        ) : (
+          <span className="faint">no name known</span>
+        )}
+        <span className="mono faint"> {f.remote}</span>
+        {f.direction === "in" ? <span className="cert">incoming</span> : null}
+        {f.scope === "internet" && !who && (
+          <button className="linkish dv-who" onClick={() => void lookup()} disabled={busy} title="Ask the internet registry who this address belongs to (sends this one address to rdap.org)">
+            {busy ? "asking…" : "who is this?"}
+          </button>
+        )}
+      </div>
+      {/* What else is known: the owner when the name came from DNS, and the reverse-DNS name. */}
+      {(f.owner && primary !== f.owner.name) || (f.ptr && primary !== f.ptr) ? (
+        <div className="faint dv-end-sub">
+          {[f.owner && primary !== f.owner.name ? `${f.owner.name} · AS${f.owner.asn}` : "", f.ptr && primary !== f.ptr ? f.ptr : ""].filter(Boolean).join(" · ")}
+        </div>
+      ) : null}
+      {who && (
+        <div className="dv-whois">
+          {who.error ? (
+            <span className="dv-error">{who.error}</span>
+          ) : (
+            <>
+              <span><span className="faint">Registered to</span> {who.organisation ?? "—"}</span>
+              <span><span className="faint">Network</span> {who.network ?? "—"}{who.range ? <span className="mono faint"> {who.range}</span> : null}{who.country ? ` · ${who.country}` : ""}</span>
+              {who.abuse && <span><span className="faint">Abuse contact</span> {who.abuse}</span>}
+              {who.link && <a href={who.link} target="_blank" rel="noreferrer noopener" className="faint">registry record</a>}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

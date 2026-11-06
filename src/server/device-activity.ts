@@ -1,7 +1,8 @@
 // The details behind "Details" on a device: who it talks to now, and what Stribog recorded.
 
 import { resolve } from "node:path";
-import { flowsFor, namesByAddress, type Flow } from "../core/activity.ts";
+import { byOwner, flowsFor, namesByAddress, type Flow, type OwnerShare } from "../core/activity.ts";
+import { AsnDb, asnDb, reverseName } from "./owners.ts";
 import { normMac } from "../core/net.ts";
 import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
@@ -14,9 +15,13 @@ export interface DeviceActivity {
   device: { id: string; name: string; ip?: string; mac?: string };
   now: { at: string; flows: Flow[]; note?: string; noNames?: string };
   history: { from: number; to: number; samples: Sample[]; talks: Talk[]; since?: string; recording: boolean };
+  /** Top talkers by network owner, now and over the period. `ready` is false while the owner database is still coming. */
+  owners: { now: OwnerShare[]; recorded: OwnerShare[]; ready: boolean };
 }
 
 const DEMO_HISTORY = resolve(import.meta.dirname, "../../fixtures/demo/history");
+const DEMO_ASN = resolve(import.meta.dirname, "../../fixtures/demo/asn.tsv");
+let demoAsn: Promise<AsnDb> | undefined;
 
 export async function deviceActivity(o: { session?: Session; agent: boolean; id: string; hours: number }): Promise<DeviceActivity | undefined> {
   const cfg = resolveConfigPath();
@@ -57,6 +62,20 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
   const store = demo ? new HistoryStore(DEMO_HISTORY) : historyFor(setup().dataDir);
   const to = demo ? Date.parse(m.generatedAt.replace(" ", "T")) : Date.now();
   const from = to - o.hours * 3600_000;
+  const talks = d.mac ? store.talks(d.mac, from, to) : [];
+
+  // Who runs the other ends: the offline ASN database, and reverse DNS for the busiest few.
+  const db = demo ? await (demoAsn ??= AsnDb.load(DEMO_ASN)) : asnDb(setup().dataDir);
+  const internet = [...flows, ...talks].filter((f) => f.scope === "internet");
+  for (const f of internet) {
+    const own = db?.lookup(f.remote);
+    if (own) f.owner = { asn: own.asn, name: own.name, country: own.country };
+  }
+  if (!demo) {
+    const busiest = [...new Set(internet.sort((a, b) => b.down + b.up - (a.down + a.up)).map((f) => f.remote))].slice(0, 20);
+    const names = new Map(await Promise.all(busiest.map(async (ip) => [ip, await reverseName(ip)] as const)));
+    for (const f of internet) f.ptr = names.get(f.remote) ?? undefined;
+  }
   return {
     device: { id: d.id, name: d.name, ip: d.ip, mac: d.mac },
     now: { at: payload.meta.refreshedAt, flows, note, noNames },
@@ -64,9 +83,10 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
       from,
       to,
       samples: d.mac ? store.samples(d.mac, from, to) : [],
-      talks: d.mac ? store.talks(d.mac, from, to) : [],
+      talks,
       since: store.since(),
       recording: !demo && recorderActive(),
     },
+    owners: { now: byOwner(flows).slice(0, 10), recorded: byOwner(talks).slice(0, 10), ready: !!db },
   };
 }

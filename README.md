@@ -95,6 +95,8 @@ Device fields: `name`, `kind`, `labels`, `description`, `services` (each `name`,
 
 **Details** under a device's name opens its page: traffic over time with when it was online, who it is talking to right now and who it talked to over the last 24 hours or 7 days, with ports, bytes each way and the names the router's DNS cache knows for the other end. It comes from the router's connection tracking (`/ip/firewall/connection`, read only when needed) and DNS cache, so it shows what the router routes: traffic to the internet or between networks, not devices talking to each other on the same LAN. Port names ("usually HTTPS") are conventions, marked as such.
 
+The page also lists who a device mostly talks to, by network owner (Cloudflare, Apple, Google…), top 10, now and over the period: often enough to tell what an unknown device is. Owners come from the free [iptoasn.com](https://iptoasn.com) database (public domain), which Stribog downloads weekly (about 9 MB) into the data directory and searches offline, so the addresses your devices talk to are not sent anywhere for it. Reverse-DNS names come from the system's own resolver. "Who is this?" next to an address asks the internet registry (RDAP, via rdap.org) about that one address, only when you click it. `STRIBOG_NO_DOWNLOADS=1` keeps Stribog off the internet entirely.
+
 Stribog records once a minute while someone is signed in to the router, for up to 12 hours after the last visit, using the credentials it already holds in memory. History lives in the data directory under `history/` and is kept for 30 days. A device behind a RouterOS container's veth interface is named after the container.
 
 ### Agents (MCP)
@@ -140,7 +142,7 @@ Stribog has no accounts of its own: signing in means signing in to the router. T
 - `src/core/analyze.ts` holds the review rules. `src/core/layout.ts` lays out the topology (port order left to right, so links never cross). `src/core/setup.ts` generates setup scripts, and `src/core/firewall.ts` describes rules in plain language.
 - `src/core/rest.ts` reads the router over REST. `src/server/session.ts` signs in and keeps sessions in memory. `src/server/provider.ts` picks the source: the signed-in router, files, or the demo.
 - `src/server/notes.ts` keeps notes and the change log, `src/server/tokens.ts` agent tokens, `src/server/mcp.ts` the MCP tools.
-- `src/core/activity.ts` turns the connection table into who-talks-to-whom; `src/server/recorder.ts` and `src/server/history.ts` record and keep history.
+- `src/core/activity.ts` turns the connection table into who-talks-to-whom; `src/server/owners.ts` looks up network owners, reverse DNS and RDAP; `src/server/recorder.ts` and `src/server/history.ts` record and keep history.
 - `src/web` is the React app. `src/server` serves `/api`.
 
 ```sh

@@ -17,5 +17,5 @@ const api = (): Plugin => ({
 export default defineConfig({
   plugins: [react(), api()],
   server: { port: 4517, host: "127.0.0.1" },
-  test: { include: ["tests/**/*.test.ts"] },
+  test: { include: ["tests/**/*.test.ts"], env: { STRIBOG_NO_DOWNLOADS: "1" } },
 });

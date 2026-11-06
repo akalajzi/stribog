@@ -29,6 +29,44 @@ export interface Flow {
   connections: number;
   /** Some of these connections are fast-tracked, so the router may count only part of their bytes. */
   fasttracked?: boolean;
+  /** Who runs the other end's network (from an ASN database, not the router). */
+  owner?: { asn: number; name: string; country?: string };
+  /** The other end's reverse-DNS name, when it has one. */
+  ptr?: string;
+}
+
+/** Traffic grouped by who runs the other end: the device's top talkers. */
+export interface OwnerShare {
+  name: string;
+  asn?: number;
+  country?: string;
+  down: number;
+  up: number;
+  /** Of all bytes in the list it was made from, 0..1. */
+  share: number;
+  addresses: number;
+  ports: string[];
+}
+
+/** Group flows by network owner (or "this network", broadcast...), biggest first. */
+export function byOwner(rows: Pick<Flow, "remote" | "port" | "protocol" | "scope" | "owner" | "names" | "down" | "up">[]): OwnerShare[] {
+  const total = rows.reduce((t, r) => t + r.down + r.up, 0) || 1;
+  const groups = new Map<string, OwnerShare & { ips: Set<string>; portSet: Set<string> }>();
+  for (const r of rows) {
+    const special = specialAddress(r.remote);
+    const name = r.owner?.name ?? (special ? "Broadcast and multicast" : r.scope === "local" ? "This network" : "Unknown network");
+    // One organisation often runs several networks (ASNs); people think of it as one.
+    const key = name;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { name, asn: r.owner?.asn, country: r.owner?.country, down: 0, up: 0, share: 0, addresses: 0, ports: [], ips: new Set(), portSet: new Set() }));
+    g.down += r.down;
+    g.up += r.up;
+    g.ips.add(r.remote);
+    if (r.port) g.portSet.add(`${r.port}/${r.protocol}`);
+  }
+  return [...groups.values()]
+    .map(({ ips, portSet, ...g }) => ({ ...g, share: (g.down + g.up) / total, addresses: ips.size, ports: [...portSet].slice(0, 6) }))
+    .sort((a, b) => b.down + b.up - (a.down + a.up));
 }
 
 /** Well-known ports. Standard assignments, shown as "usually". */

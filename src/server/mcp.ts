@@ -120,7 +120,7 @@ function buildServer(ctx: McpContext): McpServer {
     {
       title: "Device activity",
       description:
-        "Who a device talks to and how much: its connections through the router right now (other end, DNS name when the router knows it, port and what the port is usually for, bytes each way), what it talked to over the last hours as recorded, and its traffic and online history. Only routed traffic is visible (internet and between networks), not traffic between devices on the same LAN. Useful to work out what an unknown device is.",
+        "Who a device talks to and how much: its top talkers by network owner (e.g. Apple, Google, Cloudflare, from an offline ASN database), its connections through the router right now (other end, DNS or reverse-DNS name when known, the network's owner, port and what the port is usually for, bytes each way), what it talked to over the last hours as recorded, and its traffic and online history. Only routed traffic is visible (internet and between networks), not traffic between devices on the same LAN. Useful to work out what an unknown device is; say it is a guess when you do.",
       inputSchema: { device: z.string().describe("MAC address, IP address or name."), hours: z.number().int().min(1).max(720).optional().describe("How far back, default 24.") },
       annotations: read,
     },
@@ -135,7 +135,8 @@ function buildServer(ctx: McpContext): McpServer {
       const peak = s.reduce((m, x) => Math.max(m, x[2] ?? 0, x[3] ?? 0), 0);
       return json({
         device: a.device,
-        now: { at: a.now.at, note: a.now.note, flows: a.now.flows.slice(0, 40) },
+        topOwners: { now: a.owners.now, recorded: a.owners.recorded, ownersKnown: a.owners.ready },
+        now: { at: a.now.at, note: a.now.note, noNames: a.now.noNames, flows: a.now.flows.slice(0, 40) },
         recorded: {
           from: new Date(a.history.from).toISOString(),
           to: new Date(a.history.to).toISOString(),

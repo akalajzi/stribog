@@ -242,6 +242,9 @@ describe("web API sessions", () => {
     expect(act.now.flows[0]).toMatchObject({ remote: "198.51.100.20", port: 443, names: ["video.stream.example", "edge-12.cdn.example.net"] });
     expect(act.history.samples.length).toBeGreaterThan(100);
     expect(act.history.talks[0].names[0]).toBe("video.stream.example");
+    expect(act.now.flows[0].owner).toMatchObject({ asn: 64500, name: "Example Streaming Co." });
+    expect(act.owners.ready).toBe(true);
+    expect(act.owners.now[0]).toMatchObject({ name: "Example Streaming Co.", asn: 64500 });
     expect((await fetch(base + "/api/devices/mac%3A00%3A00%3A5E%3A00%3A53%3AFF/activity", { headers: jar })).status).toBe(404);
   });
 });
