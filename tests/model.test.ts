@@ -342,3 +342,18 @@ add name=bridge`),
     expect(mm.routerId).toBeUndefined();
   });
 });
+
+it("shows REST Wi-Fi rates (bits per second) the way exports print them", () => {
+  const mm = buildModel({
+    collectedAt: "x",
+    devices: [
+      {
+        role: "router",
+        config: { meta: {}, menus: { "/interface/wifi": [{ name: "wifi1", master: "true" }] } },
+        state: { "/interface/wifi/registration-table": [{ interface: "wifi1", "mac-address": "00:00:5E:00:53:71", "tx-rate": "480400000", "rx-rate": "720.6Mbps", signal: "-60" }] },
+        sources: [],
+      },
+    ],
+  });
+  expect(mm.devices.find((d) => d.mac === "00:00:5E:00:53:71")!.via).toMatchObject({ txRate: "480.4Mbps", rxRate: "720.6Mbps" });
+});

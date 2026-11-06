@@ -2,7 +2,7 @@
 //
 // Top to bottom: Internet → ISP router (with the old upstream network beside it) → gateway →
 // devices on gateway ports, in port order so links never cross → devices behind those.
-// Wi-Fi clients orbit their access point at a distance that grows as the signal weakens.
+// Devices behind an access point sit in rows below it: wired first, then Wi-Fi by signal.
 
 import type { Device, NetworkModel, Port } from "./model.ts";
 import type { Band } from "./net.ts";
@@ -16,9 +16,6 @@ export interface LNode {
   kind: string;
   label: "below" | "left" | "right" | "pill";
   ghost?: boolean;
-  client?: boolean;
-  /** For orbit clients: label side. */
-  side?: "left" | "right";
 }
 
 export interface LLink {
@@ -34,12 +31,6 @@ export interface LLink {
   reverse?: boolean;
 }
 
-export interface LOrbit {
-  apId: string;
-  x: number;
-  y: number;
-  rings: { r: number; dbm: number }[];
-}
 
 export interface LZone {
   x: number;
@@ -50,10 +41,19 @@ export interface LZone {
   sub?: string;
 }
 
+/** The shared trunk and row branches under a device with several devices behind it. */
+export interface LBus {
+  id: string;
+  from: string;
+  d: string;
+  /** Every device on it is on Wi-Fi. */
+  wifi: boolean;
+}
+
 export interface Layout {
   nodes: LNode[];
   links: LLink[];
-  orbits: LOrbit[];
+  buses: LBus[];
   zones: LZone[];
   bounds: { x: number; y: number; w: number; h: number };
   portX: Record<string, number>;
@@ -66,15 +66,10 @@ const NODE_W = 190;
 const UPSTREAM_COL_W = 178;
 /** The node that stands for every device seen only on the ISP router's network. */
 export const UPSTREAM_GROUP = "upstream:others";
-const ORBIT_MIN = 72;
-const ORBIT_MAX = 176;
-const ORBIT_LABEL_GAP = 32;
-
-export const orbitRadius = (signal?: number) => {
-  if (signal === undefined) return ORBIT_MAX - 20;
-  const r = ORBIT_MIN + (Math.abs(signal) - 50) * 4.6;
-  return Math.max(ORBIT_MIN, Math.min(ORBIT_MAX, r));
-};
+/** Devices behind one device: columns per row, cell width and row height. */
+const KID_COLS = 4;
+const KID_W = 168;
+const KID_ROW_H = 178;
 
 export function mediumOf(d: Device, port?: Port, ghost?: boolean): Medium {
   if (ghost) return "planned";
@@ -90,7 +85,7 @@ const speedLabel = (mbps?: number) => (mbps === undefined ? "" : mbps >= 1000 ? 
 export function layoutTopology(m: NetworkModel): Layout {
   const nodes: LNode[] = [];
   const links: LLink[] = [];
-  const orbits: LOrbit[] = [];
+  const buses: LBus[] = [];
   const zones: LZone[] = [];
   const byId = new Map(m.devices.map((d) => [d.id, d]));
   const router = m.routerId ? byId.get(m.routerId) : undefined;
@@ -127,14 +122,15 @@ export function layoutTopology(m: NetworkModel): Layout {
   const portIndex = (p?: string) => (p ? ports.findIndex((x) => x.name === p) : 999);
   tier1.sort((a, b) => portIndex(a.port) - portIndex(b.port));
 
-  const widthOf = (s: Slot) => {
-    if (s.kind === "device" && s.dev.kind === "ap") {
-      const wifi = children(s.dev.id).filter((c) => c.via?.kind === "wifi");
-      // Room for the orbit plus client labels on both sides.
-      return wifi.length ? 2 * ORBIT_MAX + 300 : NODE_W;
-    }
-    return NODE_W;
+  // What hangs off a device: wired first (port order), then Wi-Fi, strongest signal first.
+  const kidsOf = (id: string) => {
+    const kids = children(id);
+    const wired = kids.filter((c) => c.via?.kind !== "wifi");
+    const wifi = kids.filter((c) => c.via?.kind === "wifi").sort((a, b) => (b.via?.signal ?? -99) - (a.via?.signal ?? -99));
+    return [...wired, ...wifi];
   };
+  const even = (n: number) => n + (n % 2);
+  const widthOf = (s: Slot) => (s.kind === "device" ? Math.max(NODE_W, Math.min(even(kidsOf(s.dev.id).length), KID_COLS) * KID_W + 24) : NODE_W);
   const widths = tier1.map(widthOf);
   const total = widths.reduce((a, b) => a + b, 0);
   let cursor = gx - total / 2;
@@ -145,71 +141,59 @@ export function layoutTopology(m: NetworkModel): Layout {
     cursor += w;
     const id = s.kind === "device" ? s.dev.id : s.id;
     const isAp = s.kind === "device" ? s.dev.kind === "ap" : s.deviceKind === "ap";
-    const wifiKids = s.kind === "device" ? children(s.dev.id).filter((c) => c.via?.kind === "wifi") : [];
-    const y = t1 + (wifiKids.length ? 60 : 0);
-    nodes.push({ id, x, y, kind: s.kind === "device" ? s.dev.kind : s.deviceKind, label: isAp && wifiKids.length ? "pill" : "below", ghost: s.kind === "ghost" });
+    const kids = s.kind === "device" ? kidsOf(s.dev.id) : [];
+    const y = t1;
+    nodes.push({ id, x, y, kind: s.kind === "device" ? s.dev.kind : s.deviceKind, label: "below", ghost: s.kind === "ghost" });
 
     const port = ports.find((p) => p.name === s.port);
     const px = s.port && portX[s.port] !== undefined ? portX[s.port]! : gx;
     const y1 = gy + GATEWAY_H / 2 + 4;
     const y2 = y - (isAp ? 34 : 40);
     const medium = s.kind === "ghost" ? "planned" : mediumOf(s.dev, port);
+    const wifiFromRouter = s.kind === "device" && s.dev.via?.kind === "wifi";
     links.push({
       id: `l:${id}`,
       from: router!.id,
       to: id,
       d: vcurve(px, y1, x, y2),
       medium,
-      label: [s.port, speedLabel(port?.speedMbps), port?.poeWatts ? `PoE ${port.poeWatts} W` : ""].filter(Boolean).join(" · "),
-      // Label next to the device it leads to, where links are far apart; APs keep it mid-way, clear of the orbit.
-      labelAt: isAp && wifiKids.length ? { x: (px + x) / 2 + (x >= px ? 8 : -8), y: (y1 + y2) / 2 + 4, anchor: x >= px ? "start" : "end" } : { x: x + 8, y: y2 - 14, anchor: "start" },
+      label: wifiFromRouter ? undefined : [s.port, speedLabel(port?.speedMbps), port?.poeWatts ? `PoE ${port.poeWatts} W` : ""].filter(Boolean).join(" · "),
+      labelAt: { x: x + 8, y: y2 - 14, anchor: "start" },
       weight: s.kind === "ghost" ? 0 : medium === "2.5g" ? 0.9 : 0.5,
     });
 
-    if (s.kind !== "device") return;
-
-    // Wi-Fi orbit
-    if (wifiKids.length) {
-      orbits.push({ apId: id, x, y, rings: [-55, -65, -75].map((dbm) => ({ dbm, r: orbitRadius(dbm) })) });
-      const sorted = [...wifiKids].sort((a, b) => (b.via?.signal ?? -99) - (a.via?.signal ?? -99));
-      const right = sorted.filter((_, k) => k % 2 === 0);
-      const leftSide = sorted.filter((_, k) => k % 2 === 1);
-      const place = (list: Device[], side: "left" | "right") => {
-        // Keep clear of the uplink arriving from above and the wired drop below: -35°..65° on each
-        // side, opened up to -70°..80° when a side holds more than a few clients.
-        const [from, to] = list.length > 3 ? [-70, 80] : [-35, 65];
-        const dir = side === "right" ? 1 : -1;
-        const pts = list.map((c, k) => {
-          const t = list.length === 1 ? 0.4 : k / (list.length - 1);
-          const rad = ((from + t * (to - from)) * Math.PI) / 180;
-          const r = orbitRadius(c.via?.signal);
-          return { c, r, y: y + r * Math.sin(rad) };
+    // Devices behind this one, in rows under a trunk that starts below the device's label and
+    // branches above each row. Rows have an even number of places, so the trunk runs through a
+    // gap, never through a device. Each device's own link is the drop from its branch.
+    if (!kids.length) return;
+    const trunkTop = y + 96;
+    const rowY = (r: number) => y + 236 + r * KID_ROW_H;
+    const branchY = (r: number) => rowY(r) - 70;
+    const rows = Math.ceil(kids.length / KID_COLS);
+    const bus: string[] = [`M ${round(x)} ${round(trunkTop)} V ${round(branchY(rows - 1))}`];
+    for (let r = 0; r < rows; r++) {
+      const inRow = kids.slice(r * KID_COLS, (r + 1) * KID_COLS);
+      const places = even(inRow.length);
+      const xs = inRow.map((_, j) => x + (j - (places - 1) / 2) * KID_W);
+      bus.push(`M ${round(Math.min(x, ...xs))} ${round(branchY(r))} H ${round(Math.max(x, ...xs))}`);
+      inRow.forEach((c, j) => {
+        const cx = xs[j]!;
+        const cy = rowY(r);
+        nodes.push({ id: c.id, x: cx, y: cy, kind: c.kind, label: "below" });
+        const wifi = c.via?.kind === "wifi";
+        links.push({
+          id: `l:${c.id}`,
+          from: id,
+          to: c.id,
+          d: `M ${round(cx)} ${round(branchY(r))} V ${round(cy - 40)}`,
+          medium: mediumOf(c),
+          label: wifi ? undefined : (c.via?.port ?? ""),
+          labelAt: { x: cx + 7, y: branchY(r) + 20, anchor: "start" },
+          weight: 0.5,
         });
-        // Labels sit beside each badge: push them apart vertically, then slide each back onto its
-        // signal ring at that height, so the distance from the AP still reads as signal strength.
-        pts.sort((a, b) => a.y - b.y);
-        for (let k = 1; k < pts.length; k++) pts[k]!.y = Math.max(pts[k]!.y, pts[k - 1]!.y + ORBIT_LABEL_GAP);
-        const overflow = pts.length ? pts.at(-1)!.y - (y + ORBIT_MAX) : 0;
-        if (overflow > 0) for (const p of pts) p.y -= overflow;
-        for (const p of pts) {
-          const dy = p.y - y;
-          const dx = Math.sqrt(Math.max(0, p.r * p.r - dy * dy));
-          nodes.push({ id: p.c.id, x: x + dir * Math.max(dx, 28), y: p.y, kind: p.c.kind, label: side, client: true, side });
-        }
-      };
-      place(right, "right");
-      place(leftSide, "left");
+      });
     }
-
-    // Wired devices behind this one
-    const wired = children(id).filter((c) => c.via?.kind !== "wifi");
-    const ty = y + (wifiKids.length ? ORBIT_MAX + 70 : 210);
-    wired.forEach((c, k) => {
-      const cx = x + (k - (wired.length - 1) / 2) * NODE_W;
-      nodes.push({ id: c.id, x: cx, y: ty, kind: c.kind, label: wifiKids.length ? "right" : "below" });
-      const from = wifiKids.length ? y + 46 : y + 76;
-      links.push({ id: `l:${c.id}`, from: id, to: c.id, d: vcurve(x, from, cx, ty - 22), medium: mediumOf(c), label: c.via?.port ?? "", labelAt: { x: x - 8, y: (from + ty) / 2 + 30, anchor: "end" }, weight: 0.5 });
-    });
+    buses.push({ id: `bus:${id}`, from: id, d: bus.join(" "), wifi: kids.every((c) => c.via?.kind === "wifi") });
   });
 
   // ---- spine: internet, upstream, gateway ----------------------------------------
@@ -264,7 +248,7 @@ export function layoutTopology(m: NetworkModel): Layout {
   const x1 = Math.max(...xs, ...zones.map((z) => z.x + z.w)) + pad + 120;
   const y0 = Math.min(...ys) - 90;
   const y1 = Math.max(...ys) + 120;
-  return { nodes, links, orbits, zones, bounds: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, portX };
+  return { nodes, links, buses, zones, bounds: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, portX };
 }
 
 function vcurve(x1: number, y1: number, x2: number, y2: number): string {

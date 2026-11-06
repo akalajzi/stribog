@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { layoutTopology, orbitRadius, UPSTREAM_GROUP, type Layout } from "../src/core/layout.ts";
+import { layoutTopology, UPSTREAM_GROUP, type Layout } from "../src/core/layout.ts";
 import { readConfig, snapshotFromFiles } from "../src/core/load.ts";
 import { buildModel, type NetworkModel } from "../src/core/model.ts";
 import { parseExport } from "../src/core/ros.ts";
@@ -20,7 +20,6 @@ function checkSane(m: NetworkModel, l: Layout) {
   }
   for (const k of ["x", "y", "w", "h"] as const) expect(finite(l.bounds[k])).toBe(true);
   for (const link of l.links) expect(link.d, link.id).not.toMatch(/NaN|undefined|Infinity/);
-  for (const o of l.orbits) expect(finite(o.x) && finite(o.y)).toBe(true);
   // Bounds contain every node and zone.
   const { x, y, w, h } = l.bounds;
   for (const n of l.nodes) {
@@ -78,23 +77,36 @@ describe("layout: demo network", () => {
     expect([...px].sort((a, b) => a - b)).toEqual(px);
   });
 
-  it("puts Wi-Fi clients in an orbit around their AP, further out when weaker", () => {
-    expect(l.orbits.map((o) => o.apId).sort()).toEqual(["mac:00:00:5E:00:53:A0", "mac:00:00:5E:00:53:B0"]);
-    for (const d of m.devices.filter((x) => x.via?.kind === "wifi")) {
-      const n = l.nodes.find((x) => x.id === d.id)!;
-      const o = l.orbits.find((x) => x.apId === d.parent)!;
-      expect(n.client).toBe(true);
-      expect(Math.hypot(n.x - o.x, n.y - o.y)).toBeCloseTo(orbitRadius(d.via?.signal), 5);
+  it("draws devices behind an AP below it: wired first, then Wi-Fi by signal, on dashed band-coloured links", () => {
+    for (const apId of ["mac:00:00:5E:00:53:A0", "mac:00:00:5E:00:53:B0"]) {
+      const ap = l.nodes.find((n) => n.id === apId)!;
+      const kids = m.devices.filter((d) => d.parent === apId);
+      expect(kids.length).toBeGreaterThan(0);
+      const placed = kids.map((d) => ({ d, n: l.nodes.find((x) => x.id === d.id)! }));
+      for (const { d, n } of placed) {
+        expect(n.y, d.name).toBeGreaterThan(ap.y + 100);
+        expect(n.label).toBe("below");
+        const link = l.links.find((x) => x.to === d.id)!;
+        expect(link.from).toBe(apId);
+        if (d.via?.kind === "wifi") {
+          expect(link.medium).toBe(d.via.band === "2.4" ? "wifi-2.4" : d.via.band === "6" ? "wifi-6" : "wifi-5");
+          expect(link.label).toBeUndefined();
+        }
+      }
+      // Reading order (row by row, left to right): wired, then Wi-Fi from strongest to weakest.
+      const order = placed.sort((a, b) => a.n.y - b.n.y || a.n.x - b.n.x).map((p) => p.d);
+      const firstWifi = order.findIndex((d) => d.via?.kind === "wifi");
+      expect(order.slice(firstWifi).every((d) => d.via?.kind === "wifi")).toBe(true);
+      const signals = order.slice(firstWifi).map((d) => d.via?.signal ?? -99);
+      expect([...signals].sort((a, b) => b - a)).toEqual(signals);
     }
-    expect(orbitRadius(-48)).toBeLessThan(orbitRadius(-76));
-    expect(orbitRadius(-30)).toBe(orbitRadius(-40));
-    expect(orbitRadius(-95)).toBe(orbitRadius(-99));
   });
 
-  it("keeps the two AP orbits apart", () => {
-    const [a, b] = l.orbits;
-    const maxR = (o: typeof a) => Math.max(...l.nodes.filter((n) => n.client && m.devices.find((d) => d.id === n.id)?.parent === o!.apId).map((n) => Math.hypot(n.x - o!.x, n.y - o!.y)));
-    expect(Math.abs(a!.x - b!.x)).toBeGreaterThan(maxR(a) + maxR(b));
+  it("keeps the devices of two APs from overlapping", () => {
+    const xs = (apId: string) => l.nodes.filter((n) => m.devices.find((d) => d.id === n.id)?.parent === apId).map((n) => n.x);
+    const a = xs("mac:00:00:5E:00:53:A0");
+    const b = xs("mac:00:00:5E:00:53:B0");
+    expect(Math.max(...a) + 140).toBeLessThan(Math.min(...b));
   });
 
   it("stacks the spine: internet above the ONT above the gateway above its children", () => {

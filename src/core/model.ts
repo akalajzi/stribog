@@ -738,8 +738,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
         ssid: ssidName,
         band: radio?.band ?? bandFromRos(reg.band),
         signal: parseSignal(reg.signal ?? reg["signal-strength"]),
-        txRate: reg["tx-rate"],
-        rxRate: reg["rx-rate"],
+        txRate: wifiRate(reg["tx-rate"]),
+        rxRate: wifiRate(reg["rx-rate"]),
         radio: radio?.id,
         certainty: "read",
       };
@@ -864,6 +864,12 @@ function labelFor(name: string, comment: string | undefined, role: NetworkRole):
   const c = comment?.replace(/\s*\d+\.\d+\.\d+\.\d+\/\d+\s*/, "").trim();
   if (c && c.length <= 24) return c;
   return name.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+/** Wi-Fi rates as "866.7Mbps": exports print them that way, REST gives bits per second. */
+function wifiRate(r?: string): string | undefined {
+  if (!r || !/^\d+$/.test(r)) return r;
+  return `${Math.round(Number(r) / 1e5) / 10}Mbps`;
 }
 
 /** An ARP entry's state in plain words. */

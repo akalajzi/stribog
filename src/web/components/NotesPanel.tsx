@@ -1,125 +1,240 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { KIND_LABEL, KINDS, type DeviceKind } from "../../core/classify.ts";
 import type { ServiceNote } from "../../core/ros.ts";
 import { saveDeviceNotes, type Device } from "../api.ts";
 
-/** Notes for one device: what people and agents told Stribog. View, then edit in place. */
-export function NotesPanel({ d, onSaved }: { d: Device; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false);
-  if (!d.mac) return null;
-  const noted = d.nameSource === "user" || d.kindCertainty === "user" || d.labels?.length || d.description || d.services?.length || d.notes;
+// Everything people (or their agents) tell Stribog about a device, each part with its own
+// control: rename next to the name, labels and description under it, then services and notes.
 
-  if (editing) return <NotesForm d={d} onDone={(saved) => (setEditing(false), saved && onSaved())} />;
-  return (
-    <div>
-      <div className="sec-title" style={{ marginTop: 0 }}>
-        Notes
-        <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setEditing(true)}>{noted ? "Edit" : "Add"}</button>
+type Saved = () => void;
+
+/** Save one change; returns an error message or undefined. */
+async function save(d: Device, patch: Record<string, unknown>, onSaved: Saved): Promise<string | undefined> {
+  const err = await saveDeviceNotes(d.mac!, patch);
+  if (!err) onSaved();
+  return err;
+}
+
+/** The device's name in the inspector header, with a Rename button that also sets the kind. */
+export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("");
+  const [error, setError] = useState<string>();
+  const canEdit = !!d.mac;
+
+  if (!editing)
+    return (
+      <div className="title-row">
+        <h2>{d.name}</h2>
+        {canEdit && (
+          <button
+            className="btn ghost sm rename"
+            onClick={() => {
+              setName(d.nameSource === "user" ? d.name : "");
+              setKind(d.kindCertainty === "user" ? d.kind : "");
+              setError(undefined);
+              setEditing(true);
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>
+            Rename
+          </button>
+        )}
       </div>
-      {!noted ? (
-        <p className="faint notes-empty">Nothing noted yet. Give it a name, labels, a short description, what runs on it. Agents connected in Settings can add notes too.</p>
+    );
+
+  return (
+    <form
+      className="rename-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const err = await save(d, { name: name.trim() || null, kind: kind || null }, onSaved);
+        setError(err);
+        if (!err) setEditing(false);
+      }}
+      onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+    >
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder={d.nameSource === "user" ? "Name" : `${d.name} (from the router)`} maxLength={80} autoFocus aria-label="Name" />
+      <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind">
+        <option value="">{d.kindCertainty === "user" ? "Let Stribog guess the kind" : `${KIND_LABEL[d.kind as DeviceKind] ?? d.kind} (guessed)`}</option>
+        {KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+      </select>
+      {error && <p className="notes-error">{error}</p>}
+      <div className="notes-actions">
+        <button type="button" className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
+        <button className="btn pri sm">Save</button>
+      </div>
+      <p className="faint notes-hint">Leave the name empty to use what the router reports.</p>
+    </form>
+  );
+}
+
+/** Labels as chips you can add and remove, and the short description. */
+export function DeviceAbout({ d, onSaved }: { d: Device; onSaved: Saved }) {
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [describing, setDescribing] = useState(false);
+  const [desc, setDesc] = useState("");
+  const [error, setError] = useState<string>();
+  if (!d.mac) return null;
+  const labels = d.labels ?? [];
+  const setLabels = async (next: string[]) => setError(await save(d, { labels: next.length ? next : null }, onSaved));
+
+  return (
+    <div className="about">
+      {describing ? (
+        <Inline
+          onCancel={() => setDescribing(false)}
+          onSave={async () => {
+            const err = await save(d, { description: desc.trim() || null }, onSaved);
+            setError(err);
+            if (!err) setDescribing(false);
+          }}
+        >
+          <textarea rows={2} value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={500} placeholder="What it is and what it is for" autoFocus aria-label="Description" />
+        </Inline>
+      ) : d.description ? (
+        <p className="about-desc" onClick={() => (setDesc(d.description ?? ""), setDescribing(true))} title="Click to edit">{d.description}</p>
       ) : (
-        <div className="notes">
-          {d.description && <p className="notes-desc">{d.description}</p>}
-          {d.labels?.length ? <div className="notes-labels">{d.labels.map((l) => <span key={l} className="chip">{l}</span>)}</div> : null}
-          {d.services?.length ? (
-            <div className="notes-services">
-              {d.services.map((s, i) => (
-                <div key={i}>
-                  <b>{s.url ? <a href={s.url} target="_blank" rel="noreferrer noopener">{s.name}</a> : s.name}</b>
-                  {s.port || s.protocol ? <span className="mono faint"> {[s.port, s.protocol].filter(Boolean).join("/")}</span> : null}
-                  {s.note ? <span className="faint"> · {s.note}</span> : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {d.notes && <p className="notes-text">{d.notes}</p>}
-        </div>
+        <button className="linkish" onClick={() => (setDesc(""), setDescribing(true))}>+ Description</button>
       )}
+
+      <div className="about-labels">
+        {labels.map((l) => (
+          <span key={l} className="chip label-chip">
+            {l}
+            <button aria-label={`Remove label ${l}`} onClick={() => void setLabels(labels.filter((x) => x !== l))}>×</button>
+          </span>
+        ))}
+        {adding ? (
+          <form
+            className="label-add"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const v = label.trim();
+              if (v && !labels.includes(v)) await setLabels([...labels, v]);
+              setLabel("");
+              setAdding(false);
+            }}
+          >
+            <input value={label} onChange={(e) => setLabel(e.target.value)} onBlur={() => !label.trim() && setAdding(false)} onKeyDown={(e) => e.key === "Escape" && setAdding(false)} placeholder="Room, owner, role…" maxLength={40} autoFocus aria-label="New label" />
+          </form>
+        ) : (
+          <button className="linkish" onClick={() => setAdding(true)}>+ Label</button>
+        )}
+      </div>
+      {error && <p className="notes-error">{error}</p>}
     </div>
   );
 }
 
-type Row = { name: string; port: string; protocol: string; url: string; note: string };
-const toRow = (s: ServiceNote): Row => ({ name: s.name, port: s.port ? String(s.port) : "", protocol: s.protocol ?? "", url: s.url ?? "", note: s.note ?? "" });
+type Row = { name: string; port: string; url: string };
 
-function NotesForm({ d, onDone }: { d: Device; onDone: (saved: boolean) => void }) {
-  const [name, setName] = useState(d.nameSource === "user" ? d.name : "");
-  const [kind, setKind] = useState(d.kindCertainty === "user" ? d.kind : "");
-  const [labels, setLabels] = useState((d.labels ?? []).join(", "));
-  const [description, setDescription] = useState(d.description ?? "");
-  const [services, setServices] = useState<Row[]>((d.services ?? []).map(toRow));
-  const [notes, setNotes] = useState(d.notes ?? "");
-  const [busy, setBusy] = useState(false);
+/** What runs on the device. */
+export function DeviceServices({ d, onSaved }: { d: Device; onSaved: Saved }) {
+  const [row, setRow] = useState<Row>();
   const [error, setError] = useState<string>();
-
-  const setRow = (i: number, k: keyof Row, v: string) => setServices((rs) => rs.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
-  const save = async () => {
-    setBusy(true);
-    const err = await saveDeviceNotes(d.mac!, {
-        name: name.trim() || null,
-        kind: kind || null,
-        labels: labels.split(",").map((l) => l.trim()).filter(Boolean),
-        description: description.trim() || null,
-        services: services
-          .filter((r) => r.name.trim())
-          .map((r) => ({ name: r.name.trim(), ...(r.port.trim() ? { port: Number(r.port) } : {}), ...(r.protocol.trim() ? { protocol: r.protocol.trim() } : {}), ...(r.url.trim() ? { url: r.url.trim() } : {}), ...(r.note.trim() ? { note: r.note.trim() } : {}) })),
-        notes: notes.trim() || null,
-    });
-    setBusy(false);
+  if (!d.mac) return null;
+  const services = d.services ?? [];
+  const write = async (next: ServiceNote[]) => {
+    const err = await save(d, { services: next.length ? next : null }, onSaved);
     setError(err);
-    if (!err) onDone(true);
+    return err;
   };
 
   return (
+    <div>
+      <div className="sec-title" style={{ marginTop: 0 }}>
+        Services
+        {!row && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setRow({ name: "", port: "", url: "" })}>+ Add service</button>}
+      </div>
+      {services.length > 0 && (
+        <div className="notes-services">
+          {services.map((s, i) => (
+            <div key={i} className="svc">
+              <b>{s.url ? <a href={s.url} target="_blank" rel="noreferrer noopener">{s.name}</a> : s.name}</b>
+              {s.port || s.protocol ? <span className="mono faint"> {[s.port, s.protocol].filter(Boolean).join("/")}</span> : null}
+              {s.note ? <span className="faint"> · {s.note}</span> : null}
+              <button className="svc-x" aria-label={`Remove ${s.name}`} onClick={() => void write(services.filter((_, j) => j !== i))}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!services.length && !row && <p className="faint notes-empty">Nothing yet. Add what runs here, so you and your agents know what depends on it.</p>}
+      {row && (
+        <Inline
+          onCancel={() => setRow(undefined)}
+          onSave={async () => {
+            if (!row.name.trim()) return setError("A service needs a name.");
+            const s: ServiceNote = { name: row.name.trim(), ...(row.port ? { port: Number(row.port) } : {}), ...(row.url.trim() ? { url: row.url.trim() } : {}) };
+            if (!(await write([...services, s]))) setRow(undefined);
+          }}
+        >
+          <div className="svc-row">
+            <input value={row.name} onChange={(e) => setRow({ ...row, name: e.target.value })} placeholder="Name, e.g. Home Assistant" autoFocus aria-label="Service name" />
+            <input className="mono" value={row.port} onChange={(e) => setRow({ ...row, port: e.target.value.replace(/\D/g, "") })} placeholder="Port" inputMode="numeric" aria-label="Port" />
+          </div>
+          <input className="mono" value={row.url} onChange={(e) => setRow({ ...row, url: e.target.value })} placeholder="http://… (optional)" aria-label="URL" />
+        </Inline>
+      )}
+      {error && <p className="notes-error">{error}</p>}
+    </div>
+  );
+}
+
+/** Free-form notes, and only those. */
+export function DeviceNotesText({ d, onSaved }: { d: Device; onSaved: Saved }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string>();
+  if (!d.mac) return null;
+  return (
+    <div>
+      <div className="sec-title" style={{ marginTop: 0 }}>
+        Notes
+        {!editing && (
+          <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => (setText(d.notes ?? ""), setEditing(true))}>
+            {d.notes ? "Edit" : "+ Add note"}
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <Inline
+          onCancel={() => setEditing(false)}
+          onSave={async () => {
+            const err = await save(d, { notes: text.trim() || null }, onSaved);
+            setError(err);
+            if (!err) setEditing(false);
+          }}
+        >
+          <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Anything worth knowing later" autoFocus aria-label="Notes" />
+        </Inline>
+      ) : d.notes ? (
+        <p className="notes-text">{d.notes}</p>
+      ) : null}
+      {error && <p className="notes-error">{error}</p>}
+    </div>
+  );
+}
+
+function Inline({ children, onSave, onCancel }: { children: ReactNode; onSave: () => void | Promise<unknown>; onCancel: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
     <form
       className="notes-form"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        void save();
+        setBusy(true);
+        await onSave();
+        setBusy(false);
       }}
-      onKeyDown={(e) => e.key === "Escape" && onDone(false)}
+      onKeyDown={(e) => e.key === "Escape" && onCancel()}
     >
-      <div className="sec-title" style={{ marginTop: 0 }}>Notes</div>
-      <label>
-        <span>Name</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={d.nameSource === "user" ? "" : `${d.name} (from the router)`} maxLength={80} autoFocus />
-      </label>
-      <label>
-        <span>Kind</span>
-        <select value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="">{d.kindCertainty === "user" ? "Let Stribog guess" : `Stribog's guess: ${KIND_LABEL[d.kind as DeviceKind] ?? d.kind}`}</option>
-          {KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-        </select>
-      </label>
-      <label>
-        <span>Labels</span>
-        <input value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="Comma-separated: a room, an owner, a role" />
-      </label>
-      <label>
-        <span>Description</span>
-        <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} placeholder="What it is and what it is for" />
-      </label>
-      <div className="notes-form-services">
-        <span>Services</span>
-        {services.map((r, i) => (
-          <div key={i} className="svc-row">
-            <input value={r.name} onChange={(e) => setRow(i, "name", e.target.value)} placeholder="Name" aria-label="Service name" />
-            <input className="mono" value={r.port} onChange={(e) => setRow(i, "port", e.target.value.replace(/\D/g, ""))} placeholder="Port" aria-label="Port" inputMode="numeric" />
-            <input className="mono" value={r.url} onChange={(e) => setRow(i, "url", e.target.value)} placeholder="http://… (optional)" aria-label="URL" />
-            <button type="button" className="btn ghost sm" aria-label="Remove service" onClick={() => setServices((rs) => rs.filter((_, j) => j !== i))}>✕</button>
-          </div>
-        ))}
-        <button type="button" className="btn ghost sm" onClick={() => setServices((rs) => [...rs, { name: "", port: "", protocol: "", url: "", note: "" }])}>+ Add a service</button>
-      </div>
-      <label>
-        <span>Notes</span>
-        <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth knowing later" />
-      </label>
-      {error && <p className="notes-error" role="alert">{error}</p>}
+      {children}
       <div className="notes-actions">
-        <button type="button" className="btn ghost" onClick={() => onDone(false)}>Cancel</button>
-        <button className="btn pri" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+        <button type="button" className="btn ghost sm" onClick={onCancel}>Cancel</button>
+        <button className="btn pri sm" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
       </div>
     </form>
   );

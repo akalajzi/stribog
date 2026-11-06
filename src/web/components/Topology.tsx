@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from "react";
 import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
-import { GATEWAY_W, orbitRadius } from "../../core/layout.ts";
+import { GATEWAY_W } from "../../core/layout.ts";
 import { UPSTREAM_GROUP } from "../../core/layout.ts";
 import { ArtDefs, bandColor, COLORS, DeviceArt, GatewayArt, Glyph, mediumColor } from "./DeviceArt.tsx";
 
@@ -111,27 +111,24 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
             </g>
           ))}
 
-          {layout.orbits.map((o) => (
-            <g key={o.apId} opacity={dim(o.apId) ? 0.35 : 1}>
-              <circle cx={o.x} cy={o.y} r={orbitRadius(-80) + 20} fill="url(#apHalo)" />
-              {o.rings.map((r, i) => (
-                <circle key={r.dbm} cx={o.x} cy={o.y} r={r.r} fill="none" stroke={COLORS.w5} strokeOpacity={0.13} strokeDasharray={i === 0 ? undefined : i === 1 ? "2 4" : "1 6"} />
-              ))}
-              <text x={o.x + 16} y={o.y - orbitRadius(-80) - 6} fill="var(--tx-3)" fontSize={9.5} fontFamily="JetBrains Mono, monospace">rings {o.rings.map((r) => r.dbm).join(" · ")} dBm</text>
-            </g>
+          {layout.buses.map((b) => (
+            <path key={b.id} d={b.d} fill="none" stroke="var(--tx-3)" strokeOpacity={dim(b.from) ? 0.15 : 0.55} strokeWidth={1.4} strokeDasharray={b.wifi ? "7 6" : undefined} strokeLinejoin="round" />
           ))}
 
           {layout.links.map((l) => {
             const c = mediumColor(l.medium);
-            const dashed = l.medium === "planned" ? "5 6" : l.medium === "legacy" ? "2 5" : l.medium.startsWith("wifi") ? "1 5" : undefined;
+            // Cable is solid and heavier; Wi-Fi is dashed in its band colour; planned and legacy are dotted.
+            const wifi = l.medium.startsWith("wifi");
+            const dashed = l.medium === "planned" ? "2 6" : l.medium === "legacy" ? "2 5" : wifi ? "7 6" : undefined;
             const faded = dim(l.to) && dim(l.from);
             const to = byId.get(l.to);
             const alive = !dashed && to?.status === "online";
-            const width = l.medium === "2.5g" ? 2.6 : l.medium === "wan" ? 2.2 : 2;
+            const width = l.medium === "2.5g" ? 3.4 : l.medium === "wan" ? 2.6 : 2.8;
+            const cable = !dashed && l.medium !== "wan";
             return (
               <g key={l.id} opacity={faded ? 0.25 : 1}>
-                {l.medium === "2.5g" && <path d={l.d} fill="none" stroke={c} strokeWidth={4} opacity={0.45} filter="url(#soft)" />}
-                <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : l.medium.startsWith("wifi") ? 0.55 : 1} strokeWidth={dashed ? 1.6 : width} strokeDasharray={dashed} strokeLinecap="round" />
+                {cable && <path d={l.d} fill="none" stroke={c} strokeWidth={width + 3} opacity={l.medium === "2.5g" ? 0.5 : 0.28} filter="url(#soft)" />}
+                <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.85 : 0.4) : 1} strokeWidth={wifi ? 1.8 : dashed ? 1.6 : width} strokeDasharray={dashed} strokeLinecap="round" />
                 {alive &&
                   [0, 1, 2].slice(0, l.weight > 0.6 ? 3 : 2).map((k) => (
                     <circle key={k} r={2.3} fill="var(--tx-1)" opacity={0.9}>
@@ -180,7 +177,6 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
               );
             }
             if (!d) return null;
-            if (n.client) return <ClientBadge key={n.id} n={n} d={d} sel={isSel} sev={sev} dim={dim(n.id)} onClick={click(n.id)} />;
 
             const art =
               n.kind === "router" && n.id === model.routerId ? (
@@ -207,11 +203,11 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
       <div className="legend">
         <span><i style={{ borderColor: COLORS.mg }} />2.5G</span>
         <span><i style={{ borderColor: COLORS.g1 }} />1G</span>
-        <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />5 GHz</span>
-        <span><i style={{ borderColor: COLORS.w24, borderTopStyle: "dotted" }} />2.4 GHz</span>
+        <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dashed" }} />5 GHz Wi-Fi</span>
+        <span><i style={{ borderColor: COLORS.w24, borderTopStyle: "dashed" }} />2.4 GHz Wi-Fi</span>
         <span><i style={{ borderColor: COLORS.up, opacity: 0.6 }} />upstream</span>
-        <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dashed" }} />legacy</span>
-        {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dashed" }} />planned</span>}
+        <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dotted" }} />upstream side</span>
+        {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />planned</span>}
         <span>· moving dots = link up</span>
       </div>
       <div className="mapctl">
@@ -252,6 +248,7 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
       return [`${d.ip ?? ""}`, `${d.model ?? "AP"} · ${n} Wi-Fi client${n === 1 ? "" : "s"}`];
     }
     default: {
+      if (d.via?.kind === "wifi") return [d.ip ?? "", [d.via.signal !== undefined ? `${d.via.signal} dBm` : "", d.via.band ? `${d.via.band} GHz` : "", d.via.ssid ?? ""].filter(Boolean).join(" · ")];
       const dns = lan?.dhcp?.dns.includes(d.ip ?? "-") ? "DNS for LAN" : "";
       return [d.ip ?? "", [dns, ...(d.labels ?? []).slice(0, 2)].filter(Boolean).join(" · ")];
     }
@@ -308,26 +305,3 @@ function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string
   );
 }
 
-function ClientBadge({ n, d, sel, sev, dim, onClick }: { n: LNode; d: Device; sel: boolean; sev?: Severity; dim: boolean; onClick: () => void }) {
-  const c = bandColor(d.via?.band);
-  const standby = d.status !== "online";
-  const right = n.side !== "left";
-  const tx = right ? 20 : -20;
-  const anchor = right ? "start" : "end";
-  const sig = d.via?.signal;
-  return (
-    <g transform={`translate(${n.x} ${n.y})`} className="node" onClick={onClick} opacity={dim ? 0.3 : 1}>
-      <rect className="hit" x={right ? -16 : -150} y={-18} width={166} height={36} />
-      {sel && <SelectRing r={20} />}
-      <circle r={13} fill="var(--ink-1)" stroke={c} strokeWidth={1.4} strokeDasharray={standby ? "2 2.5" : undefined} />
-      <g transform="translate(-7 -7)" color={standby ? "var(--tx-2)" : "var(--tx-1)"}>
-        <Glyph kind={d.kind} size={14} />
-      </g>
-      <text x={tx} y={-1} textAnchor={anchor} fill={standby ? "var(--tx-2)" : "var(--tx-1)"} fontSize={11.5} className="lab-name">{d.name}</text>
-      <text x={tx} y={12} textAnchor={anchor} fill="var(--tx-3)" fontSize={9.5} fontFamily="JetBrains Mono, monospace">
-        {sig !== undefined ? `${sig}` : "?"} · {d.via?.band} GHz{d.via?.ssid ? ` · ${d.via.ssid}` : ""}
-      </text>
-      <SevDot sev={sev} x={9} y={-10} />
-    </g>
-  );
-}

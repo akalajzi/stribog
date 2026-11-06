@@ -5,7 +5,7 @@ A calm, honest control room for MikroTik home networks.
 Stribog signs in to a RouterOS router with the same user and password as WinBox or WebFig (or reads `/export` files) and shows you:
 
 - **Review**: how the network is set up, what is solid, what is fragile, and exactly what to change. Every finding explains why it matters in plain words and, where the fix is on the router, gives a RouterOS script to review.
-- **Topology**: a tidy map with drawings of the actual kinds of hardware. Port LEDs show link speed, PoE is marked, planned devices are dashed, and Wi-Fi clients orbit their access point at a distance set by signal strength.
+- **Topology**: a tidy map with drawings of the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit in rows under it, strongest signal first.
 - **Wi-Fi**: networks, a channel map per band (including where a planned access point would have to go), and every client on a signal scale.
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
 - **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.
@@ -73,7 +73,7 @@ An export has the configuration but no runtime state, so the review works fully 
 
 ### Notes: what the router cannot know
 
-Everything Stribog shows comes from the router, except notes. Click a device and use **Notes** to give it a name, a kind, labels (a room, an owner, a role), a short description, the services that run on it, and free-form notes. Notes show up on the map and everywhere else at once.
+Everything Stribog shows comes from the router, except notes. Click a device: **Rename** next to its name sets the name and kind; under it you add labels (a room, an owner, a role) and a short description; further down, the services that run on it and free-form notes. Notes show up on the map and everywhere else at once.
 
 Notes, their change history and agent tokens live in Stribog's data directory: `~/.local/share/stribog` on Linux, `~/Library/Application Support/Stribog` on macOS, `%APPDATA%\Stribog` on Windows (or `dataDir` in the config, or `STRIBOG_DATA`). Every change is appended to `audit.jsonl` with before and after, and listed under **Settings → History**.
 

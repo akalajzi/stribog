@@ -2,7 +2,7 @@ import type { Device, NetworkPayload } from "../api.ts";
 import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { bandColor, Glyph } from "./DeviceArt.tsx";
 import { SEV_VAR } from "./FindingCard.tsx";
-import { NotesPanel } from "./NotesPanel.tsx";
+import { DeviceAbout, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
 import { UPSTREAM_GROUP } from "../../core/layout.ts";
 
 export function SignalBars({ dbm }: { dbm?: number }) {
@@ -49,7 +49,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
     <aside className="side">
       <Header
         kind={d.kind}
-        title={d.name}
+        title={<DeviceTitle key={d.id} d={d} onSaved={onNotesSaved} />}
         sub={
           <>
             {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
@@ -60,6 +60,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
         }
         onClose={onClose}
       />
+      <DeviceAbout key={`about-${d.id}`} d={d} onSaved={onNotesSaved} />
 
       {d.via?.kind === "wifi" ? (
         <div className="stats">
@@ -112,7 +113,8 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
         </div>
       </div>
 
-      <NotesPanel key={d.id} d={d} onSaved={onNotesSaved} />
+      <DeviceServices key={`svc-${d.id}`} d={d} onSaved={onNotesSaved} />
+      <DeviceNotesText key={`notes-${d.id}`} d={d} onSaved={onNotesSaved} />
 
       {radios.length > 0 && (
         <div>
@@ -188,12 +190,12 @@ function UpstreamGroup({ data, onClose, onSelect }: { data: NetworkPayload; onCl
   );
 }
 
-function Header({ kind, title, sub, onClose }: { kind: string; title: string; sub: React.ReactNode; onClose: () => void }) {
+function Header({ kind, title, sub, onClose }: { kind: string; title: React.ReactNode; sub: React.ReactNode; onClose: () => void }) {
   return (
     <div className="ih">
       <div className="ic" style={{ color: "var(--tx-1)" }}><Glyph kind={kind} size={24} /></div>
       <div style={{ minWidth: 0 }}>
-        <h2>{title}</h2>
+        {typeof title === "string" ? <h2>{title}</h2> : title}
         <div className="sub">{sub}</div>
       </div>
       <button className="btn ghost sm x" onClick={onClose} aria-label="Close">✕</button>
