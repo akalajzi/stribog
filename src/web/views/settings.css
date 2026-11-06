@@ -35,3 +35,11 @@
 .st-form input:focus { box-shadow: inset 0 0 0 1px var(--tx-3); }
 .st-form-foot { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; }
 .st-form-foot .faint { font-size: 12px; line-height: 1.45; }
+.st-dns { display: grid; gap: 8px; }
+.st-dns ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.st-dns li { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; padding: 6px 0; border-top: 1px solid var(--hair); }
+.st-dns .ok, .st-int .ok { color: var(--ok); }
+.st-srv { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.st-form-title { grid-column: 1 / -1; margin: 6px 0 0; font-size: 13px; font-weight: 600; }
+.st-check { grid-column: 1 / -1; display: flex !important; align-items: center; gap: 8px; color: var(--tx-2) !important; }
+.st-check input { height: auto; box-shadow: none; }

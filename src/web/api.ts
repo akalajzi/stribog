@@ -39,8 +39,8 @@ export const createToken = (name: string) => api<{ token: string; info: TokenInf
 export const revokeToken = (id: string) => api<{ ok: true }>(`/api/tokens/${id}`, { method: "DELETE" });
 export const fetchActivity = (id: string, hours: number) => api<DeviceActivity>(`/api/devices/${encodeURIComponent(id)}/activity?hours=${hours}`);
 export const fetchIntegrations = () => api<IntegrationsInfo>("/api/integrations");
-export const connectAdGuard = (address: string, user: string, password: string) => api<{ ok: true }>("/api/integrations/adguard", { method: "POST", body: JSON.stringify({ address, user, password }) });
-export const disconnectAdGuard = () => api<{ ok: true }>("/api/integrations/adguard", { method: "DELETE" });
+export const connectAdGuard = (body: { address: string; user?: string; password?: string; sameAs?: string }) => api<{ ok: true }>("/api/integrations/adguard", { method: "POST", body: JSON.stringify(body) });
+export const disconnectAdGuard = (url: string) => api<{ ok: true }>(`/api/integrations/adguard?url=${encodeURIComponent(url)}`, { method: "DELETE" });
 export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
 
 export type Theme = "dark" | "light" | "system";

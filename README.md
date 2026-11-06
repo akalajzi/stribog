@@ -103,7 +103,7 @@ Stribog records once a minute while someone is signed in to the router, for up t
 
 Other things on your network that know what devices do can be connected in Settings → Integrations. Stribog reads them and shows what they know beside what the router reports; it never changes their settings.
 
-- **AdGuard Home.** Its query log says which names each device looks up. A device's details list the domains it looked up over the period (grouped by registered domain, with what the block lists stopped), and AdGuard's answers name the addresses in its traffic, which the router cannot do when devices ask AdGuard rather than the router. Stribog suggests the DNS server the router hands out. Like the router's, the AdGuard password stays in memory only: connect again after Stribog restarts. The demo reads a built-in sample log.
+- **AdGuard Home.** Its query log says which names each device looks up. A device's details list the domains it looked up over the period (grouped by registered domain, with what the block lists stopped), and AdGuard's answers name the addresses in its traffic, which the router cannot do when devices ask AdGuard rather than the router. Stribog suggests the DNS servers the router hands out. When there are several (a replica, say), devices split their lookups between them, so connect each one: Stribog reads them as one log, and a device's details say when a server is missing. Like the router's, the AdGuard password stays in memory only: connect again after Stribog restarts. The demo reads a built-in sample log.
 
 ### Agents (MCP)
 

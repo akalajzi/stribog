@@ -1,7 +1,7 @@
 // AdGuard Home as a source: its query log, read page by page, as names each device looked up.
 
 import { describe, expect, it } from "vitest";
-import { AdGuard, AdGuardError, baseDomain, connectAdGuard, demoDnsLog, deviceLookups, summarise, toLookup, withNames, type AdGuardLogin } from "../src/server/adguard.ts";
+import { AdGuard, AdGuardError, baseDomain, combinedLog, connectAdGuard, demoDnsLog, deviceLookups, summarise, toLookup, withNames, type AdGuardLogin } from "../src/server/adguard.ts";
 import { deviceActivity } from "../src/server/device-activity.ts";
 
 const LOGIN: AdGuardLogin = { url: "http://192.0.2.10", user: "admin", password: "pw", encrypted: false };
@@ -98,6 +98,19 @@ describe("the query log", () => {
   it("says when it cannot be read", async () => {
     const { use } = await deviceLookups(new AdGuard({ ...LOGIN, password: "wrong" }, fakeServer(LOG).fetchImpl), ["192.0.2.21"], 0, T0);
     expect(use.error).toMatch(/did not accept/);
+  });
+});
+
+describe("replicas", () => {
+  it("reads several servers as one log, and still shows what it can when one fails", async () => {
+    const a = new AdGuard(LOGIN, fakeServer(LOG.slice(0, 2), 10).fetchImpl);
+    const b = new AdGuard({ ...LOGIN, url: "http://192.0.2.11" }, fakeServer(LOG.slice(3), 10).fetchImpl);
+    const both = await deviceLookups(combinedLog([a, b]), ["192.0.2.21"], T0 - 60 * 60_000, T0);
+    expect(both.use).toMatchObject({ source: "2 AdGuard Home servers", total: 3 });
+    const down = new AdGuard({ ...LOGIN, url: "http://192.0.2.12", password: "wrong" }, fakeServer(LOG).fetchImpl);
+    const partial = await deviceLookups(combinedLog([a, down]), ["192.0.2.21"], T0 - 60 * 60_000, T0);
+    expect(partial.use.total).toBe(2);
+    expect(partial.use.failed?.[0]).toMatch(/^http:\/\/192\.0\.2\.12: .*did not accept/);
   });
 });
 

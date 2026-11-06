@@ -337,6 +337,12 @@ function LookedUp({ dns, hours }: { dns: NonNullable<DeviceActivity["dns"]>; hou
         <h2>Looked up, last {period}</h2>
         <span className="faint">names it asked {dns.source} for</span>
       </div>
+      {dns.unread?.length ? (
+        <p className="dv-warn">
+          Incomplete: the router also hands out {dns.unread.join(", ")} as DNS server{dns.unread.length === 1 ? "" : "s"}, and devices send part of their lookups there. Connect {dns.unread.length === 1 ? "it" : "them"} in Settings → Integrations.
+        </p>
+      ) : null}
+      {dns.failed?.length ? <p className="dv-warn">Incomplete: could not read {dns.failed.join("; ")}.</p> : null}
       {dns.error ? (
         <p className="dv-error">Could not read {dns.source}: {dns.error}</p>
       ) : dns.anonymised ? (

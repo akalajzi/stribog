@@ -3,7 +3,7 @@
 import { resolve } from "node:path";
 import { byOwner, flowsFor, namesByAddress, type Flow, type OwnerShare } from "../core/activity.ts";
 import { AsnDb, asnDb, reverseName } from "./owners.ts";
-import { adguard, demoDnsLog, deviceLookups, withNames, type DnsUse } from "./adguard.ts";
+import { connectedLog, demoDnsLog, dnsHandedOut, deviceLookups, withNames, type DnsUse } from "./adguard.ts";
 import { normMac } from "../core/net.ts";
 import { connectionsOf } from "../core/model.ts";
 import { RouterOsRest } from "../core/rest.ts";
@@ -64,9 +64,13 @@ export async function deviceActivity(o: { session?: Session; agent: boolean; id:
   const from = to - o.hours * 3600_000;
 
   // What it looked up, from the DNS server's log when one is connected; its answers name the other ends.
-  const log = demo ? demoDnsLog : adguard();
+  const log = demo ? demoDnsLog : connectedLog();
   const ips = links.flatMap((l) => (l.ip ? [l.ip] : []));
   const looked = log && ips.length ? await deviceLookups(log, ips, from, to) : undefined;
+  if (looked && !demo) {
+    const unread = dnsHandedOut(m).filter((h) => !h.connected).map((h) => (h.name ? `${h.name} (${h.ip})` : h.ip));
+    if (unread.length) looked.use.unread = unread;
+  }
   const names = withNames(namesByAddress(dns), looked?.names ?? new Map());
   const flows = mergeFlows(links.flatMap((l) => (l.ip ? flowsFor(l.ip, conns, names, m) : [])));
   // An empty cache usually means devices ask another DNS server, so the router has no names to give.

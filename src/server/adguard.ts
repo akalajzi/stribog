@@ -4,6 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { connectionsOf, type NetworkModel } from "../core/model.ts";
 import { candidateUrls } from "./session.ts";
 
 export interface AdGuardLogin {
@@ -53,12 +54,16 @@ export interface DnsUse {
   /** The server hides client addresses in its log, so lookups cannot be told apart by device. */
   anonymised?: boolean;
   error?: string;
+  /** Some servers could not be read; what is shown comes from the others. */
+  failed?: string[];
+  /** DNS servers the router hands out whose log Stribog does not read: lookups sent there are missing. */
+  unread?: string[];
 }
 
 /** Where lookups come from: AdGuard Home, or the demo's sample log. */
 export interface DnsLog {
   source: string;
-  lookups(since: number, o?: { client?: string; max?: number }): Promise<{ items: Lookup[]; truncated: boolean }>;
+  lookups(since: number, o?: { client?: string; max?: number }): Promise<{ items: Lookup[]; truncated: boolean; failed?: string[] }>;
   config(): Promise<{ keptMs?: number; anonymised?: boolean }>;
 }
 
@@ -177,18 +182,77 @@ export async function connectAdGuard(address: string, user: string, password: st
 
 /** Answers each device got: client → address → names asked, newest first. Kept for a day. */
 type NameBook = Map<string, Map<string, { names: string[]; at: number }>>;
-const G = globalThis as { __stribogAdGuard?: { client: AdGuard; book: NameBook; readTo?: number; readAt?: number; error?: string } };
+interface Server {
+  client: AdGuard;
+  book: NameBook;
+  readTo?: number;
+  readAt?: number;
+  error?: string;
+}
+// Several servers when a network runs replicas (devices split their lookups between the DNS servers the router hands out).
+const G = globalThis as { __stribogAdGuards?: Map<string, Server> };
+const servers = () => (G.__stribogAdGuards ??= new Map());
 
-export function adguard(): AdGuard | undefined {
-  return G.__stribogAdGuard?.client;
+export function adguards(): { client: AdGuard; error?: string }[] {
+  return [...servers().values()];
 }
 
-export function adguardError(): string | undefined {
-  return G.__stribogAdGuard?.error;
+/** Add a server, or replace the one at the same address. */
+export function addAdGuard(login: AdGuardLogin, fetchImpl?: typeof fetch) {
+  servers().set(login.url, { client: new AdGuard(login, fetchImpl), book: new Map() });
 }
 
-export function setAdGuard(login: AdGuardLogin | undefined, fetchImpl?: typeof fetch) {
-  G.__stribogAdGuard = login ? { client: new AdGuard(login, fetchImpl), book: new Map() } : undefined;
+export function removeAdGuard(url?: string) {
+  if (url === undefined) servers().clear();
+  else servers().delete(url);
+}
+
+const hostOf = (u: string) => {
+  try {
+    return new URL(/^https?:\/\//i.test(u) ? u : `http://${u}`).hostname;
+  } catch {
+    return u;
+  }
+};
+
+/** The DNS servers the router hands out, other than itself, and whether Stribog reads each one's log. */
+export function dnsHandedOut(m: NetworkModel): { ip: string; name?: string; address: string; connected: boolean }[] {
+  const lan = m.networks.find((n) => n.role === "lan");
+  const urls = [...servers().keys()].map(hostOf);
+  return (lan?.dhcp?.dns ?? [])
+    .filter((ip) => ip !== lan?.gateway)
+    .map((ip) => {
+      const owner = m.devices.find((d) => connectionsOf(d).some((l) => l.ip === ip));
+      // A web address from the notes beats the bare address: AdGuard often sits behind a reverse proxy that routes by name.
+      const address = owner?.services?.find((x) => x.url && /adguard/i.test(`${x.name} ${x.url}`))?.url ?? ip;
+      return { ip, name: owner?.name, address, connected: urls.includes(ip) || urls.includes(hostOf(address)) };
+    });
+}
+
+/** All connected servers as one log. A server that cannot be read is named in `failed`; the others still count. */
+export function connectedLog(): DnsLog | undefined {
+  const list = [...servers().values()].map((s) => s.client);
+  return list.length ? combinedLog(list) : undefined;
+}
+
+export function combinedLog(list: DnsLog[]): DnsLog {
+  if (list.length === 1) return list[0]!;
+  return {
+    source: `${list.length} AdGuard Home servers`,
+    async lookups(since, o) {
+      const parts = await Promise.allSettled(list.map((l) => l.lookups(since, o)));
+      const ok = parts.flatMap((p) => (p.status === "fulfilled" ? [p.value] : []));
+      const failed = parts.flatMap((p, i) => (p.status === "rejected" ? [`${(list[i] as AdGuard).login?.url ?? list[i]!.source}: ${p.reason instanceof Error ? p.reason.message : String(p.reason)}`] : []));
+      if (!ok.length) throw new Error(failed.join("; "));
+      const items = ok.flatMap((p) => p.items).sort((a, b) => b.time - a.time);
+      return { items, truncated: ok.some((p) => p.truncated), ...(failed.length ? { failed } : {}) };
+    },
+    async config() {
+      const cs = await Promise.all(list.map((l) => l.config()));
+      const kept = cs.flatMap((c) => (c.keptMs ? [c.keptMs] : []));
+      return { keptMs: kept.length ? Math.min(...kept) : undefined, anonymised: cs.some((c) => c.anonymised) || undefined };
+    },
+  };
 }
 
 /** Add lookups to a name book: which names pointed a device at which address. */
@@ -215,22 +279,28 @@ export function addToBook(book: NameBook, items: Lookup[]) {
  * address. Without AdGuard Home, or when it cannot be read, an empty book.
  */
 export async function recentNames(now = Date.now()): Promise<(client: string) => Map<string, string[]>> {
-  const s = G.__stribogAdGuard;
-  if (!s) return () => new Map();
-  if (!s.readAt || now - s.readAt > 20_000) {
-    s.readAt = now;
-    try {
-      const since = Math.max(now - 6 * 3600_000, (s.readTo ?? 0) - 60_000);
-      const { items } = await s.client.lookups(since, { max: 20_000 });
-      addToBook(s.book, items);
-      s.readTo = items.length ? Math.max(...items.map((l) => l.time)) : (s.readTo ?? now);
-      s.error = undefined;
-      for (const [, mine] of s.book) for (const [ip, e] of mine) if (now - e.at > 86_400_000) mine.delete(ip);
-    } catch (err) {
-      s.error = err instanceof Error ? err.message : String(err);
-    }
+  const list = [...servers().values()];
+  await Promise.all(list.map((s) => readRecent(s, now)));
+  return (client) => {
+    const out = new Map<string, string[]>();
+    for (const s of list) for (const [ip, e] of s.book.get(client) ?? []) out.set(ip, [...new Set([...(out.get(ip) ?? []), ...e.names])]);
+    return out;
+  };
+}
+
+async function readRecent(s: Server, now: number) {
+  if (s.readAt && now - s.readAt <= 20_000) return;
+  s.readAt = now;
+  try {
+    const since = Math.max(now - 6 * 3600_000, (s.readTo ?? 0) - 60_000);
+    const { items } = await s.client.lookups(since, { max: 20_000 });
+    addToBook(s.book, items);
+    s.readTo = items.length ? Math.max(...items.map((l) => l.time)) : (s.readTo ?? now);
+    s.error = undefined;
+    for (const [, mine] of s.book) for (const [ip, e] of mine) if (now - e.at > 86_400_000) mine.delete(ip);
+  } catch (err) {
+    s.error = err instanceof Error ? err.message : String(err);
   }
-  return (client) => new Map([...(s.book.get(client) ?? [])].map(([ip, e]) => [ip, e.names]));
 }
 
 /**
@@ -294,7 +364,8 @@ export async function deviceLookups(log: DnsLog, ips: string[], from: number, to
     const names = new Map<string, string[]>();
     for (const [, mine] of book) for (const [ip, e] of mine) names.set(ip, [...new Set([...(names.get(ip) ?? []), ...e.names])]);
     const s = summarise(items);
-    return { use: { ...base, ...s, domains: s.domains.slice(0, 200), truncated: per.some((p) => p.truncated) || undefined, ...cfg }, names };
+    const failed = [...new Set(per.flatMap((p) => p.failed ?? []))];
+    return { use: { ...base, ...s, domains: s.domains.slice(0, 200), truncated: per.some((p) => p.truncated) || undefined, ...cfg, ...(failed.length ? { failed } : {}) }, names };
   } catch (err) {
     return { use: { ...base, error: err instanceof Error ? err.message : String(err) }, names: new Map() };
   }

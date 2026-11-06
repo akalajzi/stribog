@@ -10,8 +10,7 @@ import { handleMcp } from "./mcp.ts";
 import { deviceActivity } from "./device-activity.ts";
 import { ensureRecorder } from "./recorder.ts";
 import { rdap } from "./owners.ts";
-import { adguard, AdGuardError, adguardError, connectAdGuard, setAdGuard } from "./adguard.ts";
-import { connectionsOf } from "../core/model.ts";
+import { addAdGuard, AdGuardError, adguards, connectAdGuard, dnsHandedOut, removeAdGuard } from "./adguard.ts";
 import { isPrivateIp } from "../core/net.ts";
 import { createSession, endSession, LoginError, sessionFrom, setSessionCookie, signIn, type Session } from "./session.ts";
 
@@ -22,17 +21,11 @@ const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".j
 /** Other sources Stribog reads, for Settings. Never includes a password. */
 export interface IntegrationsInfo {
   adguard: {
-    connected: boolean;
-    url?: string;
-    user?: string;
-    encrypted?: boolean;
-    version?: string;
-    /** The last read failed. */
-    error?: string;
     /** The demo reads a built-in sample instead. */
     sample?: boolean;
-    /** The DNS server the router hands out, when it is not the router: probably the one to connect. */
-    suggested?: { address: string; ip: string; name?: string };
+    servers: { url: string; user: string; encrypted: boolean; version?: string; error?: string }[];
+    /** The DNS servers the router hands out, other than itself: probably the ones to connect, all of them. */
+    handedOut: { ip: string; name?: string; address: string; connected: boolean }[];
   };
 }
 
@@ -175,29 +168,24 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       if (agent) return send(res, 403, { error: "Agents cannot manage integrations." }), true;
       const demo = session?.kind === "demo";
       if (route === "GET /api/integrations") {
-        const a = adguard();
+        const list = adguards();
         const m = (await getNetwork(session).catch(() => undefined))?.model;
-        const lan = m?.networks.find((n) => n.role === "lan");
-        const dnsIp = lan?.dhcp?.dns.find((ip) => ip !== lan.gateway);
-        const owner = dnsIp ? m?.devices.find((d) => connectionsOf(d).some((l) => l.ip === dnsIp)) : undefined;
+        const handedOut = m ? dnsHandedOut(m) : [];
         const info: IntegrationsInfo = {
           adguard: demo
-            ? { connected: true, sample: true }
-            : a
-              ? { connected: true, url: a.login.url, user: a.login.user, encrypted: a.login.encrypted, version: a.login.version, error: adguardError() }
-              : {
-                  connected: false,
-                  // A web address from the notes beats the bare address: AdGuard often sits behind a reverse proxy that routes by name.
-                  suggested: dnsIp ? { address: owner?.services?.find((x) => x.url && /adguard/i.test(`${x.name} ${x.url}`))?.url ?? dnsIp, ip: dnsIp, name: owner?.name } : undefined,
-                },
+            ? { sample: true, servers: [], handedOut: [] }
+            : { servers: list.map((a) => ({ url: a.client.login.url, user: a.client.login.user, encrypted: a.client.login.encrypted, version: a.client.login.version, error: a.error })), handedOut },
         };
         return send(res, 200, info), true;
       }
       if (demo) return send(res, 403, { error: "The demo network has a sample AdGuard Home log built in." }), true;
       if (route === "POST /api/integrations/adguard") {
         const body = await readJson(req);
+        // "The same user as that server": a replica's password, without the browser ever holding it.
+        const like = body.sameAs ? adguards().find((a) => a.client.login.url === body.sameAs)?.client.login : undefined;
+        if (body.sameAs && !like) return send(res, 400, { error: "That server is no longer connected." }), true;
         try {
-          setAdGuard(await connectAdGuard(String(body.address ?? ""), String(body.user ?? "").trim(), String(body.password ?? "")));
+          addAdGuard(await connectAdGuard(String(body.address ?? ""), like?.user ?? String(body.user ?? "").trim(), like?.password ?? String(body.password ?? "")));
           return send(res, 200, { ok: true }), true;
         } catch (err) {
           if (!(err instanceof AdGuardError)) throw err;
@@ -205,7 +193,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
           return send(res, err.status, { error: err.message }), true;
         }
       }
-      if (route === "DELETE /api/integrations/adguard") return setAdGuard(undefined), send(res, 200, { ok: true }), true;
+      if (route === "DELETE /api/integrations/adguard") return removeAdGuard(url.searchParams.get("url") ?? undefined), send(res, 200, { ok: true }), true;
     }
 
     // ---- agent tokens: managed by a signed-in person only ----

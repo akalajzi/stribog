@@ -41,27 +41,34 @@ function Appearance() {
 function Integrations() {
   const [info, setInfo] = useState<IntegrationsInfo>();
   const [error, setError] = useState<string>();
-  const [form, setForm] = useState({ address: "", user: "", password: "" });
+  const [form, setForm] = useState({ address: "", user: "", password: "", same: true });
   const [busy, setBusy] = useState(false);
   const load = () => fetchIntegrations().then(setInfo, (e: Error) => setError(e.message));
   useEffect(() => void load(), []);
   const a = info?.adguard;
+  const next = a?.handedOut.find((h) => !h.connected);
+  // Prefill the next DNS server the router hands out that is not connected yet.
   useEffect(() => {
-    if (a?.suggested && !form.address) setForm((f) => ({ ...f, address: a.suggested!.address }));
-  }, [a?.suggested?.address]);
+    if (next) setForm((f) => ({ ...f, address: next.address }));
+  }, [next?.address]);
+  const first = a?.servers[0];
+  const reuse = !!first && form.same;
 
   const connect = async () => {
     setBusy(true);
     setError(undefined);
     try {
-      await connectAdGuard(form.address, form.user, form.password);
-      setForm((f) => ({ ...f, password: "" }));
+      await connectAdGuard(reuse ? { address: form.address, sameAs: first!.url } : { address: form.address, user: form.user, password: form.password });
+      setForm((f) => ({ ...f, address: "", password: "" }));
       await load();
     } catch (e) {
       setError((e as Error).message);
     }
     setBusy(false);
   };
+
+  const status = !a ? "" : a.sample ? "sample log" : !a.servers.length ? "not connected" : a.handedOut.length > 1 ? `${a.handedOut.filter((h) => h.connected).length} of ${a.handedOut.length} DNS servers connected` : "connected";
+  const complete = !!a && !a.sample && a.servers.length > 0 && a.handedOut.every((h) => h.connected) && a.servers.every((x) => !x.error);
 
   return (
     <section className="card st-sec">
@@ -72,7 +79,7 @@ function Integrations() {
       <div className="st-int">
         <div className="st-int-h">
           <b>AdGuard Home</b>
-          <span className={a?.connected && !a.error ? "ok" : "faint"}>{!a ? "" : a.sample ? "sample log" : a.connected ? (a.error ? "connected, last read failed" : "connected") : "not connected"}</span>
+          <span className={complete ? "ok" : "faint"}>{status}</span>
         </div>
         <p className="faint">
           Its query log says which names each device looks up: what an app or a gadget is talking to, before any traffic flows, and what the block lists stopped. Stribog also uses its answers to name the
@@ -80,49 +87,81 @@ function Integrations() {
         </p>
         {!a ? null : a.sample ? (
           <p className="faint">The demo network reads a sample of a query log built into Stribog.</p>
-        ) : a.connected ? (
-          <>
-            <div className="kv">
-              <span>Address</span>
-              <span className="tx mono">{a.url}{a.encrypted ? "" : <span className="cert">not encrypted</span>}</span>
-              <span>Signed in as</span>
-              <span className="tx">{a.user}</span>
-              {a.version && <><span>Version</span><span className="tx mono">{a.version}</span></>}
-            </div>
-            {a.error && <p className="st-error">{a.error}</p>}
-            <p className="faint">The password stays in Stribog's memory, like the router's: after Stribog restarts, connect again.</p>
-            <div><button className="btn ghost sm" onClick={() => void disconnectAdGuard().then(load, (e: Error) => setError(e.message))}>Disconnect</button></div>
-          </>
         ) : (
-          <form
-            className="st-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void connect();
-            }}
-          >
-            <label>
-              <span>Address</span>
-              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. 192.168.1.10 or http://adguard.lan:3000" required />
-            </label>
-            <label>
-              <span>User name</span>
-              <input value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="username" required />
-            </label>
-            <label>
-              <span>Password</span>
-              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="current-password" />
-            </label>
-            <div className="st-form-foot">
-              <button className="btn pri" disabled={busy}>{busy ? "Connecting…" : "Connect"}</button>
-              {a.suggested && (
-                <span className="faint">
-                  The router tells devices to ask {a.suggested.name ? <b>{a.suggested.name}</b> : null} <span className="mono">{a.suggested.ip}</span> for names: probably this one{a.suggested.address !== a.suggested.ip ? ", at the address in its notes" : ""}. The password
-                  stays in Stribog's memory only.
-                </span>
-              )}
-            </div>
-          </form>
+          <>
+            {a.handedOut.length > 1 && (
+              <div className="st-dns">
+                <p>
+                  The router hands out {a.handedOut.length} DNS servers, and devices split their lookups between them. Connect each one that runs AdGuard Home, or Stribog sees only part of what devices look up.
+                </p>
+                <ul>
+                  {a.handedOut.map((h) => (
+                    <li key={h.ip}>
+                      <span className="mono">{h.ip}</span>
+                      {h.name ? <span>{h.name}</span> : <span className="faint">no name known</span>}
+                      <span className={h.connected ? "ok" : "faint"}>{h.connected ? "connected" : "not connected"}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {a.servers.map((x) => (
+              <div key={x.url} className="st-srv">
+                <div className="kv">
+                  <span>Address</span>
+                  <span className="tx mono">{x.url}{x.encrypted ? "" : <span className="cert">not encrypted</span>}</span>
+                  <span>Signed in as</span>
+                  <span className="tx">{x.user}</span>
+                  {x.version && <><span>Version</span><span className="tx mono">{x.version}</span></>}
+                </div>
+                {x.error && <p className="st-error">Last read failed: {x.error}</p>}
+                <div><button className="btn ghost sm" onClick={() => void disconnectAdGuard(x.url).then(load, (e: Error) => setError(e.message))}>Disconnect</button></div>
+              </div>
+            ))}
+            {a.servers.length > 0 && <p className="faint">Passwords stay in Stribog's memory, like the router's: after Stribog restarts, connect again.</p>}
+            {(!a.servers.length || next || form.address) && (
+              <form
+                className="st-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void connect();
+                }}
+              >
+                {a.servers.length > 0 && <h3 className="st-form-title">Connect {next ? `the other DNS server${next.name ? `, ${next.name}` : ""}` : "another server"}</h3>}
+                <label>
+                  <span>Address</span>
+                  <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. 192.168.1.10 or http://adguard.lan:3000" required />
+                </label>
+                {!reuse && (
+                  <>
+                    <label>
+                      <span>User name</span>
+                      <input value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="username" required />
+                    </label>
+                    <label>
+                      <span>Password</span>
+                      <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="current-password" />
+                    </label>
+                  </>
+                )}
+                {first && (
+                  <label className="st-check">
+                    <input type="checkbox" checked={form.same} onChange={(e) => setForm({ ...form, same: e.target.checked })} />
+                    <span>Same user and password as {first.url.replace(/^https?:\/\//, "")} (replicas usually share them)</span>
+                  </label>
+                )}
+                <div className="st-form-foot">
+                  <button className="btn pri" disabled={busy}>{busy ? "Connecting…" : "Connect"}</button>
+                  {next && !a.servers.length && (
+                    <span className="faint">
+                      The router tells devices to ask {next.name ? <b>{next.name}</b> : null} <span className="mono">{next.ip}</span> for names: probably this one{next.address !== next.ip ? ", at the address in its notes" : ""}. The password stays in Stribog's
+                      memory only.
+                    </span>
+                  )}
+                </div>
+              </form>
+            )}
+          </>
         )}
         {error && <p className="st-error">{error}</p>}
       </div>
