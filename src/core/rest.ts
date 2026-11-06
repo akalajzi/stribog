@@ -94,11 +94,14 @@ export function routerFetch(insecure = false): typeof fetch {
     new Promise<Response>((resolve, reject) => {
       const url = new URL(String(input));
       const https = url.protocol === "https:";
+      const body = init?.body ? String(init.body) : undefined;
+      // A length, not chunked encoding: RouterOS's web server drops chunked request bodies.
+      const headers = { ...(init?.headers as Record<string, string>), ...(body !== undefined ? { "content-length": String(Buffer.byteLength(body)) } : {}) };
       const req = (https ? httpsRequest : httpRequest)(
         url,
         {
           method: init?.method ?? "GET",
-          headers: init?.headers as Record<string, string>,
+          headers,
           agent: https ? (insecure ? agents.httpsInsecure : agents.https) : agents.http,
           signal: init?.signal ?? undefined,
         },
@@ -113,8 +116,7 @@ export function routerFetch(insecure = false): typeof fetch {
         },
       );
       req.on("error", reject);
-      if (init?.body) req.write(String(init.body));
-      req.end();
+      req.end(body);
     })) as typeof fetch;
 }
 

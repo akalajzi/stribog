@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CONFIG_PATHS, RouterOsRest, STATE_PATHS } from "../src/core/rest.ts";
+import { createServer } from "node:http";
+import { CONFIG_PATHS, RouterOsRest, routerFetch, STATE_PATHS } from "../src/core/rest.ts";
 
 interface Call {
   method: string;
@@ -170,5 +171,28 @@ describe("RouterOsRest", () => {
     const { calls, fetchImpl } = fakeRouter(ROUTES);
     await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl }).snapshot();
     expect(calls.some((c) => /\/ppp\/secret|\/user|\/certificate/.test(c.path))).toBe(false);
+  });
+});
+
+describe("routerFetch", () => {
+  it("sends bodies with a length, not chunked, which RouterOS ignores", async () => {
+    const seen: { headers: Record<string, string | string[] | undefined>; body: string }[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (c: Buffer) => (body += c));
+      req.on("end", () => {
+        seen.push({ headers: req.headers, body });
+        res.writeHead(200, { "content-type": "application/json" }).end("[]");
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/rest/interface/ethernet/monitor`;
+    const body = JSON.stringify({ ".id": "*1,*2", once: "true", note: "č" });
+    const res = await routerFetch()(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+    server.close();
+    expect(res.status).toBe(200);
+    expect(seen[0]!.body).toBe(body);
+    expect(seen[0]!.headers["content-length"]).toBe(String(Buffer.byteLength(body)));
+    expect(seen[0]!.headers["transfer-encoding"]).toBeUndefined();
   });
 });
