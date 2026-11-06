@@ -341,18 +341,26 @@ function InternetNow({ data }: { data: NetworkPayload }) {
   // Left of the ISP's box, outside the upstream zone around it.
   const zone = layout.zones.find((z) => at.x > z.x && at.x < z.x + z.w && at.y > z.y && at.y < z.y + z.h);
   const x = zone ? zone.x - 28 : at.x - 64;
+  // A big, light number with a small, quiet unit: read at a glance, not as a log line.
+  const line = (y: number, arrow: string, bps: number) => {
+    const [num, unit] = fmtBps(bps).split(" ");
+    // Numbers right-aligned, then direction and unit in one small column, so both lines line up.
+    return (
+      <g>
+        <text x={x - 44} y={y} textAnchor="end" fontSize={34} fontWeight={300} letterSpacing="-0.02em" fill={color} style={{ fontVariantNumeric: "tabular-nums" }}>{num}</text>
+        <text x={x - 38} y={y} fontSize={12} fill="var(--tx-3)">
+          <tspan>{arrow}</tspan>
+          <tspan dx={3}>{unit}</tspan>
+        </text>
+      </g>
+    );
+  };
   return (
-    <g className="internet-now" fontFamily="JetBrains Mono, monospace" textAnchor="end">
+    <g className="internet-now" fontFamily="Inter, SF Pro Text, -apple-system, sans-serif">
       <title>{`Through the router's internet port ${wan.name}${cap ? ` (${fmtBps(cap)})` : ""}, as it reads now`}</title>
-      <text x={x} y={at.y - 30} fontSize={11} letterSpacing="0.08em" fill="var(--tx-3)" fontFamily="Inter, sans-serif">INTERNET NOW</text>
-      <text x={x} y={at.y + 4} fontSize={30} fontWeight={600} fill={color}>
-        <tspan fill="var(--tx-3)" fontSize={20}>↓ </tspan>
-        {fmtBps(wan.rxBps ?? 0)}
-      </text>
-      <text x={x} y={at.y + 40} fontSize={30} fontWeight={600} fill={color}>
-        <tspan fill="var(--tx-3)" fontSize={20}>↑ </tspan>
-        {fmtBps(wan.txBps ?? 0)}
-      </text>
+      <text x={x} y={at.y - 34} textAnchor="end" fontSize={10.5} fontWeight={600} letterSpacing="0.09em" fill="var(--tx-3)">INTERNET NOW</text>
+      {line(at.y + 2, "↓", wan.rxBps ?? 0)}
+      {line(at.y + 42, "↑", wan.txBps ?? 0)}
     </g>
   );
 }
