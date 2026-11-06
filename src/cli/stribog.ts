@@ -98,7 +98,7 @@ ${c.bold("collect")}
   Reads the router over the RouterOS REST API (GET and "monitor once" only) and writes a
   snapshot JSON. Point "snapshot" in stribog.config.json at it to audit it later.
   The password comes from --password-file or $STRIBOG_PASSWORD and is never printed.
-  Use a read-only user:
+  Any user that can read works; a read-only one is the safest choice:
     /user group add name=stribog-read policy=read,api,rest-api,!write,!policy,!sensitive
     /user add name=stribog group=stribog-read password=...
 
@@ -197,8 +197,8 @@ async function load(flags: Flags): Promise<Loaded> {
     process.env.STRIBOG_CONFIG = path;
   }
   const { getNetwork, resolveConfigPath } = await import("../server/provider.ts");
-  const { path } = resolveConfigPath();
-  const p = await getNetwork(true);
+  const path = resolveConfigPath() ?? DEMO_CONFIG;
+  const p = await getNetwork(undefined, true);
   const demo = p.meta.mode === "demo" || resolve(path) === DEMO_CONFIG;
   return { model: p.model, analysis: p.analysis, label: path, demo, sample: p.meta.sample, error: p.meta.error };
 }
@@ -235,7 +235,7 @@ function report({ model: m, analysis: a, label, demo, sample, error }: Loaded, f
   out.push(c.dim(`  ${stats.join(" · ")}`));
   const shown = label.startsWith("/") && !relative(process.cwd(), label).startsWith("..") ? relative(process.cwd(), label) : label;
   out.push(c.dim(`  from ${shown}`));
-  if (error) out.push(c.amber(wrap(`Live read failed, showing files instead: ${error}`, 2, w)));
+  if (error) out.push(c.amber(wrap(error, 2, w)));
   out.push("");
 
   const gradeColor = a.grade === "great" ? c.green : a.grade === "good" ? c.teal : a.grade === "fair" ? c.amber : c.red;
@@ -299,7 +299,7 @@ async function collect(flags: Flags) {
   const url = flags.url as string | undefined;
   const user = flags.user as string | undefined;
   if (!url || !/^https?:\/\//.test(url)) fail("collect needs --url http(s)://router", 2);
-  if (!user) fail("collect needs --user (a read-only RouterOS user)", 2);
+  if (!user) fail("collect needs --user (any RouterOS user that can read; a read-only one is enough)", 2);
   const pwFile = flags["password-file"] as string | undefined;
   let password = process.env.STRIBOG_PASSWORD ?? "";
   if (pwFile) {
@@ -308,9 +308,6 @@ async function collect(flags: Flags) {
   }
   if (!password) fail("no password: use --password-file or set STRIBOG_PASSWORD", 2);
   const out = expand((flags.out as string | undefined) ?? "snapshot.json");
-  // RestOptions.insecure is not applied by RouterOsRest itself; do what the server does.
-  if (flags.insecure && url.startsWith("https://")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
   process.stderr.write(c.dim(`Reading ${url} as ${user} (read-only)…\n`));
   let router;
   try {

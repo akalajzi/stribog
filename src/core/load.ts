@@ -17,16 +17,14 @@ export interface StribogConfig {
   snapshot?: string;
   overrides?: string;
   sampleState?: boolean;
-  live?: LiveSpec;
+  /** The router the web app signs in to. Its data replaces the `router` file source while someone is signed in. */
+  router?: RouterSpec;
 }
 
-export interface LiveSpec {
-  url: string;
-  user: string;
-  passwordFile?: string;
-  /** Accept a self-signed certificate on https. */
-  insecure?: boolean;
-  /** Seconds between polls when serving. */
+export interface RouterSpec {
+  /** Address as typed in a browser: `192.168.88.1`, `https://router.lan`. Without a scheme https is tried first. */
+  url?: string;
+  /** Seconds between reads while the app is open. */
   interval?: number;
 }
 

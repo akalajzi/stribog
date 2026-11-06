@@ -349,7 +349,7 @@ function introReason(d: Device): string {
   return `Looks like a ${KIND_LABEL[d.kind].toLowerCase()}, but that is a guess`;
 }
 
-function MeetPanel({ devices, configPath, onSelect }: { devices: Device[]; configPath: string; onSelect: (id: string) => void }) {
+function MeetPanel({ devices, configPath, onSelect }: { devices: Device[]; configPath?: string; onSelect: (id: string) => void }) {
   const ex = devices[0];
   const example = JSON.stringify(
     {
@@ -364,7 +364,7 @@ function MeetPanel({ devices, configPath, onSelect }: { devices: Device[]; confi
     null,
     2,
   );
-  const file = configPath.split("/").pop() ?? "stribog.config.json";
+  const file = configPath?.split("/").pop() ?? "stribog.config.json";
 
   return (
     <>

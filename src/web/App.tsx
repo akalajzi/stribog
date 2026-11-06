@@ -1,5 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useNetwork, useRoute, type Finding, type NetworkPayload } from "./api.ts";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useNetwork, useRoute, useSession, type Finding, type NetworkPayload, type SessionInfo } from "./api.ts";
+import { Logo } from "./components/Logo.tsx";
+import { Login } from "./views/Login.tsx";
 import { Topology } from "./components/Topology.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { Overview } from "./views/Overview.tsx";
@@ -18,7 +20,22 @@ const NAV: { path: string; label: string; icon: ReactNode }[] = [
 ];
 
 export function App() {
-  const { data, error, loading, reload } = useNetwork();
+  const session = useSession();
+  const { info, signOut } = session;
+  const onSignedOut = useCallback((reason: string) => void signOut(reason), [signOut]);
+
+  if (!info)
+    return (
+      <div className="loading">
+        {session.error ? <span style={{ color: "var(--bad)" }}>Could not reach Stribog's server: {session.error}</span> : <span className="pulse">Starting…</span>}
+      </div>
+    );
+  if (!info.signedIn && info.login) return <Login login={info.login} ended={session.ended} onSignIn={session.signIn} onDemo={() => void session.demo()} />;
+  return <Shell session={info} onSignOut={() => void signOut()} onSignedOut={onSignedOut} />;
+}
+
+function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSignOut: () => void; onSignedOut: (reason: string) => void }) {
+  const { data, error, loading, reload } = useNetwork(onSignedOut);
   const [path, params, go] = useRoute();
 
   if (!data)
@@ -34,11 +51,7 @@ export function App() {
   return (
     <div className="app">
       <nav className="rail">
-        <svg className="logo" viewBox="0 0 30 30" fill="none">
-          <path d="M4 11c5-4 10 4 15 0s7-3 7-3" stroke="#ece9e2" strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M4 17c5-4 10 4 15 0s7-3 7-3" stroke="#93b4ff" strokeWidth="1.8" strokeLinecap="round" opacity=".85" />
-          <path d="M4 23c5-4 10 4 15 0s7-3 7-3" stroke="#c4a6ff" strokeWidth="1.8" strokeLinecap="round" opacity=".6" />
-        </svg>
+        <Logo className="logo" />
         {NAV.map((n) => (
           <a key={n.path} href={`#${n.path}`} className={`ri${path === n.path ? " on" : ""}`}>
             {n.icon}
@@ -51,9 +64,15 @@ export function App() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className={loading ? "pulse" : undefined}><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 5v6h-6" /></svg>
           <span className="tip">Reload</span>
         </button>
+        {session.kind !== "files" && (
+          <button className="ri" title={session.kind === "demo" ? "Leave the demo" : "Sign out"} onClick={onSignOut}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14" /><path d="M10 8l-4 4 4 4M6 12h10" /></svg>
+            <span className="tip">{session.kind === "demo" ? "Leave the demo" : "Sign out"}</span>
+          </button>
+        )}
       </nav>
 
-      <TopBar data={data} />
+      <TopBar data={data} session={session} />
 
       <main className="main">
         {path === "/map" ? (
@@ -74,7 +93,7 @@ export function App() {
   );
 }
 
-function TopBar({ data }: { data: NetworkPayload }) {
+function TopBar({ data, session }: { data: NetworkPayload; session: SessionInfo }) {
   const { model, analysis, meta } = data;
   const up = model.devices.find((d) => d.id === "upstream");
   const isp = up?.facts.find((f) => f.startsWith("ISP:"))?.replace("ISP: ", "");
@@ -90,11 +109,17 @@ function TopBar({ data }: { data: NetworkPayload }) {
         {model.wan.doubleNat === true && <span className="faint">· double NAT</span>}
       </span>
       <div className="grow" />
-      {meta.error && <span className="pill err" title={meta.error}>Live read failed, showing files</span>}
+      {session.router && !session.router.encrypted && (
+        <span className="pill warn" title="The router's https service (www-ssl) is off, so Stribog talks to it over plain http and the password crosses your network unencrypted on every read. Turning on www-ssl fixes this.">
+          Not encrypted
+        </span>
+      )}
+      {session.router && <span className="pill" title={session.router.url}>{session.user}<span className="faint">@ {session.router.identity ?? session.router.url.replace(/^https?:\/\//, "")}</span></span>}
+      {meta.error && <span className="pill err" title={meta.error}>{meta.stale ? "Router not answering" : "Could not read the router"}</span>}
       {meta.mode === "live" ? (
-        <span className="pill"><span className="dot pulse" />Live · {new Date(meta.refreshedAt).toLocaleTimeString()}</span>
+        <span className="pill">{meta.stale ? <span className="dot warn" /> : <span className="dot pulse" />}Live · {new Date(meta.refreshedAt).toLocaleTimeString()}</span>
       ) : meta.sample ? (
-        <span className="pill sample" title="Configuration is real (from exports); clients, signals and link speeds are sample data until a live, read-only router connection is set up.">Real config · sample live data</span>
+        <span className="pill sample" title="Configuration is real (from exports); clients, signals and link speeds are sample data, not read from a router.">Real config · sample live data</span>
       ) : (
         <span className="pill">{meta.mode === "demo" ? "Demo network" : `From files · ${model.generatedAt}`}</span>
       )}
