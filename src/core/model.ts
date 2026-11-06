@@ -739,7 +739,13 @@ export function buildModel(snap: Snapshot): NetworkModel {
         d.via = { kind: "port", port: p.name, certainty: "inferred" };
       }
     }
-    if (hasState && d.status === "unknown") d.status = ls?.status === "bound" || a?.complete === "true" ? "online" : "offline";
+    if (hasState && d.status === "unknown") {
+      // A live router reports ARP reachability; a valid lease alone only means the address is still reserved for it.
+      const arpUp = a?.status ? /reachable|delay|probe|permanent/.test(a.status) : a?.complete === "true";
+      d.status = arpUp || (!a?.status && ls?.status === "bound") ? "online" : "offline";
+      if (d.status === "offline" && ls?.status === "bound")
+        d.facts.push(`Probably asleep or gone: its address lease is still valid, but it has not answered recently${ls["last-seen"] ? ` (last DHCP contact ${ls["last-seen"]} ago)` : ""}`);
+    }
     if (d.zone === "upstream") d.parent ??= devices.has("upstream") ? "upstream" : routerId;
     d.only24 = ovd?.only24 ?? likelyOnly24(kind, comment, hostname, name);
     add(d);

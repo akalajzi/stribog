@@ -187,6 +187,32 @@ describe("demo model: networks and Wi-Fi", () => {
     expect(r["cap-wifi2"]!.plan).toEqual({ frequencies: [5180, 5200, 5220, 5240], width: "20/40/80mhz", skipDfs: true });
   });
 
+  it("calls a device with a valid lease but failed ARP offline, and says why", () => {
+    const rsc = "/ip address\nadd address=192.168.50.1/24 interface=bridge\n/ip dhcp-server\nadd interface=bridge name=dhcp1\n";
+    const lease = (mac: string, ip: string) => ({ address: ip, "mac-address": mac, server: "dhcp1", status: "bound", "last-seen": "25m51s", dynamic: "true" });
+    const mm = buildModel({
+      collectedAt: "x",
+      devices: [
+        {
+          role: "router",
+          config: parseExport(rsc),
+          state: {
+            "/ip/dhcp-server/lease": [lease("00:00:5E:00:53:81", "192.168.50.81"), lease("00:00:5E:00:53:82", "192.168.50.82")],
+            "/ip/arp": [
+              { address: "192.168.50.81", "mac-address": "00:00:5E:00:53:81", interface: "bridge", complete: "false", status: "failed" },
+              { address: "192.168.50.82", "mac-address": "00:00:5E:00:53:82", interface: "bridge", complete: "true", status: "reachable" },
+            ],
+          },
+          sources: [],
+        },
+      ],
+    });
+    const gone = mm.devices.find((d) => d.mac === "00:00:5E:00:53:81")!;
+    expect(gone.status).toBe("offline");
+    expect(gone.facts.join(" ")).toMatch(/Probably asleep or gone.*25m51s/);
+    expect(mm.devices.find((d) => d.mac === "00:00:5E:00:53:82")!.status).toBe("online");
+  });
+
   it("ties radios to their access point from the REST `cap` field, without CAP exports", () => {
     const AP = "00:00:5E:00:53:C0";
     const mm = buildModel({

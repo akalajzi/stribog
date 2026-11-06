@@ -64,10 +64,11 @@ export const GATEWAY_H = 62;
 const ROW = { internet: 0, upstream: 170, gateway: 380, tier1: 640 };
 const NODE_W = 190;
 const LEGACY_COLS = 6;
-const LEGACY_COL_W = 160;
+const LEGACY_COL_W = 178;
 const LEGACY_ROW_H = 105;
 const ORBIT_MIN = 72;
 const ORBIT_MAX = 176;
+const ORBIT_LABEL_GAP = 32;
 
 export const orbitRadius = (signal?: number) => {
   if (signal === undefined) return ORBIT_MAX - 20;
@@ -175,14 +176,27 @@ export function layoutTopology(m: NetworkModel): Layout {
       const right = sorted.filter((_, k) => k % 2 === 0);
       const leftSide = sorted.filter((_, k) => k % 2 === 1);
       const place = (list: Device[], side: "left" | "right") => {
-        // Keep clear of the uplink arriving from above and the wired drop below: -35°..65° on each side.
-        list.forEach((c, k) => {
+        // Keep clear of the uplink arriving from above and the wired drop below: -35°..65° on each
+        // side, opened up to -70°..80° when a side holds more than a few clients.
+        const [from, to] = list.length > 3 ? [-70, 80] : [-35, 65];
+        const dir = side === "right" ? 1 : -1;
+        const pts = list.map((c, k) => {
           const t = list.length === 1 ? 0.4 : k / (list.length - 1);
-          const deg = -35 + t * 100;
-          const rad = ((side === "right" ? deg : 180 - deg) * Math.PI) / 180;
+          const rad = ((from + t * (to - from)) * Math.PI) / 180;
           const r = orbitRadius(c.via?.signal);
-          nodes.push({ id: c.id, x: x + r * Math.cos(rad), y: y + r * Math.sin(rad), kind: c.kind, label: side, client: true, side });
+          return { c, r, y: y + r * Math.sin(rad) };
         });
+        // Labels sit beside each badge: push them apart vertically, then slide each back onto its
+        // signal ring at that height, so the distance from the AP still reads as signal strength.
+        pts.sort((a, b) => a.y - b.y);
+        for (let k = 1; k < pts.length; k++) pts[k]!.y = Math.max(pts[k]!.y, pts[k - 1]!.y + ORBIT_LABEL_GAP);
+        const overflow = pts.length ? pts.at(-1)!.y - (y + ORBIT_MAX) : 0;
+        if (overflow > 0) for (const p of pts) p.y -= overflow;
+        for (const p of pts) {
+          const dy = p.y - y;
+          const dx = Math.sqrt(Math.max(0, p.r * p.r - dy * dy));
+          nodes.push({ id: p.c.id, x: x + dir * Math.max(dx, 28), y: p.y, kind: p.c.kind, label: side, client: true, side });
+        }
       };
       place(right, "right");
       place(leftSide, "left");
@@ -227,7 +241,7 @@ export function layoutTopology(m: NetworkModel): Layout {
   // Devices there are not behind this router; they share the zone with the ISP router, so they
   // get no link of their own unless they hang off one of this router's WAN-side ports.
   if (upstream || legacy.length) {
-    const y0 = gridRows > 1 ? ROW.upstream - 50 : ROW.upstream + 10;
+    const y0 = gridRows > 1 ? ROW.upstream - 30 : ROW.upstream + 10;
     legacy.forEach((d, k) => {
       const x = gx - 250 - (k % LEGACY_COLS) * LEGACY_COL_W;
       const y = y0 + Math.floor(k / LEGACY_COLS) * LEGACY_ROW_H;
@@ -239,7 +253,7 @@ export function layoutTopology(m: NetworkModel): Layout {
     });
     const cols = Math.min(LEGACY_COLS, legacy.length);
     const minX = legacy.length ? gx - 250 - (cols - 1) * LEGACY_COL_W - LEGACY_COL_W / 2 - 10 : gx - 140;
-    const top = ROW.upstream - 92;
+    const top = Math.min(ROW.upstream - 92, y0 - 85); // room for the zone's title and subtitle
     const bottom = Math.max(ROW.upstream + 148, y0 + (gridRows - 1) * LEGACY_ROW_H + 78);
     const sub = [m.wan.gateway ? `${m.wan.gateway.replace(/\.\d+$/, ".0/24")}` : "", upstream?.name ?? "ISP router", legacy.length ? `${legacy.length} device${legacy.length === 1 ? "" : "s"} not behind this router` : ""].filter(Boolean).join(" · ");
     zones.push({ x: minX, y: top, w: gx + 210 - minX, h: bottom - top, title: "Upstream", sub });
