@@ -7,7 +7,7 @@ import { analyze, type Analysis } from "../core/analyze.ts";
 import { layoutTopology, type Layout } from "../core/layout.ts";
 import { expand, readConfig, snapshotFromFiles, type StribogConfig } from "../core/load.ts";
 import { buildModel, connectionsOf, linkCounters, type NetworkModel } from "../core/model.ts";
-import { AuthError, RouterOsRest } from "../core/rest.ts";
+import { AuthError, RouterOsRest, type ReadPlan } from "../core/rest.ts";
 import type { Snapshot } from "../core/ros.ts";
 import type { LiveRates } from "../core/live.ts";
 import { dataDir, NotesStore } from "./notes.ts";
@@ -92,7 +92,12 @@ function storeAt(path: string, audit: string | undefined, persist = true): Notes
 // ---- network ------------------------------------------------------------------------
 
 /** Router data is cached as read; the payload is rebuilt whenever the notes change. */
-type Cached = { at: number; snap: Snapshot; meta: Omit<NetworkPayload["meta"], "refreshedAt">; payload: NetworkPayload; notes: unknown };
+type Cached = { at: number; snap: Snapshot; meta: Omit<NetworkPayload["meta"], "refreshedAt">; payload: NetworkPayload; notes: unknown; configAt?: number; slowAt?: number };
+
+/** Configuration changes when someone changes it: read it this often, at sign-in and on Reload. */
+const CONFIG_EVERY = 5 * 60_000;
+/** Neighbours, radio channels, access points joining: about once a minute. */
+const SLOW_EVERY = 60_000;
 let filesCache: Cached | undefined;
 let demoCache: Cached | undefined;
 /** The router session that read most recently, so agents and the recorder can see the network too. On globalThis so it survives Vite's module reloads. */
@@ -208,14 +213,18 @@ function liveNetwork(session: Session, login: RouterLogin, s: Setup, force: bool
   if (!force && prev && Date.now() - prev.at < ttl) return Promise.resolve(withNotes(prev, notes));
   const running = inFlight.get(session);
   if (running) return running;
-  const p = readLive(session, login, s, prev, touch).finally(() => inFlight.delete(session));
+  const p = readLive(session, login, s, prev, touch, force).finally(() => inFlight.delete(session));
   inFlight.set(session, p);
   return p;
 }
 
-async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Cached | undefined, touch: boolean): Promise<NetworkPayload> {
+async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Cached | undefined, touch: boolean, force: boolean): Promise<NetworkPayload> {
   try {
-    const snap = await liveSnapshot(login, s);
+    // Each refresh reads who is connected; the configuration and slow state only when due.
+    const now = Date.now();
+    const config = force || !prev?.configAt || now - prev.configAt > CONFIG_EVERY;
+    const slow = config || !prev?.slowAt || now - prev.slowAt > SLOW_EVERY;
+    const snap = await liveSnapshot(login, s, { reuse: prev?.snap.devices.find((d) => d.role === "router"), config, slow });
     // Development snapshots are big (with the connection table): at most one a minute.
     if (s.config.debug?.saveSnapshot && Date.now() - (LIVE.__stribogSavedAt ?? 0) > 60_000) {
       LIVE.__stribogSavedAt = Date.now();
@@ -226,7 +235,15 @@ async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Ca
       const saved = { ...snap, devices: [{ ...snap.devices[0]!, state: { ...st, "/ip/firewall/connection": conns, "/ip/dns/cache": dns } }, ...snap.devices.slice(1)] };
       writeFileSync(expand(s.config.debug.saveSnapshot, s.base), JSON.stringify(saved, null, 2) + "\n", { mode: 0o600 });
     }
-    const c: Cached = { at: Date.now(), snap, meta: { mode: "live", sample: false, configPath: s.configPath }, payload: undefined as unknown as NetworkPayload, notes: Symbol() };
+    const c: Cached = {
+      at: Date.now(),
+      snap,
+      meta: { mode: "live", sample: false, configPath: s.configPath },
+      payload: undefined as unknown as NetworkPayload,
+      notes: Symbol(),
+      configAt: config ? now : prev?.configAt,
+      slowAt: slow ? now : prev?.slowAt,
+    };
     session.cache = c;
     if (touch) LIVE.__stribogLastLive = session;
     return withNotes(c, notesFor(false).get());
@@ -242,8 +259,8 @@ async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Ca
   }
 }
 
-async function liveSnapshot(login: RouterLogin, s: Setup): Promise<Snapshot> {
-  const router = await new RouterOsRest({ url: login.url, user: login.user, password: login.password, insecure: login.encrypted }).snapshot();
+async function liveSnapshot(login: RouterLogin, s: Setup, plan: ReadPlan): Promise<Snapshot> {
+  const router = await new RouterOsRest({ url: login.url, user: login.user, password: login.password, insecure: login.encrypted }).snapshot(plan);
   // Exports of other devices (access points), if configured, add detail the router cannot see.
   const files = snapshotFromFiles({ ...s.config, sources: (s.config.sources ?? []).filter((x) => x.role !== "router"), snapshot: undefined, notes: undefined }, s.base);
   return { collectedAt: new Date().toISOString(), devices: [router, ...files.devices] };

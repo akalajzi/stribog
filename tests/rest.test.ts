@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createServer } from "node:http";
-import { CONFIG_PATHS, RouterOsRest, routerFetch, STATE_PATHS } from "../src/core/rest.ts";
+import { CONFIG_PATHS, FIXED_PATHS, RouterOsRest, routerFetch, SLOW_PATHS, STATE_PATHS } from "../src/core/rest.ts";
 
 interface Call {
   method: string;
@@ -66,6 +66,24 @@ const ROUTES: Record<string, unknown> = {
 };
 
 describe("RouterOsRest", () => {
+  it("rereads only who is connected when the configuration is fresh, and keeps the rest", async () => {
+    const { calls, fetchImpl } = fakeRouter(ROUTES);
+    const rest = () => new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl });
+    const first = await rest().snapshot();
+    const n = calls.length;
+    const again = await rest().snapshot({ reuse: first });
+    const read = calls.slice(n);
+    expect(read.filter((c) => c.method === "GET").map((c) => c.path).sort()).toEqual(["/system/resource", ...STATE_PATHS].sort());
+    expect(read.filter((c) => c.method === "POST").map((c) => c.path).sort()).toEqual(["/interface/ethernet/monitor", "/interface/monitor-traffic"]);
+    expect(again.config.menus).toEqual(first.config.menus);
+    expect(again.state!["/interface/wifi/monitor"]).toEqual(first.state!["/interface/wifi/monitor"]);
+    // A failed configuration menu is still reported while the configuration is reused.
+    expect(again.readErrors?.["GET /ip/firewall/filter"]).toBeDefined();
+    const slow = calls.length;
+    await rest().snapshot({ reuse: first, slow: true });
+    expect(calls.slice(slow).filter((c) => c.method === "GET").map((c) => c.path)).toEqual(expect.arrayContaining(SLOW_PATHS));
+  });
+
   it("reads every config and state menu under /rest with basic auth", async () => {
     const { calls, fetchImpl } = fakeRouter(ROUTES);
     await new RouterOsRest({ url: "https://192.168.50.1/", user: "stribog", password: "s3cret pass", fetchImpl }).snapshot();
@@ -74,7 +92,7 @@ describe("RouterOsRest", () => {
       expect(c.headers.authorization).toBe("Basic " + Buffer.from("stribog:s3cret pass").toString("base64"));
     }
     const gets = new Set(calls.filter((c) => c.method === "GET").map((c) => c.path));
-    for (const p of [...CONFIG_PATHS, ...STATE_PATHS]) expect(gets.has(p), p).toBe(true);
+    for (const p of [...CONFIG_PATHS, ...STATE_PATHS, ...SLOW_PATHS, ...FIXED_PATHS]) expect(gets.has(p), p).toBe(true);
     // Nothing but GET and the read-only monitor commands.
     for (const c of calls.filter((x) => x.method !== "GET")) {
       expect(c.method).toBe("POST");

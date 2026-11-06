@@ -53,17 +53,24 @@ export const CONFIG_PATHS = [
   "/ipv6/nd",
 ];
 
-export const STATE_PATHS = [
-  "/system/resource",
-  "/system/routerboard",
-  "/interface",
-  "/ip/arp",
-  "/ip/neighbor",
-  "/interface/bridge/host",
-  "/interface/wifi/registration-table",
-  "/interface/wifi/capsman/remote-cap",
-  "/interface/wifi/radio",
-];
+/** State that changes by the minute: who is connected, links up or down. Read on every refresh. */
+export const STATE_PATHS = ["/interface", "/ip/arp", "/interface/bridge/host", "/interface/wifi/registration-table", "/ip/dhcp-client", "/ip/dhcp-server/lease"];
+
+/** State that changes slowly: neighbours, radio channels, access points joining. Read about once a minute. */
+export const SLOW_PATHS = ["/ip/neighbor", "/interface/wifi/capsman/remote-cap", "/interface/wifi/radio"];
+
+/** What never changes while the router runs. Read with the configuration. */
+export const FIXED_PATHS = ["/system/routerboard"];
+
+/**
+ * Which parts a read refreshes. Configuration (some forty menus) changes when someone changes it,
+ * so it is read at sign-in, on request and every few minutes; the rest is reused from `reuse`.
+ */
+export interface ReadPlan {
+  reuse?: DeviceSnapshot;
+  config?: boolean;
+  slow?: boolean;
+}
 
 export interface RestOptions {
   url: string;
@@ -271,34 +278,41 @@ export class RouterOsRest {
     return this.get("/ip/dns/cache");
   }
 
-  async snapshot(): Promise<DeviceSnapshot> {
+  async snapshot(plan: ReadPlan = {}): Promise<DeviceSnapshot> {
+    const prev = plan.reuse;
+    const config = plan.config || !prev;
+    const slow = plan.slow || config;
     // Fail loudly on a bad login instead of returning an empty network.
     const resource = await this.get("/system/resource");
-    const menus: Record<string, RosRecord[]> = {};
+    const menus: Record<string, RosRecord[]> = config ? {} : { ...prev!.config.menus };
     const state: Record<string, RosRecord[]> = {};
+    if (!slow) for (const p of [...SLOW_PATHS, ...FIXED_PATHS, "/interface/ethernet/poe/monitor", "/interface/wifi/monitor"]) if (prev?.state?.[p]) state[p] = prev.state[p]!;
+    if (!config) for (const p of FIXED_PATHS) if (prev?.state?.[p]) state[p] = prev.state[p]!;
     const failed = (key: string) => (err: unknown) => {
       this.errors[key] ??= err instanceof Error ? err.message : String(err);
       return [] as RosRecord[];
     };
+    const paths = [...STATE_PATHS, ...(slow ? SLOW_PATHS : []), ...(config ? FIXED_PATHS : [])];
     await Promise.all([
-      ...CONFIG_PATHS.map(async (p) => (menus[p] = await this.get(p).catch(failed(`GET ${p}`)))),
-      ...STATE_PATHS.filter((p) => p !== "/system/resource").map(async (p) => (state[p] = await this.get(p).catch(failed(`GET ${p}`)))),
-      this.get("/ip/dhcp-client").then((r) => (state["/ip/dhcp-client"] = r)).catch(failed("GET /ip/dhcp-client")),
-      this.get("/ip/dhcp-server/lease").then((r) => (state["/ip/dhcp-server/lease"] = r)).catch(failed("GET /ip/dhcp-server/lease")),
+      ...(config ? CONFIG_PATHS : []).map(async (p) => (menus[p] = await this.get(p).catch(failed(`GET ${p}`)))),
+      ...paths.map(async (p) => (state[p] = await this.get(p).catch(failed(`GET ${p}`)))),
     ]);
-    // Containers can carry secrets in their command line or environment: keep only what identifies them.
-    const keep = ["name", "tag", "remote-image", "interface", "hostname", "status", "running", "stopped"];
-    menus["/container"] = (menus["/container"] ?? []).map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => keep.includes(k))) as RosRecord);
-    // REST lists dynamic leases too; the config view should only hold static ones.
-    menus["/ip/dhcp-server/lease"] = (menus["/ip/dhcp-server/lease"] ?? []).filter((l) => l.dynamic !== "true");
+    if (config) {
+      // Containers can carry secrets in their command line or environment: keep only what identifies them.
+      const keep = ["name", "tag", "remote-image", "interface", "hostname", "status", "running", "stopped"];
+      menus["/container"] = (menus["/container"] ?? []).map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => keep.includes(k))) as RosRecord);
+      // REST lists dynamic leases too; the config view should only hold static ones.
+      menus["/ip/dhcp-server/lease"] = (menus["/ip/dhcp-server/lease"] ?? []).filter((l) => l.dynamic !== "true");
+    }
     const ether = menus["/interface/ethernet"] ?? [];
     const wifi = (menus["/interface/wifi"] ?? []).filter((w) => !w["master-interface"]);
     // PoE ports have their own menu and ids; routers without PoE have none.
     const poePorts = menus["/interface/ethernet/poe"] ?? [];
+    const kept = (p: string) => Promise.resolve(prev?.state?.[p] ?? []);
     const [mon, poe, wmon, traffic] = await Promise.all([
       this.monitor("/interface/ethernet", ether).catch(failed("POST /interface/ethernet/monitor")),
-      this.monitor("/interface/ethernet/poe", poePorts).catch(failed("POST /interface/ethernet/poe/monitor")),
-      this.monitor("/interface/wifi", wifi).catch(failed("POST /interface/wifi/monitor")),
+      slow ? this.monitor("/interface/ethernet/poe", poePorts).catch(failed("POST /interface/ethernet/poe/monitor")) : kept("/interface/ethernet/poe/monitor"),
+      slow ? this.monitor("/interface/wifi", wifi).catch(failed("POST /interface/wifi/monitor")) : kept("/interface/wifi/monitor"),
       this.monitorTraffic(ether.map((e) => e.name ?? "").filter(Boolean)).catch(failed("POST /interface/monitor-traffic")),
     ]);
     state["/interface/ethernet/monitor"] = mon;
@@ -308,12 +322,18 @@ export class RouterOsRest {
     state["/system/resource"] = resource;
     const res = state["/system/resource"]?.[0];
     const at = new Date().toISOString();
+    // Errors of menus not read this time still stand.
+    const notRead = (key: string) => {
+      const p = key.replace(/^(GET|POST) /, "");
+      return (!config && (CONFIG_PATHS.includes(p) || FIXED_PATHS.includes(p))) || (!slow && (SLOW_PATHS.includes(p) || p === "/interface/ethernet/poe/monitor" || p === "/interface/wifi/monitor"));
+    };
+    const errors = { ...Object.fromEntries(Object.entries(prev?.readErrors ?? {}).filter(([k]) => notRead(k))), ...this.errors };
     return {
       role: "router",
       config: { meta: { version: res?.version?.split(" ")[0], model: res?.["board-name"] }, menus },
       state,
       sources: [{ kind: "rest", label: this.opt.url, at }],
-      ...(Object.keys(this.errors).length ? { readErrors: { ...this.errors } } : {}),
+      ...(Object.keys(errors).length ? { readErrors: errors } : {}),
     };
   }
 }
