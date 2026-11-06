@@ -69,7 +69,7 @@ export async function tick(now = Date.now()) {
     const rates = new Map<string, { downBps: number; upBps: number }>();
     for (const l of payload.model.devices.flatMap(connectionsOf)) {
       const fl = byMac.get(l.mac) ?? [];
-      rates.set(l.mac, { downBps: (fl.reduce((t, f) => t + f.down, 0) * 8) / dt, upBps: (fl.reduce((t, f) => t + f.up, 0) * 8) / dt });
+      rates.set(l.mac, { downBps: Math.round((fl.reduce((t, f) => t + f.down, 0) * 8) / dt), upBps: Math.round((fl.reduce((t, f) => t + f.up, 0) * 8) / dt) });
     }
     setRates({ at: now, byMac: rates });
   }
