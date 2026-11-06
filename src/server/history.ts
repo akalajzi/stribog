@@ -54,8 +54,12 @@ export class HistoryStore {
     renameSync(tmp, f);
   }
 
-  /** One device's samples in [from, to], at most `points` of them (evenly thinned). */
-  samples(mac: string, from: number, to: number, points = 360): Sample[] {
+  /**
+   * One device's samples in [from, to], at most `points` of them (evenly thinned). A machine with
+   * several connections passes all their MACs: online if any is, traffic added up.
+   */
+  samples(macs: string | string[], from: number, to: number, points = 360): Sample[] {
+    const list = typeof macs === "string" ? [macs] : macs;
     const out: Sample[] = [];
     for (const d of this.days(from, to)) {
       const f = this.file("samples", d);
@@ -64,8 +68,10 @@ export class HistoryStore {
         if (!line) continue;
         const { t, d: byMac } = JSON.parse(line) as { t: number; d: Record<string, [0 | 1, number | null, number | null, number | null]> };
         if (t < from || t > to) continue;
-        const v = byMac[mac];
-        if (v) out.push([t, ...v]);
+        const vs = list.map((m) => byMac[m]).filter((v) => !!v);
+        if (!vs.length) continue;
+        const sum = (i: 1 | 2) => (vs.some((v) => v[i] !== null) ? vs.reduce((a, v) => a + (v[i] ?? 0), 0) : null);
+        out.push([t, vs.some((v) => v[0]) ? 1 : 0, sum(1), sum(2), vs.find((v) => v[3] !== null)?.[3] ?? null]);
       }
     }
     if (out.length <= points) return out;
@@ -80,14 +86,15 @@ export class HistoryStore {
     return thin;
   }
 
-  /** One device's talks over [from, to], merged across days, biggest first. */
-  talks(mac: string, from: number, to: number): Talk[] {
+  /** One device's talks over [from, to] (all its connections' MACs), merged across days, biggest first. */
+  talks(macs: string | string[], from: number, to: number): Talk[] {
+    const list = typeof macs === "string" ? [macs] : macs;
     const merged = new Map<string, Talk>();
     for (const d of this.days(from, to)) {
       const f = this.file("talks", d);
       if (!existsSync(f)) continue;
-      const mine = (JSON.parse(readFileSync(f, "utf8")) as Record<string, Record<string, Talk>>)[mac] ?? {};
-      for (const [k, t] of Object.entries(mine)) {
+      const all = JSON.parse(readFileSync(f, "utf8")) as Record<string, Record<string, Talk>>;
+      for (const [k, t] of list.flatMap((m) => Object.entries(all[m] ?? {}))) {
         if (Date.parse(t.last) < from || Date.parse(t.first) > to) continue;
         const p = merged.get(k);
         merged.set(k, p ? { ...p, down: p.down + t.down, up: p.up + t.up, first: p.first < t.first ? p.first : t.first, last: p.last > t.last ? p.last : t.last, names: t.names ?? p.names } : { ...t });

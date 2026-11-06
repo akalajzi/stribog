@@ -2,6 +2,7 @@
 // within the last 12 hours). It reads through that session's credentials, which stay in memory.
 
 import { flowsFor, namesByAddress, type Flow } from "../core/activity.ts";
+import { connectionsOf } from "../core/model.ts";
 import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
@@ -54,10 +55,11 @@ export async function tick(now = Date.now()) {
   const moved = deltas(conns, st.prev);
   const names = namesByAddress(dns);
   const byMac = new Map<string, Flow[]>();
-  for (const d of payload.model.devices) {
-    if (!d.mac || !d.ip) continue;
-    const flows = flowsFor(d.ip, moved, names, payload.model).filter((f) => f.down + f.up > 0);
-    if (flows.length) byMac.set(d.mac, flows);
+  // Kept per connection (MAC): a machine's connections are grouped when read, so a changed grouping is never baked in.
+  for (const l of payload.model.devices.flatMap(connectionsOf)) {
+    if (!l.mac || !l.ip) continue;
+    const flows = flowsFor(l.ip, moved, names, payload.model).filter((f) => f.down + f.up > 0);
+    if (flows.length) byMac.set(l.mac, flows);
   }
   store.addTalks(now, byMac);
   st.lastTick = now;
@@ -71,7 +73,7 @@ export async function tick(now = Date.now()) {
 export function samplesOf(p: NetworkPayload): Record<string, [0 | 1, number | null, number | null, number | null]> {
   const out: Record<string, [0 | 1, number | null, number | null, number | null]> = {};
   const { model: m } = p;
-  for (const d of m.devices) {
+  for (const d of m.devices.flatMap(connectionsOf)) {
     if (!d.mac) continue;
     const port = d.via?.kind === "port" && d.parent === m.routerId ? m.ports.find((x) => x.name === d.via?.port) : undefined;
     const down = d.via?.kind === "wifi" ? d.via.downBps : port?.txBps;

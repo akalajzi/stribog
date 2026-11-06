@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } fro
 import type { Device, Finding, NetworkPayload, Radio, Severity } from "../api.ts";
 import type { Band } from "../../core/net.ts";
 import { isDfs } from "../../core/net.ts";
+import { connectionViews } from "../../core/model.ts";
 import { FindingCard, SEV_VAR } from "../components/FindingCard.tsx";
 import { Glyph, bandColor } from "../components/DeviceArt.tsx";
 import {
@@ -48,7 +49,7 @@ export function WifiView({ data, onSelect }: { data: NetworkPayload; onSelect: (
   const { model, analysis } = data;
   const aps = model.devices.filter((d) => d.kind === "ap" || model.radios.some((r) => r.apId === d.id));
   const plannedAps = model.planned.filter((p) => p.kind === "ap");
-  const clients = model.devices.filter((d) => d.via?.kind === "wifi" && d.status !== "offline");
+  const clients = connectionViews(model.devices).filter((d) => d.via?.kind === "wifi" && d.status !== "offline");
   const placements = placePlanned(model);
   const apName = (id: string) => model.devices.find((d) => d.id === id)?.name ?? model.planned.find((p) => `planned:${p.id}` === id)?.name ?? id;
   const devName = (id: string) => model.devices.find((d) => d.id === id)?.name ?? id;

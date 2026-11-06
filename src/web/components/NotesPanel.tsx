@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { KIND_LABEL, KINDS, type DeviceKind } from "../../core/classify.ts";
 import type { ServiceNote } from "../../core/ros.ts";
-import { saveDeviceNotes, type Device } from "../api.ts";
+import { fmtBps } from "../../core/net.ts";
+import { saveDeviceNotes, type Device, type NetworkModel } from "../api.ts";
+import { bandColor } from "./DeviceArt.tsx";
 
 // Everything people (or their agents) tell Stribog about a device, each part with its own
 // control: rename next to the name, labels and description under it, then services and notes.
@@ -237,5 +239,94 @@ function Inline({ children, onSave, onCancel }: { children: ReactNode; onSave: (
         <button className="btn pri sm" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
       </div>
     </form>
+  );
+}
+
+/**
+ * A machine's connections (cable, Wi-Fi), and the notes that say which connections are one
+ * machine: split one Stribog grouped by its DHCP name, or join one it could not know about.
+ */
+export function DeviceConnections({ d, model, onSaved, onSelect }: { d: Device; model: NetworkModel; onSaved: Saved; onSelect: (id: string) => void }) {
+  const [joining, setJoining] = useState(false);
+  const [other, setOther] = useState("");
+  const [error, setError] = useState<string>();
+  if (!d.mac || d.managed || d.id === model.routerId || d.zone !== "lan") return null;
+  const links = d.links ?? [];
+  const patchAll = async (patches: [string, Record<string, unknown>][]) => {
+    for (const [mac, patch] of patches) {
+      const err = await saveDeviceNotes(mac, patch);
+      if (err) return setError(err);
+    }
+    setError(undefined);
+    onSaved();
+  };
+  // Splitting one off clears the group's notes that joined them, and keeps it out of DHCP-name grouping.
+  const split = (mac: string) => patchAll(links.map((l) => [l.mac, l.mac === mac ? { separate: true, sameAs: null } : { sameAs: null }]));
+  const candidates = model.devices.filter((x) => x.mac && x.id !== d.id && !x.managed && x.zone === "lan" && x.id !== model.routerId).sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div>
+      {links.length > 0 && (
+        <>
+          <div className="sec-title" style={{ marginTop: 0 }}>Connections</div>
+          <div className="links">
+            {links.map((l, i) => {
+              const parent = model.devices.find((x) => x.id === l.parent);
+              const port = l.via?.kind === "port" && l.parent === model.routerId ? model.ports.find((p) => p.name === l.via?.port) : undefined;
+              const down = l.via?.kind === "wifi" ? l.via.downBps : port?.txBps;
+              const up = l.via?.kind === "wifi" ? l.via.upBps : port?.rxBps;
+              return (
+                <div key={l.mac} className="link-row">
+                  <div className="link-head">
+                    <b style={{ color: l.via?.kind === "wifi" ? bandColor(l.via.band) : undefined }}>
+                      {l.via?.kind === "wifi" ? `Wi-Fi${l.via.band ? ` ${l.via.band} GHz` : ""}` : l.via?.kind === "port" ? "Cable" : "Connection"}
+                    </b>
+                    {parent && (
+                      <span className="faint">
+                        {" via "}
+                        <a href="#" onClick={(e) => (e.preventDefault(), onSelect(parent.id))}>{parent.name}</a>
+                        {l.via?.kind === "port" && l.via.port ? ` · ${l.via.port}` : l.via?.kind === "wifi" && l.via.signal !== undefined ? ` · ${l.via.signal} dBm` : ""}
+                      </span>
+                    )}
+                    <span className="link-status" style={{ color: l.status === "online" ? "var(--ok)" : "var(--tx-3)" }}>{l.status}</span>
+                  </div>
+                  <div className="mono faint link-ids">{l.ip ?? "no address"} · {l.mac}</div>
+                  {l.status === "online" && (down !== undefined || up !== undefined) && <div className="mono faint link-ids">↓ {fmtBps(down ?? 0)} · ↑ {fmtBps(up ?? 0)} now</div>}
+                  {l.leaseComment && <div className="faint link-note">“{l.leaseComment}”</div>}
+                  {i > 0 && <button className="linkish" onClick={() => void split(l.mac)}>Not the same machine</button>}
+                </div>
+              );
+            })}
+          </div>
+          <p className="faint notes-hint">
+            {d.linkedBy === "user" ? "Shown as one machine because its notes say so." : `Shown as one machine because each connection gives the router the DHCP name “${links[0]?.hostname ?? d.hostname}”. That is a guess: two devices can share a name.`}
+          </p>
+        </>
+      )}
+      {joining ? (
+        <form
+          className="notes-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!other) return setJoining(false);
+            await patchAll([[d.mac!, { sameAs: other, separate: null }]]);
+            setJoining(false);
+          }}
+          onKeyDown={(e) => e.key === "Escape" && setJoining(false)}
+        >
+          <select value={other} onChange={(e) => setOther(e.target.value)} autoFocus aria-label="The same machine as">
+            <option value="">Choose its other connection…</option>
+            {candidates.map((x) => <option key={x.id} value={x.mac}>{x.name} · {x.ip ?? x.mac}</option>)}
+          </select>
+          <div className="notes-actions">
+            <button type="button" className="btn ghost sm" onClick={() => setJoining(false)}>Cancel</button>
+            <button className="btn pri sm" disabled={!other}>Same machine</button>
+          </div>
+        </form>
+      ) : (
+        <button className="linkish" onClick={() => (setOther(""), setJoining(true))}>+ Another connection of this machine</button>
+      )}
+      {error && <p className="notes-error">{error}</p>}
+    </div>
   );
 }

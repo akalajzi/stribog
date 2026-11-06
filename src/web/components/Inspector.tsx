@@ -2,9 +2,10 @@ import type { Device, NetworkPayload } from "../api.ts";
 import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { bandColor, Glyph } from "./DeviceArt.tsx";
 import { SEV_VAR } from "./FindingCard.tsx";
-import { DeviceAbout, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
+import { DeviceAbout, DeviceConnections, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
 import { UPSTREAM_GROUP } from "../../core/layout.ts";
 import { fmtBps } from "../../core/net.ts";
+import { connectionViews } from "../../core/model.ts";
 
 export function SignalBars({ dbm }: { dbm?: number }) {
   const n = dbm === undefined ? 0 : dbm >= -55 ? 4 : dbm >= -62 ? 3 : dbm >= -70 ? 2 : 1;
@@ -40,7 +41,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
   const d = model.devices.find((x) => x.id === id);
   if (!d) return null;
   const parent = d.parent ? model.devices.find((x) => x.id === d.parent) : undefined;
-  const kids = model.devices.filter((x) => x.parent === d.id);
+  const kids = connectionViews(model.devices).filter((x) => x.parent === d.id);
   const wifiKids = kids.filter((x) => x.via?.kind === "wifi");
   const port = d.via?.kind === "port" && d.parent === model.routerId ? model.ports.find((p) => p.name === d.via?.port) : undefined;
   const radios = model.radios.filter((r) => r.apId === d.id);
@@ -100,14 +101,14 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
       <div>
         <div className="sec-title" style={{ marginTop: 0 }}>Details</div>
         <div className="kv">
-          {d.ip && <><span>Address</span><span className="tx mono">{d.ip}{d.reserved ? <span className="faint"> reserved</span> : null}</span></>}
-          {d.mac && <><span>MAC</span><span className="tx mono">{d.mac}{d.privateMac ? <span className="cert">private</span> : null}</span></>}
+          {d.ip && !d.links && <><span>Address</span><span className="tx mono">{d.ip}{d.reserved ? <span className="faint"> reserved</span> : null}</span></>}
+          {d.mac && !d.links && <><span>MAC</span><span className="tx mono">{d.mac}{d.privateMac ? <span className="cert">private</span> : null}</span></>}
           {d.hostname && <><span>Hostname</span><span className="tx mono">{d.hostname}</span></>}
           {d.vendor && <><span>Vendor</span><span className="tx">{d.vendor}</span></>}
           {d.model && <><span>Model</span><span className="tx">{d.model}</span></>}
           {d.version && <><span>RouterOS</span><span className="tx mono">{d.version}</span></>}
           {net && <><span>Network</span><span className="tx">{net.label}{net.cidr ? <span className="faint mono"> {net.cidr}</span> : null}</span></>}
-          {parent && (
+          {parent && !d.links && (
             <>
               <span>Connected to</span>
               <span className="tx">
@@ -117,14 +118,14 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
               </span>
             </>
           )}
-          {port && (
+          {port && !d.links && (
             <>
               <span>Link</span>
               <span className="tx mono">{port.speedMbps ? `${port.speedMbps >= 1000 ? port.speedMbps / 1000 + " Gbps" : port.speedMbps + " Mbps"}` : port.running === false ? "no link" : "?"}{port.poeWatts ? ` · PoE ${port.poeVolts} V ${port.poeWatts} W` : ""}</span>
             </>
           )}
           {d.via?.kind === "wifi" && d.via.rxRate && <><span>Link rates</span><span className="tx mono">tx {d.via.txRate} · rx {d.via.rxRate}</span></>}
-          {traffic && (traffic.down !== undefined || traffic.up !== undefined) && (
+          {traffic && !d.links && (traffic.down !== undefined || traffic.up !== undefined) && (
             <>
               <span>Traffic now</span>
               <span className="tx mono">↓ {fmtBps(traffic.down ?? 0)} · ↑ {fmtBps(traffic.up ?? 0)}<span className="faint"> {traffic.where}</span></span>
@@ -134,6 +135,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
         </div>
       </div>
 
+      <DeviceConnections key={`links-${d.id}`} d={d} model={model} onSaved={onNotesSaved} onSelect={onSelect} />
       <DeviceServices key={`svc-${d.id}`} d={d} onSaved={onNotesSaved} />
       <DeviceNotesText key={`notes-${d.id}`} d={d} onSaved={onNotesSaved} />
 

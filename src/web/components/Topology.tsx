@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEven
 import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
 import { GATEWAY_W, UPSTREAM_GROUP } from "../../core/layout.ts";
 import { fmtBps } from "../../core/net.ts";
+import { connectionViews } from "../../core/model.ts";
 import { ArtDefs, COLORS, DeviceArt, GatewayArt, mediumColor } from "./DeviceArt.tsx";
 
 const SEV_COLOR: Partial<Record<Severity, string>> = { critical: COLORS.bad, warning: COLORS.warn, suggestion: "var(--idea)" };
@@ -285,13 +286,15 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
     case model.routerId === d.id ? "router" : "-":
       return [`${d.ip ?? ""} · RouterOS ${d.version ?? "?"}`, `${model.ports.filter((p) => p.deviceIds.length).length} of ${model.ports.length} ports in use`];
     case "ap": {
-      const n = model.devices.filter((x) => x.parent === d.id && x.via?.kind === "wifi").length;
+      const n = connectionViews(model.devices).filter((x) => x.parent === d.id && x.via?.kind === "wifi").length;
       return [`${d.ip ?? ""}`, `${d.model ?? "AP"} · ${n} Wi-Fi client${n === 1 ? "" : "s"}`];
     }
     default: {
       if (d.via?.kind === "wifi") return [d.ip ?? "", [d.via.signal !== undefined ? `${d.via.signal} dBm` : "", d.via.band ? `${d.via.band} GHz` : "", d.via.ssid ?? ""].filter(Boolean).join(" · ")];
       const dns = lan?.dhcp?.dns.includes(d.ip ?? "-") ? "DNS for LAN" : "";
-      return [d.ip ?? "", [dns, ...(d.labels ?? []).slice(0, 2)].filter(Boolean).join(" · ")];
+      // A machine's other connections, where they are up: it is drawn once, where its main one is.
+      const also = (d.links ?? []).slice(1).filter((l) => l.status === "online").map((l) => (l.via?.kind === "wifi" ? `also Wi-Fi${l.via.band ? ` ${l.via.band} GHz` : ""}` : l.via?.kind === "port" ? `also cable${l.via.port ? ` ${l.via.port}` : ""}` : "also another link"));
+      return [d.ip ?? "", [...also, dns, ...(d.labels ?? []).slice(0, 2)].filter(Boolean).slice(0, 2).join(" · ")];
     }
   }
 }

@@ -89,7 +89,7 @@ The same notes are available over HTTP:
 | `PATCH /api/notes/network` | `site`, `upstream` (`name`, `model`, `isp`), `notes` |
 | `GET /api/notes/audit` | the change history, newest first |
 
-Device fields: `name`, `kind`, `labels`, `description`, `services` (each `name`, `port`, `protocol`, `url`, `note`), `notes`, and `only24` for hardware that only has a 2.4 GHz radio.
+Device fields: `name`, `kind`, `labels`, `description`, `services` (each `name`, `port`, `protocol`, `url`, `note`), `notes`, `only24` for hardware that only has a 2.4 GHz radio, and two for machines with several connections (cable and Wi-Fi): `sameAs`, the MAC of another connection of the same machine, and `separate: true` for a device that only shares its DHCP name with another. Connections that give the router the same DHCP name are shown as one machine, marked as a guess, unless more than one of them could be Wi-Fi (phones of the same model share names).
 
 ### Device details and history
 

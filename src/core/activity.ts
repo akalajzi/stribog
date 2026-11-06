@@ -4,7 +4,7 @@
 // Only routed traffic is tracked: a device talking to another on the same LAN bridge never
 // passes the router's firewall and does not appear here.
 
-import type { NetworkModel } from "./model.ts";
+import { connectionsOf, type NetworkModel } from "./model.ts";
 import { inCidr, isPrivateIp } from "./net.ts";
 import type { RosRecord } from "./ros.ts";
 
@@ -144,7 +144,7 @@ export function flowsFor(ip: string, conns: RosRecord[], names: Map<string, stri
     const key = `${one.direction}|${one.protocol}|${one.remote}|${one.port ?? ""}`;
     let f = groups.get(key);
     if (!f) {
-      const dev = m.devices.find((d) => d.ip === one.remote && d.mac);
+      const dev = m.devices.find((d) => d.mac && connectionsOf(d).some((l) => l.ip === one.remote));
       const special = specialAddress(one.remote);
       const local = !!special || lans.some((cidr) => inCidr(one.remote, cidr)) || (isPrivateIp(one.remote) && !!dev);
       f = {

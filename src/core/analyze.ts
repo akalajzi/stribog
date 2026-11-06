@@ -4,7 +4,7 @@
 // matters in plain words and, where the fix is on the router, gives a RouterOS script to review.
 // Nothing here changes anything.
 
-import type { Device, NetworkModel, Radio } from "./model.ts";
+import { connectionViews, type Device, type NetworkModel, type Radio } from "./model.ts";
 import { inPool, isPrivateMac } from "./net.ts";
 import { enabled, isTrue, list, menu, prop, single, type RosConfig, type Snapshot } from "./ros.ts";
 
@@ -333,7 +333,7 @@ const poolCheck: Rule = ({ m, lan }) => {
 const signalWord = (s?: number) => (s === undefined ? "unknown" : s >= -55 ? "excellent" : s >= -65 ? "good" : s >= -72 ? "fair" : "weak");
 
 const band24Clients: Rule = ({ clients }) => {
-  const on24 = clients.filter((d) => d.via?.kind === "wifi" && d.via.band === "2.4");
+  const on24 = connectionViews(clients).filter((d) => d.via?.kind === "wifi" && d.via.band === "2.4");
   return on24.map((d): Finding => {
     const sig = d.via?.signal;
     if (d.only24)
@@ -367,7 +367,7 @@ const band24Clients: Rule = ({ clients }) => {
 };
 
 const weakClients: Rule = ({ clients }) => {
-  const weak = clients.filter((d) => d.via?.kind === "wifi" && d.via.band !== "2.4" && (d.via.signal ?? 0) < -70);
+  const weak = connectionViews(clients).filter((d) => d.via?.kind === "wifi" && d.via.band !== "2.4" && (d.via.signal ?? 0) < -70);
   return weak.map((d) => ({
     id: `wifi-weak-${d.mac}`,
     severity: "suggestion" as const,

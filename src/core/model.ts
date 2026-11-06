@@ -84,6 +84,45 @@ export interface Device {
   only24?: boolean;
   lastSeen?: string;
   facts: string[];
+  /**
+   * A machine with more than one network connection (cable and Wi-Fi, two cables), primary
+   * first: the one `mac`, `ip` and `via` describe. Absent when the device has one connection.
+   */
+  links?: DeviceLink[];
+  /** How Stribog knows the connections are one machine: the same DHCP name (inferred), or a note. */
+  linkedBy?: "hostname" | "user";
+}
+
+/** A device's connections: its links, or the one it has. Devices without a MAC (the router's own view of itself, planned ones) have none. */
+export function connectionsOf(d: Device): DeviceLink[] {
+  if (d.links) return d.links;
+  if (!d.mac) return [];
+  const { mac, ip, hostname, vendor, privateMac, reserved, leaseComment, network, status, parent, via, lastSeen } = d;
+  return [{ mac, ip, hostname, vendor, privateMac, reserved, leaseComment, network, status, parent, via, lastSeen }];
+}
+
+/**
+ * Each connection as a device of its own, for views of one radio or port: a machine on cable and
+ * Wi-Fi is a Wi-Fi client of its access point too. Ids stay the machine's.
+ */
+export function connectionViews(devices: Device[]): Device[] {
+  return devices.flatMap((d) => (d.links ? d.links.map((l) => ({ ...d, ...l })) : [d]));
+}
+
+/** One network connection of a device that has several. */
+export interface DeviceLink {
+  mac: string;
+  ip?: string;
+  hostname?: string;
+  vendor?: string;
+  privateMac?: boolean;
+  reserved?: boolean;
+  leaseComment?: string;
+  network?: string;
+  status: Device["status"];
+  parent?: string;
+  via?: Connection;
+  lastSeen?: string;
 }
 
 export interface Port {
@@ -683,6 +722,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
     if (h?.["on-interface"]) apPorts.set(h["on-interface"], id);
   }
 
+  const clients: Device[] = [];
   for (const mac of macs) {
     if (routerMacs.has(mac) || caps.has(mac)) continue;
     const ovd = ov.devices?.[mac] ?? ov.devices?.[mac.toLowerCase()];
@@ -706,7 +746,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
 
     let kind: DeviceKind | undefined = (ovd?.kind as DeviceKind | undefined) ?? undefined;
     let kindCertainty: Certainty = kind ? "user" : "inferred";
-    kind ??= kindFromText(comment ? shortName(comment) : undefined) ?? kindFromText(hostname) ?? kindFromText(comment) ?? v.kind ?? (v.private && reg ? "phone" : undefined);
+    // Only the comment's name part: what follows ("- in the attic", "(via the hall AP)") says where it is, not what it is.
+    kind ??= kindFromText(comment ? shortName(comment) : undefined) ?? kindFromText(hostname) ?? v.kind ?? (v.private && reg ? "phone" : undefined);
     if (!kind) {
       kind = "unknown";
       kindCertainty = "inferred";
@@ -802,8 +843,9 @@ export function buildModel(snap: Snapshot): NetworkModel {
     }
     if (d.zone === "upstream") d.parent ??= devices.has("upstream") ? "upstream" : routerId;
     d.only24 = ovd?.only24 ?? likelyOnly24(kind, comment, hostname, name);
-    add(d);
+    clients.push(add(d));
   }
+  for (const group of sameMachine(clients, ov)) mergeLinks(group, ov, devices);
 
   // AP placement: on the router port where its MAC is learned, or from its lease/port comment.
   for (const id of apIds) {
@@ -837,7 +879,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
 
   // Port occupancy.
   for (const d of devices.values()) {
-    if (d.parent === routerId && d.via?.kind === "port" && d.via.port) portByName(d.via.port)?.deviceIds.push(d.id);
+    for (const l of d.links ?? [d]) if (l.parent === routerId && l.via?.kind === "port" && l.via.port) portByName(l.via.port)?.deviceIds.push(d.id);
   }
   const upstreamPort = portByName(upstreamPortName);
   if (upstreamPort && devices.has("upstream")) upstreamPort.deviceIds.unshift("upstream");
@@ -940,4 +982,114 @@ function commentMatches(portComment: string, d: Device): boolean {
   if (d.ip && portComment.includes(d.ip)) return true;
   const words = (d.leaseComment ?? d.name).split(/\s+/).filter((w) => w.length >= 5);
   return words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(portComment));
+}
+
+// ---- one machine, several connections ---------------------------------------------
+
+/**
+ * Client devices that are one machine: those a note says are the same, and those that give the
+ * router the same DHCP name. The name is only a hint, so it is not used when two of the
+ * connections could be Wi-Fi (two phones of the same model give the same name), nor for a
+ * connection whose note says it is a separate device.
+ */
+export function sameMachine(clients: Device[], ov: Notes): Device[][] {
+  const notesOf = (d: Device) => (d.mac ? (ov.devices?.[d.mac] ?? ov.devices?.[d.mac.toLowerCase()]) : undefined);
+  const byMac = new Map(clients.filter((d) => d.mac).map((d) => [d.mac!, d]));
+  const root = new Map<string, string>();
+  const find = (m: string): string => {
+    const r = root.get(m) ?? m;
+    return r === m ? m : find(r);
+  };
+  const join = (a: string, b: string) => {
+    const [x, y] = [find(a), find(b)];
+    if (x !== y) root.set(y, x);
+  };
+
+  const byName = new Map<string, Device[]>();
+  for (const d of byMac.values()) {
+    const name = d.hostname?.trim().toLowerCase();
+    if (!name || notesOf(d)?.separate) continue;
+    byName.set(name, [...(byName.get(name) ?? []), d]);
+  }
+  const named = new Set<string>();
+  for (const g of byName.values()) {
+    if (g.length < 2 || g.filter((d) => d.via?.kind !== "port").length > 1) continue;
+    for (const d of g.slice(1)) join(g[0]!.mac!, d.mac!);
+    for (const d of g) named.add(d.mac!);
+  }
+  const told = new Set<string>();
+  for (const d of byMac.values()) {
+    const other = notesOf(d)?.sameAs;
+    const o = other ? normMac(other) : undefined;
+    if (!o || !byMac.has(o) || o === d.mac) continue;
+    join(o, d.mac!);
+    told.add(d.mac!).add(o);
+  }
+
+  const groups = new Map<string, Device[]>();
+  for (const d of byMac.values()) {
+    if (!named.has(d.mac!) && !told.has(d.mac!)) continue;
+    const r = find(d.mac!);
+    groups.set(r, [...(groups.get(r) ?? []), d]);
+  }
+  return [...groups.values()].filter((g) => g.length > 1).map((g) => {
+    for (const d of g) if (told.has(d.mac!)) d.linkedBy = "user";
+    return g;
+  });
+}
+
+/** Fold a group into one device, kept under the primary connection's id. */
+function mergeLinks(group: Device[], ov: Notes, devices: Map<string, Device>) {
+  // The primary: online before offline, cable before Wi-Fi.
+  const rank = (d: Device) => (d.status === "online" ? 0 : 2) + (d.via?.kind === "port" ? 0 : 1);
+  const all = [...group].sort((a, b) => rank(a) - rank(b));
+  const p = all[0]!;
+  const notesOf = (d: Device) => ov.devices?.[d.mac!] ?? ov.devices?.[d.mac!.toLowerCase()];
+  const byUser = all.some((d) => d.linkedBy === "user");
+  const links: DeviceLink[] = all.map((d) => ({
+    mac: d.mac!,
+    ip: d.ip,
+    hostname: d.hostname,
+    vendor: d.vendor,
+    privateMac: d.privateMac,
+    reserved: d.reserved,
+    leaseComment: d.leaseComment,
+    network: d.network,
+    status: d.status,
+    parent: d.parent,
+    via: d.via,
+    lastSeen: d.lastSeen,
+  }));
+
+  // Names and kinds people gave win, from any connection; DHCP reservation notes usually
+  // describe one connection ("wired", "Wi-Fi"), so the shared DHCP name comes before them.
+  const named = all.find((d) => d.nameSource === "user");
+  const container = all.find((d) => d.nameSource === "container");
+  const host = all.find((d) => d.hostname);
+  if (named) [p.name, p.nameSource] = [named.name, "user"];
+  else if (container) [p.name, p.nameSource] = [container.name, "container"];
+  else if (host) [p.name, p.nameSource] = [host.hostname!, "hostname"];
+  const kinded = all.find((d) => d.kindCertainty === "user") ?? all.find((d) => d.kindCertainty === "read") ?? all.find((d) => d.kind !== "unknown");
+  if (kinded) [p.kind, p.kindCertainty] = [kinded.kind, kinded.kindCertainty];
+
+  // Notes are kept per MAC; the primary's come first, the others fill what it lacks.
+  for (const d of all.slice(1)) {
+    p.labels = [...new Set([...(p.labels ?? []), ...(d.labels ?? [])])];
+    if (!p.labels.length) p.labels = undefined;
+    p.description ??= d.description;
+    p.services ??= d.services;
+    p.notes ??= d.notes;
+  }
+  if (all.some((d) => d.status === "online")) p.status = "online";
+  p.only24 = notesOf(p)?.only24 ?? p.only24;
+  p.links = links;
+  p.linkedBy = byUser ? "user" : "hostname";
+  const how = (l: DeviceLink) => (l.via?.kind === "wifi" ? "Wi-Fi" : l.via?.kind === "port" ? `cable${l.via.port ? ` (${l.via.port})` : ""}` : "an unknown connection");
+  p.facts = [
+    byUser
+      ? `One machine with ${links.length} connections, as its notes say: ${links.map(how).join(" and ")}`
+      : `Probably one machine with ${links.length} connections (${links.map(how).join(" and ")}): each gives the router the DHCP name “${host?.hostname}”`,
+    ...all.flatMap((d) => d.facts),
+  ];
+  for (const d of all.slice(1)) devices.delete(d.id);
 }

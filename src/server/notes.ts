@@ -129,7 +129,7 @@ const text = (v: unknown, field: string, max: number): string | null | undefined
 };
 
 function validateDevice(p: Record<string, unknown>): Partial<Record<keyof DeviceNotes, unknown>> {
-  const allowed = new Set(["name", "kind", "labels", "description", "services", "notes", "only24"]);
+  const allowed = new Set(["name", "kind", "labels", "description", "services", "notes", "only24", "sameAs", "separate"]);
   for (const k of Object.keys(p)) if (!allowed.has(k)) throw new NotesError(`Unknown field “${k}”. Use: ${[...allowed].join(", ")}.`);
   const out: Partial<Record<keyof DeviceNotes, unknown>> = {};
   if ("name" in p) out.name = text(p.name, "name", LIMITS.name);
@@ -143,6 +143,15 @@ function validateDevice(p: Record<string, unknown>): Partial<Record<keyof Device
   if ("only24" in p) {
     if (p.only24 !== null && typeof p.only24 !== "boolean") throw new NotesError("only24 must be true or false.");
     out.only24 = p.only24;
+  }
+  if ("separate" in p) {
+    if (p.separate !== null && typeof p.separate !== "boolean") throw new NotesError("separate must be true or false.");
+    out.separate = p.separate || null;
+  }
+  if ("sameAs" in p) {
+    const v = text(p.sameAs, "sameAs", 40);
+    if (v && !/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(normMac(v))) throw new NotesError("sameAs must be a MAC address, like 02:00:5E:10:00:01.");
+    out.sameAs = v ? normMac(v) : v;
   }
   if ("labels" in p) {
     if (p.labels === null) out.labels = null;

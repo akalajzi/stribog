@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { KINDS } from "../core/classify.ts";
-import type { Device, NetworkModel } from "../core/model.ts";
+import { connectionsOf, type Device, type NetworkModel } from "../core/model.ts";
 import { normMac } from "../core/net.ts";
 import { NotesError, type NotesStore } from "./notes.ts";
 import type { NetworkPayload } from "./provider.ts";
@@ -53,6 +53,8 @@ const deviceNotesShape = {
     .describe("What runs on it. Replaces the list."),
   notes: z.string().nullable().optional().describe("Free-form notes. Replaces the text."),
   only24: z.boolean().nullable().optional().describe("Hardware that can only use 2.4 GHz, so being on 2.4 GHz is expected."),
+  sameAs: z.string().nullable().optional().describe("MAC of another connection of the same machine (e.g. its Wi-Fi when this is its cable): the two show as one device."),
+  separate: z.boolean().nullable().optional().describe("Not the same machine as others with the same DHCP name, which Stribog otherwise shows as one device."),
 };
 
 function buildServer(ctx: McpContext): McpServer {
@@ -93,7 +95,7 @@ function buildServer(ctx: McpContext): McpServer {
       const list = model.devices
         .filter((d) => d.mac || d.id === model.routerId)
         .filter((d) => !status || status === "any" || d.status === status)
-        .filter((d) => !q || [d.name, d.ip, d.mac, d.hostname, d.description, ...(d.labels ?? [])].some((x) => x?.toLowerCase().includes(q)));
+        .filter((d) => !q || [d.name, d.ip, d.mac, d.hostname, d.description, ...(d.labels ?? []), ...connectionsOf(d).flatMap((l) => [l.ip, l.mac])].some((x) => x?.toLowerCase().includes(q)));
       return json(list.map((d) => brief(d, model)));
     }),
   );
@@ -217,7 +219,8 @@ function stripUndefined(o: Record<string, unknown>): Record<string, unknown> {
 function findDevice(m: NetworkModel, q: string): Device | undefined {
   const s = q.trim();
   const mac = normMac(s);
-  return m.devices.find((d) => d.mac === mac) ?? m.devices.find((d) => d.ip === s) ?? m.devices.find((d) => d.name.toLowerCase() === s.toLowerCase());
+  const any = connectionsOf;
+  return m.devices.find((d) => any(d).some((l) => l.mac === mac)) ?? m.devices.find((d) => any(d).some((l) => l.ip === s)) ?? m.devices.find((d) => d.name.toLowerCase() === s.toLowerCase());
 }
 
 function brief(d: Device, m: NetworkModel) {
@@ -235,6 +238,17 @@ function brief(d: Device, m: NetworkModel) {
     connection: d.via
       ? { via: d.via.kind, to: parent?.name, port: d.via.port, ssid: d.via.ssid, band: d.via.band, signalDbm: d.via.signal, certainty: d.via.certainty }
       : undefined,
+    otherConnections: d.links?.slice(1).map((l) => ({
+      mac: l.mac,
+      ip: l.ip,
+      status: l.status,
+      via: l.via?.kind,
+      to: m.devices.find((x) => x.id === l.parent)?.name,
+      port: l.via?.port,
+      ssid: l.via?.ssid,
+      band: l.via?.band,
+    })),
+    sameMachineBecause: d.linkedBy && (d.linkedBy === "user" ? "notes say so" : "the same DHCP name (inferred)"),
     labels: d.labels,
     description: d.description,
     services: d.services,

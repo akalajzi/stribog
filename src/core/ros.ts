@@ -75,6 +75,10 @@ export interface DeviceNotes {
   notes?: string;
   /** Hardware that can only use 2.4 GHz (many printers and IoT devices). */
   only24?: boolean;
+  /** The MAC of another connection of the same machine (its cable and its Wi-Fi, say). */
+  sameAs?: string;
+  /** Not the same machine as others that give the router the same DHCP name. */
+  separate?: boolean;
   /** When these notes last changed (ISO time). */
   updatedAt?: string;
 }
