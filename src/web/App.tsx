@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNetwork, useRoute, useSession, type Finding, type NetworkPayload, type SessionInfo } from "./api.ts";
+import { useLiveRates, useNetwork, useRoute, useSession, type Finding, type NetworkPayload, type SessionInfo } from "./api.ts";
 import { Logo } from "./components/Logo.tsx";
 import { Login } from "./views/Login.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
@@ -41,6 +41,8 @@ export function App() {
 function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSignOut: () => void; onSignedOut: (reason: string) => void }) {
   const { data, error, loading, reload, refetch } = useNetwork(onSignedOut);
   const [path, params, go] = useRoute();
+  // Traffic every couple of seconds where it is watched: the map and the home page.
+  const fresh = useLiveRates(data, path === "/" || path === "/map");
   // Notes changed somewhere (a finding accepted, say): the review depends on them.
   useEffect(() => {
     addEventListener("stribog:notes-changed", refetch);
@@ -89,7 +91,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
 
       <main className="main">
         {path === "/map" ? (
-          <MapView data={data} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} onNotesSaved={refetch} />
+          <MapView data={fresh!} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} onNotesSaved={refetch} />
         ) : path === "/wifi" ? (
           <WifiView data={data} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/clients" ? (
@@ -105,7 +107,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
         ) : path === "/settings" ? (
           <SettingsView data={data} session={session} />
         ) : (
-          <Home data={data} />
+          <Home data={fresh!} />
         )}
       </main>
     </div>

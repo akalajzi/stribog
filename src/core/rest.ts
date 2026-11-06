@@ -4,6 +4,7 @@
 // The web app signs in with the router's own user (usually admin); the CLI can use any user,
 // including a read-only one. The REST API is served by `www-ssl`, and by `www` since 7.9.
 
+import { liveRatesFrom, type LiveRates } from "./live.ts";
 import { Agent as HttpAgent, request as httpRequest } from "node:http";
 import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { scrub, type DeviceSnapshot, type RosRecord } from "./ros.ts";
@@ -253,6 +254,16 @@ export class RouterOsRest {
     const fields = [".id", "protocol", "src-address", "dst-address", "reply-src-address", "reply-dst-address", "src-port", "dst-port", "reply-src-port", "reply-dst-port", "orig-bytes", "repl-bytes", "orig-packets", "repl-packets", "tcp-state", "timeout", "connection-type", "fasttrack"];
     const rows = await this.call("POST", "/ip/firewall/connection/print", { ".proplist": fields }).catch(() => [] as RosRecord[]);
     return rows.length ? rows : this.get("/ip/firewall/connection");
+  }
+
+  /** Just the numbers that change by the second: port throughput, Wi-Fi clients, the router's load. */
+  async rates(ports: string[]): Promise<LiveRates> {
+    const [traffic, reg, res] = await Promise.all([
+      this.monitorTraffic(ports).catch(() => [] as RosRecord[]),
+      this.get("/interface/wifi/registration-table").catch(() => [] as RosRecord[]),
+      this.get("/system/resource").catch(() => [] as RosRecord[]),
+    ]);
+    return liveRatesFrom(traffic, reg, res[0]);
   }
 
   /** The router's DNS cache: names it resolved recently, to put names on addresses. */

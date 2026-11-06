@@ -970,7 +970,7 @@ function labelFor(name: string, comment: string | undefined, role: NetworkRole):
 }
 
 /** "48000000", "48Mbps", "1.2Gbps" → bits per second. */
-function bps(v?: string): number | undefined {
+export function bps(v?: string): number | undefined {
   if (v === undefined || v === "") return undefined;
   const m = /^([\d.]+)\s*([kMG])?(?:bps)?$/i.exec(v.trim());
   if (!m) return undefined;
@@ -979,7 +979,7 @@ function bps(v?: string): number | undefined {
 }
 
 /** Wi-Fi rates as "866.7Mbps": exports print them that way, REST gives bits per second. */
-function wifiRate(r?: string): string | undefined {
+export function wifiRate(r?: string): string | undefined {
   if (!r || !/^\d+$/.test(r)) return r;
   return `${Math.round(Number(r) / 1e5) / 10}Mbps`;
 }

@@ -9,6 +9,7 @@ import { expand, readConfig, snapshotFromFiles, type StribogConfig } from "../co
 import { buildModel, connectionsOf, linkCounters, type NetworkModel } from "../core/model.ts";
 import { AuthError, RouterOsRest } from "../core/rest.ts";
 import type { Snapshot } from "../core/ros.ts";
+import type { LiveRates } from "../core/live.ts";
 import { dataDir, NotesStore } from "./notes.ts";
 import { ratesNow } from "./rates.ts";
 import { HistoryStore } from "./history.ts";
@@ -95,7 +96,7 @@ type Cached = { at: number; snap: Snapshot; meta: Omit<NetworkPayload["meta"], "
 let filesCache: Cached | undefined;
 let demoCache: Cached | undefined;
 /** The router session that read most recently, so agents and the recorder can see the network too. On globalThis so it survives Vite's module reloads. */
-const LIVE = globalThis as { __stribogLastLive?: Session };
+const LIVE = globalThis as { __stribogLastLive?: Session; __stribogSavedAt?: number };
 
 /**
  * The network as the given session sees it. Without a session this reads files only: the
@@ -180,6 +181,23 @@ function withMeasuredRates(m: NetworkModel) {
   }
 }
 
+/**
+ * Traffic now, between full reads: three small calls instead of the whole router. One read at a
+ * time per session, reused for a second, so several tabs cost the router the same as one.
+ */
+const liveInFlight = new WeakMap<Session, { at: number; p: Promise<LiveRates> }>();
+export function liveRates(session: Session): Promise<LiveRates> | undefined {
+  const login = session.router;
+  const snap = (session.cache as Cached | undefined)?.snap;
+  if (!login || !snap) return undefined;
+  const prev = liveInFlight.get(session);
+  if (prev && Date.now() - prev.at < 1500) return prev.p;
+  const ports = (snap.devices[0]?.config.menus["/interface/ethernet"] ?? []).map((e) => e.name ?? "").filter(Boolean);
+  const p = new RouterOsRest({ url: login.url, user: login.user, password: login.password, insecure: login.encrypted }).rates(ports);
+  liveInFlight.set(session, { at: Date.now(), p });
+  return p;
+}
+
 // One router read at a time per session; a second tab or a quick reload joins the one in flight.
 const inFlight = new WeakMap<Session, Promise<NetworkPayload>>();
 
@@ -198,7 +216,9 @@ function liveNetwork(session: Session, login: RouterLogin, s: Setup, force: bool
 async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Cached | undefined, touch: boolean): Promise<NetworkPayload> {
   try {
     const snap = await liveSnapshot(login, s);
-    if (s.config.debug?.saveSnapshot) {
+    // Development snapshots are big (with the connection table): at most one a minute.
+    if (s.config.debug?.saveSnapshot && Date.now() - (LIVE.__stribogSavedAt ?? 0) > 60_000) {
+      LIVE.__stribogSavedAt = Date.now();
       // The development snapshot also keeps the connection table and DNS cache, read on demand otherwise.
       const rest = new RouterOsRest({ url: login.url, user: login.user, password: login.password, insecure: login.encrypted });
       const [conns, dns] = await Promise.all([rest.connections().catch(() => []), rest.dnsCache().catch(() => [])]);

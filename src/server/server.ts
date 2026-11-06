@@ -3,7 +3,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { getNetwork, getNetworkForAgent, notesFor, setup, SignedOutError, snapshotOf } from "./provider.ts";
+import { getNetwork, getNetworkForAgent, liveRates, notesFor, setup, SignedOutError, snapshotOf } from "./provider.ts";
 import { adviceRequest } from "../core/advice.ts";
 import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
@@ -107,6 +107,17 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         activity: (id, hours) => deviceActivity({ session, agent: !!agent, id, hours }),
       });
       return true;
+    }
+
+    // Traffic now, every couple of seconds, between full reads (live routers only).
+    if (route === "GET /api/live") {
+      const r = session && liveRates(session);
+      if (!r) return send(res, 200, null), true;
+      try {
+        return send(res, 200, await r), true;
+      } catch (err) {
+        return send(res, 502, { error: err instanceof Error ? err.message : String(err) }), true;
+      }
     }
 
     if (route === "GET /api/network") {
