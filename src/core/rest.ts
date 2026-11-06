@@ -19,6 +19,7 @@ export const CONFIG_PATHS = [
   "/interface/bridge",
   "/interface/bridge/port",
   "/interface/ethernet",
+  "/interface/ethernet/poe",
   "/interface/vlan",
   "/interface/list",
   "/interface/list/member",
@@ -184,11 +185,21 @@ export class RouterOsRest {
     return { identity: id?.name, version: res.version.split(" ")[0], model: res["board-name"] };
   }
 
-  /** `monitor numbers=... once` for every item in a menu. */
-  async monitor(menuPath: string, names: string[]) {
-    if (!names.length) return [];
-    const rows = await this.call("POST", `${menuPath}/monitor`, { numbers: names.join(","), once: "" });
-    return rows.map((r, i) => ({ name: names[i] ?? r.name ?? "", ...r }));
+  /**
+   * `monitor ... once` for the given items of a menu. RouterOS 7.21 wants their `.id`s over REST
+   * (it answers "missing =.id=" to `numbers`); older versions took names, so those are the fallback.
+   * Each result row is tagged with the item's name.
+   */
+  async monitor(menuPath: string, items: RosRecord[]) {
+    const list = items.filter((x) => x.name);
+    if (!list.length) return [];
+    const path = `${menuPath}/monitor`;
+    const ids = list.map((x) => x[".id"]).filter(Boolean);
+    let rows: RosRecord[] = [];
+    if (ids.length === list.length) rows = await this.call("POST", path, { ".id": ids.join(","), once: "" });
+    if (!rows.length) rows = await this.call("POST", path, { numbers: list.map((x) => x.name).join(","), once: "" });
+    if (rows.length) delete this.errors[`POST ${path}`];
+    return rows.map((r, i) => ({ ...r, name: r.name ?? list[i]!.name! }));
   }
 
   async snapshot(): Promise<DeviceSnapshot> {
@@ -208,11 +219,13 @@ export class RouterOsRest {
     ]);
     // REST lists dynamic leases too; the config view should only hold static ones.
     menus["/ip/dhcp-server/lease"] = (menus["/ip/dhcp-server/lease"] ?? []).filter((l) => l.dynamic !== "true");
-    const ether = (menus["/interface/ethernet"] ?? []).map((e) => e.name ?? "").filter(Boolean);
-    const wifi = (menus["/interface/wifi"] ?? []).filter((w) => !w["master-interface"]).map((w) => w.name ?? "").filter(Boolean);
+    const ether = menus["/interface/ethernet"] ?? [];
+    const wifi = (menus["/interface/wifi"] ?? []).filter((w) => !w["master-interface"]);
+    // PoE ports have their own menu and ids; routers without PoE have none.
+    const poePorts = menus["/interface/ethernet/poe"] ?? [];
     const [mon, poe, wmon] = await Promise.all([
       this.monitor("/interface/ethernet", ether).catch(failed("POST /interface/ethernet/monitor")),
-      this.monitor("/interface/ethernet/poe", ether.filter((e) => e.startsWith("ether"))).catch(failed("POST /interface/ethernet/poe/monitor")),
+      this.monitor("/interface/ethernet/poe", poePorts).catch(failed("POST /interface/ethernet/poe/monitor")),
       this.monitor("/interface/wifi", wifi).catch(failed("POST /interface/wifi/monitor")),
     ]);
     state["/interface/ethernet/monitor"] = mon;
