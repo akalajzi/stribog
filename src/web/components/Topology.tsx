@@ -3,7 +3,7 @@ import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
 import { GATEWAY_W, orbitRadius } from "../../core/layout.ts";
 import { ArtDefs, bandColor, COLORS, DeviceArt, GatewayArt, Glyph, mediumColor } from "./DeviceArt.tsx";
 
-const SEV_COLOR: Partial<Record<Severity, string>> = { critical: COLORS.bad, warning: COLORS.warn, suggestion: "#8fb8ff" };
+const SEV_COLOR: Partial<Record<Severity, string>> = { critical: COLORS.bad, warning: COLORS.warn, suggestion: "var(--idea)" };
 const SEV_RANK: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
 
 interface Props {
@@ -104,9 +104,9 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
 
           {layout.zones.map((z, i) => (
             <g key={i}>
-              <rect x={z.x} y={z.y} width={z.w} height={z.h} rx={22} fill="rgba(217,212,200,.018)" stroke="rgba(217,212,200,.16)" strokeDasharray="3 6" />
-              <text x={z.x + 20} y={z.y + 28} fill="#9aa0aa" fontSize={11} fontWeight={600} letterSpacing={1.2}>{z.title.toUpperCase()}</text>
-              {z.sub && <text x={z.x + 20} y={z.y + 45} fill="#5d636d" fontSize={11} fontFamily="JetBrains Mono, monospace">{z.sub}</text>}
+              <rect x={z.x} y={z.y} width={z.w} height={z.h} rx={22} fill="var(--up)" fillOpacity={0.018} stroke="var(--up)" strokeOpacity={0.16} strokeDasharray="3 6" />
+              <text x={z.x + 20} y={z.y + 28} fill="var(--tx-2)" fontSize={11} fontWeight={600} letterSpacing={1.2}>{z.title.toUpperCase()}</text>
+              {z.sub && <text x={z.x + 20} y={z.y + 45} fill="var(--tx-3)" fontSize={11} fontFamily="JetBrains Mono, monospace">{z.sub}</text>}
             </g>
           ))}
 
@@ -116,7 +116,7 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
               {o.rings.map((r, i) => (
                 <circle key={r.dbm} cx={o.x} cy={o.y} r={r.r} fill="none" stroke={COLORS.w5} strokeOpacity={0.13} strokeDasharray={i === 0 ? undefined : i === 1 ? "2 4" : "1 6"} />
               ))}
-              <text x={o.x + 16} y={o.y - orbitRadius(-80) - 6} fill="#5d636d" fontSize={9.5} fontFamily="JetBrains Mono, monospace">rings {o.rings.map((r) => r.dbm).join(" · ")} dBm</text>
+              <text x={o.x + 16} y={o.y - orbitRadius(-80) - 6} fill="var(--tx-3)" fontSize={9.5} fontFamily="JetBrains Mono, monospace">rings {o.rings.map((r) => r.dbm).join(" · ")} dBm</text>
             </g>
           ))}
 
@@ -133,7 +133,7 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
                 <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : l.medium.startsWith("wifi") ? 0.55 : 1} strokeWidth={dashed ? 1.6 : width} strokeDasharray={dashed} strokeLinecap="round" />
                 {alive &&
                   [0, 1, 2].slice(0, l.weight > 0.6 ? 3 : 2).map((k) => (
-                    <circle key={k} r={2.3} fill={l.medium === "wan" ? "#ece9e2" : "#e9f0ff"} opacity={0.9}>
+                    <circle key={k} r={2.3} fill="var(--tx-1)" opacity={0.9}>
                       <animateMotion dur={`${l.weight > 0.6 ? 1.6 : 2.4}s`} begin={`-${k * (l.weight > 0.6 ? 0.55 : 1.2)}s`} repeatCount="indefinite">
                         <mpath href={`#${l.id}`} />
                       </animateMotion>
@@ -159,7 +159,7 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
                   <rect className="hit" x={-60} y={-40} width={120} height={110} />
                   <DeviceArt kind={n.kind} ghost />
                   <text y={50} textAnchor="middle" fill={COLORS.w5} fontSize={12.5} fontWeight={600} className="lab-name">{p?.name}</text>
-                  <text y={66} textAnchor="middle" fill="#9aa0aa" fontSize={10.5}>Planned · not applied</text>
+                  <text y={66} textAnchor="middle" fill="var(--tx-2)" fontSize={10.5}>Planned · not applied</text>
                 </g>
               );
             }
@@ -209,11 +209,11 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
 
 function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
   if (wide)
-    return <rect x={-GATEWAY_W / 2 - 12} y={-44} width={GATEWAY_W + 24} height={92} rx={18} fill="none" stroke="#ece9e2" strokeOpacity={0.45} strokeWidth={1.2} />;
+    return <rect x={-GATEWAY_W / 2 - 12} y={-44} width={GATEWAY_W + 24} height={92} rx={18} fill="none" stroke="var(--tx-1)" strokeOpacity={0.45} strokeWidth={1.2} />;
   return (
     <g>
-      <circle r={r} fill="none" stroke="#ece9e2" strokeOpacity={0.5} strokeWidth={1.2} />
-      <circle r={r} fill="none" stroke="#ece9e2" strokeOpacity={0.25}>
+      <circle r={r} fill="none" stroke="var(--tx-1)" strokeOpacity={0.5} strokeWidth={1.2} />
+      <circle r={r} fill="none" stroke="var(--tx-1)" strokeOpacity={0.25}>
         <animate attributeName="r" values={`${r};${r + 12}`} dur="2.4s" repeatCount="indefinite" />
         <animate attributeName="stroke-opacity" values=".3;0" dur="2.4s" repeatCount="indefinite" />
       </circle>
@@ -245,7 +245,7 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
 function SevDot({ sev, x, y }: { sev?: Severity; x: number; y: number }) {
   const c = sev ? SEV_COLOR[sev] : undefined;
   if (!c) return null;
-  return <circle cx={x} cy={y} r={3.5} fill={c} stroke="#07090c" strokeWidth={2} />;
+  return <circle cx={x} cy={y} r={3.5} fill={c} stroke="var(--ink-0)" strokeWidth={2} />;
 }
 
 function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string[]; sev?: Severity }) {
@@ -254,9 +254,9 @@ function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string
     const x = -GATEWAY_W / 2 - 18;
     return (
       <g textAnchor="end">
-        <text x={x} y={-10} fill="#ece9e2" fontSize={15} fontWeight={650} className="lab-name">{name}</text>
-        <text x={x} y={8} fill="#5d636d" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
-        <text x={x} y={23} fill="#5d636d" fontSize={10.5}>{l2}</text>
+        <text x={x} y={-10} fill="var(--tx-1)" fontSize={15} fontWeight={650} className="lab-name">{name}</text>
+        <text x={x} y={8} fill="var(--tx-3)" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
+        <text x={x} y={23} fill="var(--tx-3)" fontSize={10.5}>{l2}</text>
         <SevDot sev={sev} x={x + 8} y={-14} />
       </g>
     );
@@ -265,9 +265,9 @@ function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string
     const x = n.kind === "tv" || n.kind === "iot" ? 40 : 44;
     return (
       <g>
-        <text x={x} y={-4} fill="#ece9e2" fontSize={13} fontWeight={600} className="lab-name">{name}</text>
-        <text x={x} y={12} fill="#5d636d" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
-        {l2 && <text x={x} y={27} fill="#9aa0aa" fontSize={10.5}>{l2}</text>}
+        <text x={x} y={-4} fill="var(--tx-1)" fontSize={13} fontWeight={600} className="lab-name">{name}</text>
+        <text x={x} y={12} fill="var(--tx-3)" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
+        {l2 && <text x={x} y={27} fill="var(--tx-2)" fontSize={10.5}>{l2}</text>}
         <SevDot sev={sev} x={x - 8} y={-8} />
       </g>
     );
@@ -276,17 +276,17 @@ function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string
     const w = Math.max(96, name.length * 7.6 + 30);
     return (
       <g>
-        <rect x={-w / 2} y={44} width={w} height={22} rx={11} fill="#0c0f14" stroke="rgba(255,255,255,.1)" />
-        <text y={59} textAnchor="middle" fill="#ece9e2" fontSize={12.5} fontWeight={600} className="lab-name">{name}</text>
+        <rect x={-w / 2} y={44} width={w} height={22} rx={11} fill="var(--ink-1)" stroke="var(--hair-2)" />
+        <text y={59} textAnchor="middle" fill="var(--tx-1)" fontSize={12.5} fontWeight={600} className="lab-name">{name}</text>
         <SevDot sev={sev} x={w / 2 - 2} y={46} />
       </g>
     );
   }
   return (
     <g textAnchor="middle">
-      <text y={56} fill="#ece9e2" fontSize={13} fontWeight={600} className="lab-name">{name}</text>
-      <text y={72} fill="#5d636d" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
-      {l2 && <text y={87} fill="#9aa0aa" fontSize={10.5}>{l2}</text>}
+      <text y={56} fill="var(--tx-1)" fontSize={13} fontWeight={600} className="lab-name">{name}</text>
+      <text y={72} fill="var(--tx-3)" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
+      {l2 && <text y={87} fill="var(--tx-2)" fontSize={10.5}>{l2}</text>}
       <SevDot sev={sev} x={name.length * 3.7 + 10} y={52} />
     </g>
   );
@@ -303,12 +303,12 @@ function ClientBadge({ n, d, sel, sev, dim, onClick }: { n: LNode; d: Device; se
     <g transform={`translate(${n.x} ${n.y})`} className="node" onClick={onClick} opacity={dim ? 0.3 : 1}>
       <rect className="hit" x={right ? -16 : -150} y={-18} width={166} height={36} />
       {sel && <SelectRing r={20} />}
-      <circle r={13} fill="#10141a" stroke={c} strokeWidth={1.4} strokeDasharray={standby ? "2 2.5" : undefined} />
-      <g transform="translate(-7 -7)" color={standby ? "#9aa0aa" : "#ece9e2"}>
+      <circle r={13} fill="var(--ink-1)" stroke={c} strokeWidth={1.4} strokeDasharray={standby ? "2 2.5" : undefined} />
+      <g transform="translate(-7 -7)" color={standby ? "var(--tx-2)" : "var(--tx-1)"}>
         <Glyph kind={d.kind} size={14} />
       </g>
-      <text x={tx} y={-1} textAnchor={anchor} fill={standby ? "#9aa0aa" : "#ece9e2"} fontSize={11.5} className="lab-name">{d.name}</text>
-      <text x={tx} y={12} textAnchor={anchor} fill="#5d636d" fontSize={9.5} fontFamily="JetBrains Mono, monospace">
+      <text x={tx} y={-1} textAnchor={anchor} fill={standby ? "var(--tx-2)" : "var(--tx-1)"} fontSize={11.5} className="lab-name">{d.name}</text>
+      <text x={tx} y={12} textAnchor={anchor} fill="var(--tx-3)" fontSize={9.5} fontFamily="JetBrains Mono, monospace">
         {sig !== undefined ? `${sig}` : "?"} · {d.via?.band} GHz{d.via?.ssid ? ` · ${d.via.ssid}` : ""}
       </text>
       <SevDot sev={sev} x={9} y={-10} />

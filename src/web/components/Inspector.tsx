@@ -2,6 +2,7 @@ import type { Device, NetworkPayload } from "../api.ts";
 import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { bandColor, Glyph } from "./DeviceArt.tsx";
 import { SEV_VAR } from "./FindingCard.tsx";
+import { NotesPanel } from "./NotesPanel.tsx";
 
 export function SignalBars({ dbm }: { dbm?: number }) {
   const n = dbm === undefined ? 0 : dbm >= -55 ? 4 : dbm >= -62 ? 3 : dbm >= -70 ? 2 : 1;
@@ -12,9 +13,9 @@ export function SignalBars({ dbm }: { dbm?: number }) {
   );
 }
 
-const certLabel = (c?: string) => (c === "inferred" ? "probably" : c === "user" ? "you said" : undefined);
+const certLabel = (c?: string) => (c === "inferred" ? "probably" : c === "user" ? "noted" : undefined);
 
-export function Inspector({ data, id, onClose, onSelect, onFinding }: { data: NetworkPayload; id: string; onClose: () => void; onSelect: (id: string) => void; onFinding: (fid: string) => void }) {
+export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved }: { data: NetworkPayload; id: string; onClose: () => void; onSelect: (id: string) => void; onFinding: (fid: string) => void; onNotesSaved: () => void }) {
   const { model, analysis } = data;
   const planned = model.planned.find((p) => `planned:${p.id}` === id);
   if (planned) {
@@ -49,7 +50,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding }: { data: Ne
         sub={
           <>
             {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
-            {d.kindCertainty === "inferred" && d.kind !== "unknown" ? <span className="cert">probably</span> : null}
+            {d.kindCertainty === "inferred" && d.kind !== "unknown" ? <span className="cert">probably</span> : d.kindCertainty === "user" ? <span className="cert">noted</span> : null}
             {" · "}
             <span style={{ color: d.status === "online" ? "var(--ok)" : d.status === "offline" ? "var(--tx-3)" : "var(--tx-2)" }}>{d.status}</span>
           </>
@@ -107,6 +108,8 @@ export function Inspector({ data, id, onClose, onSelect, onFinding }: { data: Ne
           {d.only24 && d.via?.band === "2.4" && <><span>Radio</span><span className="tx">2.4 GHz only (by design)</span></>}
         </div>
       </div>
+
+      <NotesPanel key={d.id} d={d} onSaved={onNotesSaved} />
 
       {radios.length > 0 && (
         <div>

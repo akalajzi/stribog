@@ -44,17 +44,15 @@ Stribog fills in this computer's gateway as the router address and `admin` as th
 
 It talks to the router's REST API, which RouterOS 7.9 and newer serve from the same web service as WebFig. It tries https (`www-ssl`) first and accepts the router's self-signed certificate, then falls back to plain http (`www`). Over http the password crosses your network unencrypted on every read, and Stribog says so in the top bar; turning on `www-ssl` fixes it.
 
-To pin the address, or to add what the router cannot know, create `stribog.config.json` in the repository root (it is git-ignored, as is `data/`):
+To pin the address, create `stribog.config.json` in the repository root (it is git-ignored, as is `data/`):
 
 ```json
 {
   "router": { "url": "192.168.88.1", "interval": 15 },
-  "sources": [{ "role": "cap", "export": "data/ap-living.rsc" }],
-  "overrides": "data/overrides.json"
 }
 ```
 
-`interval` is the number of seconds between reads while the app is open. Exports of CAPsMAN access points add detail the router itself does not have.
+`interval` is the number of seconds between reads while the app is open.
 
 For development, `"debug": { "saveSnapshot": "data/live.json" }` writes every live read to that file (secrets scrubbed, mode 600), which is handy for reproducing a problem in a test.
 
@@ -67,36 +65,48 @@ Export the configuration on the router (`/export file=router`, then download `ro
   "sources": [
     { "role": "router", "export": "data/router.rsc" },
     { "role": "cap", "export": "data/ap-living.rsc" }
-  ],
-  "overrides": "data/overrides.json"
+  ]
 }
 ```
 
 An export has the configuration but no runtime state, so the review works fully while clients, signal and link speeds are missing. A `state` file per source can add runtime data (see `fixtures/demo/state.json` for the shape).
 
-### Telling Stribog what it cannot know
+### Notes: what the router cannot know
 
-Names, kinds, rooms, the ISP and planned devices go in the overrides file, keyed by MAC address:
+Everything Stribog shows comes from the router, except notes. Click a device and use **Notes** to give it a name, a kind, labels (a room, an owner, a role), a short description, the services that run on it, and free-form notes. Notes show up on the map and everywhere else at once.
 
-```json
-{
-  "site": "Home",
-  "upstream": { "name": "ISP router", "model": "Example ONT", "isp": "Example Fibre" },
-  "devices": {
-    "02:00:5E:00:53:10": { "name": "3D printer", "kind": "printer3d", "only24": true, "room": "Workshop" }
-  },
-  "planned": [{ "id": "ap-2", "name": "Upstairs AP", "kind": "ap", "port": "ether7" }]
-}
+Notes, their change history and agent tokens live in Stribog's data directory: `~/.local/share/stribog` on Linux, `~/Library/Application Support/Stribog` on macOS, `%APPDATA%\Stribog` on Windows (or `dataDir` in the config, or `STRIBOG_DATA`). Every change is appended to `audit.jsonl` with before and after, and listed under **Settings → History**.
+
+The same notes are available over HTTP:
+
+| Request | |
+|---|---|
+| `GET /api/notes` | all notes |
+| `GET /api/notes/devices/{mac}` | one device |
+| `PATCH /api/notes/devices/{mac}` | change the fields you send; `null` clears one |
+| `PUT /api/notes/devices/{mac}` | replace the device's notes |
+| `DELETE /api/notes/devices/{mac}` | forget them |
+| `PATCH /api/notes/network` | `site`, `upstream` (`name`, `model`, `isp`), `notes` |
+| `GET /api/notes/audit` | the change history, newest first |
+
+Device fields: `name`, `kind`, `labels`, `description`, `services` (each `name`, `port`, `protocol`, `url`, `note`), `notes`, and `only24` for hardware that only has a 2.4 GHz radio.
+
+### Agents (MCP)
+
+Under **Settings → Agents**, create a token for an AI agent. It is shown once; Stribog keeps only its hash. The agent connects to `http://<stribog>/mcp` (Streamable HTTP) with `Authorization: Bearer <token>`, for example:
+
+```sh
+claude mcp add --transport http stribog http://127.0.0.1:4517/mcp --header "Authorization: Bearer stb_…"
 ```
 
-`only24` marks hardware that only has a 2.4 GHz radio, so being on 2.4 GHz is reported as expected rather than as a problem.
+An agent has the same rights as a person for notes, and sees the network through the most recent signed-in session (or its last read, marked stale, when nobody is signed in). Tools: `get_network_overview`, `list_devices`, `get_device`, `update_device_notes`, `update_network_notes`, `get_review`, `get_change_log`. The token also works for the HTTP API above.
 
 ## Command line
 
 ```sh
 pnpm review                                  # terminal report for ./stribog.config.json (or the demo)
 pnpm review -- --fix                         # include evidence and fix scripts
-pnpm review -- --export router.rsc --cap ap.rsc
+pnpm review -- --export router.rsc --cap ap.rsc [--notes notes.json]
 pnpm collect -- --url https://192.168.88.1 --user stribog --password-file ~/.config/stribog/router-password --insecure --out data/snapshot.json
 ```
 
@@ -123,6 +133,7 @@ Stribog has no accounts of its own: signing in means signing in to the router. T
 - `src/core/model.ts` builds one model of devices, ports, networks, SSIDs, radios and the WAN. Every derived fact records whether it was read, inferred or told by the user, and the UI says "probably" for inferences.
 - `src/core/analyze.ts` holds the review rules. `src/core/layout.ts` lays out the topology (port order left to right, so links never cross). `src/core/setup.ts` generates setup scripts, and `src/core/firewall.ts` describes rules in plain language.
 - `src/core/rest.ts` reads the router over REST. `src/server/session.ts` signs in and keeps sessions in memory. `src/server/provider.ts` picks the source: the signed-in router, files, or the demo.
+- `src/server/notes.ts` keeps notes and the change log, `src/server/tokens.ts` agent tokens, `src/server/mcp.ts` the MCP tools.
 - `src/web` is the React app. `src/server` serves `/api`.
 
 ```sh

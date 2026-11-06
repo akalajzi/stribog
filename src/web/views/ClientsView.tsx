@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Device, Finding, NetworkPayload, Severity } from "../api.ts";
-import { KIND_LABEL, KINDS, type DeviceKind } from "../../core/classify.ts";
-import { CliBlock, SEV_VAR } from "../components/FindingCard.tsx";
+import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
+import { SEV_VAR } from "../components/FindingCard.tsx";
 import { COLORS, Glyph, bandColor } from "../components/DeviceArt.tsx";
 import { SignalBars } from "../components/Inspector.tsx";
 import "./clients.css";
@@ -187,7 +187,7 @@ export function ClientsView({ data, onSelect }: { data: NetworkPayload; onSelect
           </table>
         </div>
 
-        <MeetPanel devices={intro} configPath={data.meta.configPath} onSelect={onSelect} />
+        <MeetPanel devices={intro} onSelect={onSelect} />
       </div>
     </div>
   );
@@ -348,23 +348,7 @@ function introReason(d: Device): string {
   return `Looks like a ${KIND_LABEL[d.kind].toLowerCase()}, but that is a guess`;
 }
 
-function MeetPanel({ devices, configPath, onSelect }: { devices: Device[]; configPath?: string; onSelect: (id: string) => void }) {
-  const ex = devices[0];
-  const example = JSON.stringify(
-    {
-      devices: {
-        [ex?.mac ?? "AA:BB:CC:DD:EE:FF"]: {
-          name: ex && ex.nameSource !== "mac" && ex.nameSource !== "vendor" ? ex.name : "Kitchen speaker",
-          kind: ex && ex.kind !== "unknown" ? ex.kind : "iot",
-          room: "Living room",
-        },
-      },
-    },
-    null,
-    2,
-  );
-  const file = configPath?.split("/").pop() ?? "stribog.config.json";
-
+function MeetPanel({ devices, onSelect }: { devices: Device[]; onSelect: (id: string) => void }) {
   return (
     <>
       <div className="sec-title">Meet your network <em className="faint">{devices.length ? `${plural(devices.length, "device")} Stribog is unsure about` : "everyone is introduced"}</em></div>
@@ -393,13 +377,10 @@ function MeetPanel({ devices, configPath, onSelect }: { devices: Device[]; confi
         <div className="cl-meet-how">
           <div className="lbl">How to tell Stribog</div>
           <p className="muted">
-            Add an entry per device, keyed by its MAC address, to the overrides file: the file named by <span className="mono tx1">"overrides"</span> in{" "}
-            <span className="mono tx1" title={configPath}>{file}</span>. Reload and the change appears everywhere.
+            Click a device and use <span className="tx1">Notes</span> in the panel on the right: a name, its kind, labels, a short description, what runs on it. The change shows everywhere at once and is kept in
+            the history in Settings.
           </p>
-          <CliBlock code={example} />
-          <p className="faint" style={{ fontSize: 12 }}>
-            Kinds: <span className="mono">{KINDS.join(", ")}</span>. Add <span className="mono">"only24": true</span> for hardware that only has 2.4 GHz.
-          </p>
+          <p className="muted">An agent connected in Settings can do the same over MCP, for example to name everything it recognises in one go.</p>
         </div>
       </div>
     </>

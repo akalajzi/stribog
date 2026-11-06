@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNetwork, useRoute, useSession, type Finding, type NetworkPayload, type SessionInfo } from "./api.ts";
 import { Logo } from "./components/Logo.tsx";
 import { Login } from "./views/Login.tsx";
+import { SettingsView } from "./views/SettingsView.tsx";
 import { Topology } from "./components/Topology.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { Overview } from "./views/Overview.tsx";
@@ -35,7 +36,7 @@ export function App() {
 }
 
 function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSignOut: () => void; onSignedOut: (reason: string) => void }) {
-  const { data, error, loading, reload } = useNetwork(onSignedOut);
+  const { data, error, loading, reload, refetch } = useNetwork(onSignedOut);
   const [path, params, go] = useRoute();
 
   if (!data)
@@ -60,6 +61,10 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
           </a>
         ))}
         <div className="sp" />
+        <a href="#/settings" className={`ri${path === "/settings" ? " on" : ""}`}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+          <span className="tip">Settings</span>
+        </a>
         <button className="ri" title="Reload" onClick={reload}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className={loading ? "pulse" : undefined}><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 5v6h-6" /></svg>
           <span className="tip">Reload</span>
@@ -76,7 +81,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
 
       <main className="main">
         {path === "/map" ? (
-          <MapView data={data} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} />
+          <MapView data={data} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} onNotesSaved={refetch} />
         ) : path === "/wifi" ? (
           <WifiView data={data} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/clients" ? (
@@ -85,6 +90,8 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
           <NetworkView data={data} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/plan" ? (
           <PlanView data={data} />
+        ) : path === "/settings" ? (
+          <SettingsView data={data} session={session} />
         ) : (
           <Overview data={data} onShow={showOnMap} />
         )}
@@ -127,7 +134,7 @@ function TopBar({ data, session }: { data: NetworkPayload; session: SessionInfo 
   );
 }
 
-function MapView({ data, selected, highlight, go }: { data: NetworkPayload; selected?: string; highlight?: string[]; go: (p: string, q?: Record<string, string>) => void }) {
+function MapView({ data, selected, highlight, go, onNotesSaved }: { data: NetworkPayload; selected?: string; highlight?: string[]; go: (p: string, q?: Record<string, string>) => void; onNotesSaved: () => void }) {
   const [sel, setSel] = useState(selected);
   useEffect(() => setSel(selected), [selected]);
   const select = (id?: string) => {
@@ -143,6 +150,7 @@ function MapView({ data, selected, highlight, go }: { data: NetworkPayload; sele
           id={sel}
           onClose={() => select(undefined)}
           onSelect={(id) => select(id)}
+          onNotesSaved={onNotesSaved}
           onFinding={(fid) => {
             go("/");
             setTimeout(() => document.getElementById(`f-${fid}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);

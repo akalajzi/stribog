@@ -5,18 +5,19 @@ import type { ReactNode } from "react";
 import type { Port } from "../api.ts";
 import { GATEWAY_H, GATEWAY_W } from "../../core/layout.ts";
 
+/** Data colours, from the theme (styles.css), so light and dark agree on meaning. */
 export const COLORS = {
-  mg: "#93b4ff",
-  g1: "#6fd6c4",
-  w5: "#c4a6ff",
-  w24: "#f0b983",
-  w6: "#ff9ec7",
-  up: "#d9d4c8",
-  ok: "#63d6a2",
-  warn: "#f3c25a",
-  bad: "#ff7a72",
-  tx3: "#5d636d",
-  legacy: "#7c8088",
+  mg: "var(--mg)",
+  g1: "var(--g1)",
+  w5: "var(--w5)",
+  w24: "var(--w24)",
+  w6: "var(--w6)",
+  up: "var(--up)",
+  ok: "var(--ok)",
+  warn: "var(--warn)",
+  bad: "var(--bad)",
+  tx3: "var(--tx-3)",
+  legacy: "var(--legacy)",
 };
 
 /** Shared gradients and filters; render once per SVG. */
@@ -30,7 +31,7 @@ export function ArtDefs() {
       <linearGradient id="plasticTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffffff" /><stop offset="1" stopColor="#e4e0d8" /></linearGradient>
       <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#263049" /><stop offset="1" stopColor="#0d1119" /></linearGradient>
       <radialGradient id="globe" cx=".35" cy=".3" r=".8"><stop offset="0" stopColor="#34405a" /><stop offset=".6" stopColor="#151b27" /><stop offset="1" stopColor="#0a0d12" /></radialGradient>
-      <radialGradient id="apHalo"><stop offset="0" stopColor="#c4a6ff" stopOpacity=".14" /><stop offset=".6" stopColor="#c4a6ff" stopOpacity=".035" /><stop offset="1" stopColor="#c4a6ff" stopOpacity="0" /></radialGradient>
+      <radialGradient id="apHalo"><stop offset="0" stopColor="var(--w5)" stopOpacity=".14" /><stop offset=".6" stopColor="var(--w5)" stopOpacity=".035" /><stop offset="1" stopColor="var(--w5)" stopOpacity="0" /></radialGradient>
       <filter id="led" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="1.6" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
       <filter id="shadow" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="4" /></filter>
       <filter id="soft" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" /></filter>
@@ -63,7 +64,7 @@ export function DeviceArt({ kind, status, accent = COLORS.g1, ghost }: { kind: s
   if (ghost) {
     return (
       <g opacity={0.85}>
-        <rect x={-22} y={-28} width={44} height={56} rx={11} fill="rgba(196,166,255,.05)" stroke={COLORS.w5} strokeOpacity={0.7} strokeDasharray="4 4" />
+        <rect x={-22} y={-28} width={44} height={56} rx={11} fill={COLORS.w5} fillOpacity={0.05} stroke={COLORS.w5} strokeOpacity={0.7} strokeDasharray="4 4" />
         <circle cy={18} r={2} fill="none" stroke={COLORS.w5} strokeOpacity={0.7} />
       </g>
     );

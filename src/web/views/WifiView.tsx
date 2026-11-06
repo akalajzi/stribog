@@ -383,7 +383,7 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
                 <stop offset="1" stopColor={color} stopOpacity="0" />
               </linearGradient>
               <pattern id={`${id}-dfs`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,.07)" strokeWidth="2" />
+                <line x1="0" y1="0" x2="0" y2="6" stroke="var(--fg)" strokeOpacity={.07} strokeWidth="2" />
               </pattern>
               <pattern id={`${id}-clash`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
                 <line x1="0" y1="0" x2="0" y2="5" stroke="var(--warn)" strokeOpacity=".55" strokeWidth="1.6" />
@@ -404,12 +404,12 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
             })}
 
             {/* Axis */}
-            <line x1={PAD} x2={W - PAD} y1={base} y2={base} stroke="rgba(255,255,255,.12)" />
+            <line x1={PAD} x2={W - PAD} y1={base} y2={base} stroke="var(--fg)" strokeOpacity={.12} />
             {scale.ticks.map((t) => {
               const allowed = plan.includes(t.ch);
               return (
                 <g key={t.ch}>
-                  <line x1={t.x} x2={t.x} y1={base} y2={base + (allowed ? 5 : 3)} stroke={allowed ? color : "rgba(255,255,255,.18)"} />
+                  <line x1={t.x} x2={t.x} y1={base} y2={base + (allowed ? 5 : 3)} stroke={allowed ? color : "var(--fg)"} strokeOpacity={allowed ? 1 : 0.18} />
                   {t.label && (
                     <text x={t.x} y={base + 17} textAnchor="middle" className={`wf-svg-tick${allowed ? " on" : ""}`} style={allowed ? { fill: color } : undefined}>
                       {t.ch}
@@ -419,7 +419,7 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
               );
             })}
             {scale.breaks.map((bx) => (
-              <g key={bx} stroke="rgba(255,255,255,.22)" strokeWidth={1.2}>
+              <g key={bx} stroke="var(--fg)" strokeOpacity={.22} strokeWidth={1.2}>
                 <line x1={bx - 5} y1={base + 4} x2={bx - 1} y2={base - 4} />
                 <line x1={bx + 1} y1={base + 4} x2={bx + 5} y2={base - 4} />
               </g>
@@ -483,7 +483,7 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
               const y = top - 8 - lane * LANE;
               return (
                 <g key={it.key}>
-                  {lane > 0 && <line x1={c} x2={c} y1={y + 4} y2={hillTop - 2} stroke="rgba(255,255,255,.12)" strokeDasharray="2 3" />}
+                  {lane > 0 && <line x1={c} x2={c} y1={y + 4} y2={hillTop - 2} stroke="var(--fg)" strokeOpacity={.12} strokeDasharray="2 3" />}
                   <text x={c} y={y - 15} textAnchor="middle" className="wf-svg-name">{it.name}</text>
                   <text x={c} y={y} textAnchor="middle" className="wf-svg-sub" style={subStyle}>{it.sub}</text>
                 </g>

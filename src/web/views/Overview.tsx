@@ -12,7 +12,7 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
   return (
     <div style={{ position: "relative", width: 180, height: 180 }}>
       <svg width={180} height={180} viewBox="0 0 180 180">
-        <circle cx={90} cy={90} r={r} fill="none" stroke="rgba(255,255,255,.06)" strokeWidth={10} />
+        <circle cx={90} cy={90} r={r} fill="none" stroke="var(--fg)" strokeOpacity={.06} strokeWidth={10} />
         <circle cx={90} cy={90} r={r} fill="none" stroke={color} strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(score / 100) * c} ${c}`} transform="rotate(-90 90 90)" style={{ filter: `drop-shadow(0 0 8px ${color})`, transition: "stroke-dasharray .8s" }} />
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>

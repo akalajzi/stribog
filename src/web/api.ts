@@ -7,6 +7,49 @@ export type { Analysis, Finding, Severity, Category } from "../core/analyze.ts";
 export type { Device, NetworkModel, Port, Network, Ssid, Radio } from "../core/model.ts";
 export type { Layout, LNode, LLink } from "../core/layout.ts";
 
+/** Merge notes for a device; null clears a field. Resolves to an error message, or undefined. */
+export async function saveDeviceNotes(mac: string, patch: Record<string, unknown>): Promise<string | undefined> {
+  const res = await fetch(`/api/notes/devices/${encodeURIComponent(mac)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
+  if (res.ok) return undefined;
+  return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`;
+}
+
+export interface TokenInfo {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+export interface AuditEntry {
+  at: string;
+  target: string;
+  before: unknown;
+  after: unknown;
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, { ...init, headers: { "content-type": "application/json", ...init?.headers } });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+  return body;
+}
+export const listTokens = () => api<TokenInfo[]>("/api/tokens");
+export const createToken = (name: string) => api<{ token: string; info: TokenInfo }>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) });
+export const revokeToken = (id: string) => api<{ ok: true }>(`/api/tokens/${id}`, { method: "DELETE" });
+export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
+
+export type Theme = "dark" | "light" | "system";
+export const getTheme = (): Theme => (localStorage.getItem("stribog-theme") as Theme | null) ?? "dark";
+/** Applies the theme to the page; "system" follows the operating system. */
+export function applyTheme(t: Theme = getTheme()) {
+  const light = t === "light" || (t === "system" && matchMedia("(prefers-color-scheme: light)").matches);
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+}
+export function setTheme(t: Theme) {
+  localStorage.setItem("stribog-theme", t);
+  applyTheme(t);
+}
+
 const post = (path: string, body?: unknown) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
 
 export function useSession() {
@@ -87,7 +130,7 @@ export function useNetwork(onSignedOut: (reason: string) => void) {
     return () => clearInterval(t);
   }, [data?.meta.mode, load]);
 
-  return { data, error, loading, reload: () => load(true) };
+  return { data, error, loading, reload: () => load(true), refetch: () => load() };
 }
 
 /** Tiny hash router: #/map?d=mac:..  */

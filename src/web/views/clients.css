@@ -13,7 +13,7 @@
 .cl-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 26px 0 12px; }
 .cl-bar .filters { flex: 1; }
 .cl-search { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 12px; border-radius: 9px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--hair-2); color: var(--tx-3); width: 280px; transition: box-shadow .15s; }
-.cl-search:focus-within { box-shadow: inset 0 0 0 1px var(--hair-3), 0 0 0 3px rgba(147, 180, 255, .08); color: var(--tx-2); }
+.cl-search:focus-within { box-shadow: inset 0 0 0 1px var(--hair-3), 0 0 0 3px color-mix(in srgb, var(--mg) 8%, transparent); color: var(--tx-2); }
 .cl-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--tx-1); font: inherit; }
 .cl-search input::placeholder { color: var(--tx-3); }
 .cl-clear { border: 0; background: none; color: var(--tx-3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
@@ -25,7 +25,7 @@
 .cl-group td .mono { letter-spacing: 0; margin-left: 4px; }
 .cl-row { cursor: pointer; }
 .cl-row td { padding-top: 11px; padding-bottom: 11px; }
-.cl-row:hover td { background: rgba(255, 255, 255, .025) !important; }
+.cl-row:hover td { background: color-mix(in srgb, var(--fg) 2.5%, transparent) !important; }
 .cl-row.off .cl-dev b { color: var(--tx-2); }
 .cl-dev { display: flex; align-items: center; gap: 11px; min-width: 190px; }
 .cl-dev b { display: block; font-weight: 500; color: var(--tx-1); }
@@ -38,7 +38,7 @@
 .cl-tagline { font-size: 11px; color: var(--tx-3); }
 .cl-drift { font-size: 11px; color: var(--warn); white-space: nowrap; }
 .cl-drift::before { content: "≠ "; opacity: .8; }
-.cl-up { color: var(--up); background: rgba(217, 212, 200, .07); box-shadow: none; }
+.cl-up { color: var(--up); background: color-mix(in srgb, var(--up) 7%, transparent); box-shadow: none; }
 .cl-status { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
 .cl-st { color: var(--tx-2); font-size: 12px; min-width: 44px; }
 .cl-sev { width: 8px; height: 8px; border-radius: 2px; transform: rotate(45deg); margin-right: 4px; cursor: help; }
