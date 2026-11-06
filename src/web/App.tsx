@@ -3,6 +3,7 @@ import { useNetwork, useRoute, useSession, type Finding, type NetworkPayload, ty
 import { Logo } from "./components/Logo.tsx";
 import { Login } from "./views/Login.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
+import { DeviceView } from "./views/DeviceView.tsx";
 import { Topology } from "./components/Topology.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { Overview } from "./views/Overview.tsx";
@@ -90,6 +91,8 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
           <NetworkView data={data} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/plan" ? (
           <PlanView data={data} />
+        ) : path === "/device" && params.get("d") ? (
+          <DeviceView data={data} id={params.get("d")!} onBack={() => go("/map", { d: params.get("d")! })} onSelect={(id) => go("/device", { d: id })} />
         ) : path === "/settings" ? (
           <SettingsView data={data} session={session} />
         ) : (
@@ -151,6 +154,7 @@ function MapView({ data, selected, highlight, go, onNotesSaved }: { data: Networ
           onClose={() => select(undefined)}
           onSelect={(id) => select(id)}
           onNotesSaved={onNotesSaved}
+          onDetails={(id) => go("/device", { d: id })}
           onFinding={(fid) => {
             go("/");
             setTimeout(() => document.getElementById(`f-${fid}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);

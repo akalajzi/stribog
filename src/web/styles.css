@@ -10,8 +10,8 @@
   --hair-2: rgba(255, 255, 255, 0.1);
   --hair-3: rgba(255, 255, 255, 0.16);
   --tx-1: #ece9e2;
-  --tx-2: #9aa0aa;
-  --tx-3: #5d636d;
+  --tx-2: #aeb4be;
+  --tx-3: #80868f;
 
   --mg: #93b4ff; /* 2.5G+ wired */
   --g1: #6fd6c4; /* 1G wired */
@@ -28,6 +28,9 @@
   /* The ink overlays are mixed from: white on dark, black on light. */
   --fg: #ffffff;
   --code: #cfd6e4;
+  /* Chart series (download, upload): validated for colour vision and contrast on the panel surface. */
+  --chart-down: #5f8cf0;
+  --chart-up: #c9762a;
 
   --sans: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
@@ -63,6 +66,8 @@
   --legacy: #8b8f97;
   --fg: #000000;
   --code: #2b3140;
+  --chart-down: #3e6ee0;
+  --chart-up: #c06a1e;
 }
 
 * { box-sizing: border-box; }
@@ -276,3 +281,4 @@ pre.cli .c { color: var(--tx-3); }
 .notes-form .svc-row { display: grid; grid-template-columns: 1fr 72px; gap: 6px; }
 .notes-error { margin: 0; color: var(--bad); }
 .notes-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.details-btn { justify-content: space-between; height: 34px; }

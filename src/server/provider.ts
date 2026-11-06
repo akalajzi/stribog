@@ -91,8 +91,8 @@ function storeAt(path: string, audit: string | undefined, persist = true): Notes
 type Cached = { at: number; snap: Snapshot; meta: Omit<NetworkPayload["meta"], "refreshedAt">; payload: NetworkPayload; notes: unknown };
 let filesCache: Cached | undefined;
 let demoCache: Cached | undefined;
-/** The router session that read most recently, so an agent can see the network too. */
-let lastLive: Session | undefined;
+/** The router session that read most recently, so agents and the recorder can see the network too. On globalThis so it survives Vite's module reloads. */
+const LIVE = globalThis as { __stribogLastLive?: Session };
 
 /**
  * The network as the given session sees it. Without a session this reads files only: the
@@ -114,6 +114,18 @@ export async function getNetwork(session?: Session, force = false): Promise<Netw
   return withNotes(filesCache, notes);
 }
 
+/** The most recent signed-in router session, while it lasts: agents and the recorder read through it. */
+export function liveSession(): Session | undefined {
+  const l = LIVE.__stribogLastLive;
+  return l && isAlive(l) && l.router ? l : undefined;
+}
+
+/** The demo's own router state (its connection table, DNS cache), for activity in the demo. */
+export function demoState(): Record<string, import("../core/ros.ts").RosRecord[]> | undefined {
+  demoCache ??= fromFiles(DEMO_CONFIG, "demo");
+  return demoCache.snap.devices.find((d) => d.role === "router")?.state;
+}
+
 /**
  * What an agent sees: a fresh read through the most recent signed-in session while it lasts,
  * else that session's last picture (marked stale), else nothing.
@@ -121,8 +133,8 @@ export async function getNetwork(session?: Session, force = false): Promise<Netw
 export async function getNetworkForAgent(): Promise<NetworkPayload | undefined> {
   const s = setup();
   if (!s.login) return getNetwork();
-  if (lastLive && isAlive(lastLive) && lastLive.router) return liveNetwork(lastLive, lastLive.router, s, false, false);
-  const prev = lastLive?.cache as Cached | undefined;
+  if (LIVE.__stribogLastLive && isAlive(LIVE.__stribogLastLive) && LIVE.__stribogLastLive.router) return liveNetwork(LIVE.__stribogLastLive, LIVE.__stribogLastLive.router, s, false, false);
+  const prev = LIVE.__stribogLastLive?.cache as Cached | undefined;
   if (!prev) return undefined;
   const p = withNotes(prev, notesFor(false).get());
   return { ...p, meta: { ...p.meta, stale: true, error: "Nobody is signed in to Stribog right now, so this is the last picture it read." } };
@@ -164,7 +176,7 @@ async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Ca
     if (s.config.debug?.saveSnapshot) writeFileSync(expand(s.config.debug.saveSnapshot, s.base), JSON.stringify(snap, null, 2) + "\n", { mode: 0o600 });
     const c: Cached = { at: Date.now(), snap, meta: { mode: "live", sample: false, configPath: s.configPath }, payload: undefined as unknown as NetworkPayload, notes: Symbol() };
     session.cache = c;
-    if (touch) lastLive = session;
+    if (touch) LIVE.__stribogLastLive = session;
     return withNotes(c, notesFor(false).get());
   } catch (err) {
     // A changed password ends the session; anything else keeps the last picture, marked stale.

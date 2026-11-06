@@ -81,6 +81,27 @@
     { "name": "ether8", "rx-bits-per-second": "12000", "tx-bits-per-second": "91000" },
     { "name": "sfp-sfpplus1", "rx-bits-per-second": "0", "tx-bits-per-second": "0" }
   ],
+  "/ip/firewall/connection": [
+    { ".id": "*1", "protocol": "tcp", "src-address": "192.168.50.101:51514", "dst-address": "198.51.100.20:443", "reply-src-address": "198.51.100.20:443", "orig-bytes": "1834221", "repl-bytes": "512334122", "tcp-state": "established" },
+    { ".id": "*2", "protocol": "udp", "src-address": "192.168.50.101:61022", "dst-address": "198.51.100.21:443", "reply-src-address": "198.51.100.21:443", "orig-bytes": "920114", "repl-bytes": "88120455" },
+    { ".id": "*3", "protocol": "tcp", "src-address": "192.168.50.101:51533", "dst-address": "192.0.2.80:443", "reply-src-address": "192.0.2.80:443", "orig-bytes": "48211", "repl-bytes": "210933", "tcp-state": "established" },
+    { ".id": "*4", "protocol": "tcp", "src-address": "192.168.50.50:40112", "dst-address": "203.0.113.88:8883", "reply-src-address": "203.0.113.88:8883", "orig-bytes": "88213", "repl-bytes": "41022", "tcp-state": "established" },
+    { ".id": "*5", "protocol": "udp", "src-address": "192.168.50.50:123", "dst-address": "192.0.2.123:123", "reply-src-address": "192.0.2.123:123", "orig-bytes": "152", "repl-bytes": "152" },
+    { ".id": "*6", "protocol": "tcp", "src-address": "192.168.50.10:42210", "dst-address": "198.51.100.60:443", "reply-src-address": "198.51.100.60:443", "orig-bytes": "1288001992", "repl-bytes": "2210933", "tcp-state": "established" },
+    { ".id": "*7", "protocol": "udp", "src-address": "192.168.50.10:53122", "dst-address": "192.0.2.53:853", "reply-src-address": "192.0.2.53:853", "orig-bytes": "210331", "repl-bytes": "882114" },
+    { ".id": "*8", "protocol": "tcp", "src-address": "192.168.50.40:50211", "dst-address": "203.0.113.88:8883", "reply-src-address": "203.0.113.88:8883", "orig-bytes": "22110", "repl-bytes": "9802", "tcp-state": "established" },
+    { ".id": "*9", "protocol": "tcp", "src-address": "192.168.50.30:39001", "dst-address": "198.51.100.21:443", "reply-src-address": "198.51.100.21:443", "orig-bytes": "2011220", "repl-bytes": "244820993", "tcp-state": "established", "connection-type": "fasttrack" }
+  ],
+  "/ip/dns/cache": [
+    { "name": "video.stream.example", "type": "CNAME", "data": "edge-12.cdn.example.net", "ttl": "1h" },
+    { "name": "edge-12.cdn.example.net", "type": "A", "data": "198.51.100.20", "ttl": "1h" },
+    { "name": "video.stream.example", "type": "A", "data": "198.51.100.21", "ttl": "1h" },
+    { "name": "mail.example.com", "type": "A", "data": "192.0.2.80", "ttl": "1h" },
+    { "name": "mqtt.printers.example", "type": "A", "data": "203.0.113.88", "ttl": "1h" },
+    { "name": "time.example.org", "type": "A", "data": "192.0.2.123", "ttl": "1h" },
+    { "name": "backup.example.net", "type": "A", "data": "198.51.100.60", "ttl": "1h" },
+    { "name": "dns.example.org", "type": "A", "data": "192.0.2.53", "ttl": "1h" }
+  ],
   "/interface/wifi/registration-table": [
     { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:70", "signal": "-52", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "960.7Mbps", "uptime": "6h12m", "tx-bits-per-second": "38400000", "rx-bits-per-second": "1900000" },
     { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "5E:00:5E:00:53:71", "signal": "-48", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "1080.6Mbps", "uptime": "2h40m", "tx-bits-per-second": "820000", "rx-bits-per-second": "95000" },

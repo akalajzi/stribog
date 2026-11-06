@@ -364,3 +364,23 @@ it("reads traffic now: per router port from monitor-traffic, per Wi-Fi client fr
   expect(byMac("00:00:5E:00:53:70")!.via).toMatchObject({ downBps: 38_400_000, upBps: 1_900_000 });
   expect(byMac("00:00:5E:00:53:72")?.via?.downBps).toBe(0);
 });
+
+it("names a device behind a container's veth after the container", () => {
+  const mm = buildModel({
+    collectedAt: "x",
+    devices: [
+      {
+        role: "router",
+        config: { meta: {}, menus: { "/container": [{ name: "dns-filter", tag: "example/dns-filter:latest", interface: "veth-dns", status: "running" }] } },
+        state: {
+          "/interface/bridge/host": [{ "mac-address": "02:00:5E:00:53:EA", "on-interface": "veth-dns", bridge: "lan" }],
+          "/ip/arp": [{ address: "192.168.50.53", "mac-address": "02:00:5E:00:53:EA", interface: "lan", status: "reachable", complete: "true" }],
+        },
+        sources: [],
+      },
+    ],
+  });
+  const d = mm.devices.find((x) => x.mac === "02:00:5E:00:53:EA")!;
+  expect(d).toMatchObject({ name: "dns-filter", nameSource: "container", kind: "server", kindCertainty: "read" });
+  expect(d.facts).toContain("A container running on the router itself: “dns-filter”, image example/dns-filter:latest, running");
+});

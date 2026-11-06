@@ -60,7 +60,7 @@ export interface Device {
   kind: DeviceKind;
   kindCertainty: Certainty;
   name: string;
-  nameSource: "user" | "identity" | "comment" | "hostname" | "vendor" | "mac" | "system";
+  nameSource: "user" | "identity" | "comment" | "container" | "hostname" | "vendor" | "mac" | "system";
   mac?: string;
   ip?: string;
   hostname?: string;
@@ -657,6 +657,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
   // The WAN gateway is the upstream device, not a client, however the router saw it.
   const arp = stateMenu("/ip/arp").filter((a) => !gwMac || normMac(a["mac-address"]) !== gwMac);
   const upstreamSide = (iface?: string) => zoneOfIface(iface) === "upstream";
+  // RouterOS containers sit behind veth interfaces; the container says what the device is.
+  const containers = menu(cfg, "/container");
   const routerMacs = new Set(menu(cfg, "/interface/bridge").map((b) => normMac(b["admin-mac"])).filter(Boolean));
   const macs = new Set<string>();
   for (const l of leasesCfg) macs.add(normMac(l["mac-address"]));
@@ -710,9 +712,13 @@ export function buildModel(snap: Snapshot): NetworkModel {
       kindCertainty = "inferred";
     }
 
+    const container = host?.["on-interface"] ? containers.find((c) => c.interface === host["on-interface"]) : undefined;
+    if (container && !ovd?.kind) [kind, kindCertainty] = ["server", "read"];
+
     let name = ovd?.name;
     let nameSource: Device["nameSource"] = "user";
     if (!name && comment) [name, nameSource] = [shortName(comment), "comment"];
+    if (!name && container?.name) [name, nameSource] = [container.name, "container"];
     if (!name && hostname) [name, nameSource] = [hostname, "hostname"];
     if (!name && v.vendor) [name, nameSource] = [`${v.vendor} ${mac.slice(-5)}`, "vendor"];
     if (!name) [name, nameSource] = [`${v.private ? "Private" : KIND_LABEL[kind]} ${mac.slice(-5)}`, "mac"];
@@ -742,6 +748,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
     else if (ip && !lanNet?.cidr) d.zone = "lan";
     else if (ip && lanNet?.cidr && !inCidr(ip, lanNet.cidr) && d.network === undefined) d.zone = "upstream";
     if (comment) d.facts.push(`DHCP reservation note: “${comment}”`);
+    if (container) d.facts.push(`A container running on the router itself: “${container.name}”${container.tag ?? container["remote-image"] ? `, image ${container.tag ?? container["remote-image"]}` : ""}${container.status ? `, ${container.status}` : ""}`);
     if (onLan && upArp?.address) d.facts.push(`Also known on the upstream network as ${upArp.address} (${arpWords(upArp)})`);
     if (!onLan && upArp) d.facts.push(`Seen only on the upstream network, in the router's address table: ${arpWords(upArp)}`);
     if (lc?.address && currentIp && currentIp !== lc.address) d.facts.push(`Reserved ${lc.address}, but currently at ${currentIp}`);

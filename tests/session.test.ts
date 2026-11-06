@@ -210,7 +210,7 @@ describe("web API sessions", () => {
     const client = new Client({ name: "test", version: "1" });
     await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp"), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(["get_change_log", "get_device", "get_network_overview", "get_review", "list_devices", "update_device_notes", "update_network_notes"]);
+    expect(tools).toEqual(["get_change_log", "get_device", "get_device_activity", "get_network_overview", "get_review", "list_devices", "update_device_notes", "update_network_notes"]);
 
     const text = (r: unknown) => JSON.parse((r as { content: { text: string }[] }).content[0]!.text);
     const ov = text(await client.callTool({ name: "get_network_overview", arguments: {} }));
@@ -223,6 +223,8 @@ describe("web API sessions", () => {
 
     const dev = text(await client.callTool({ name: "get_device", arguments: { device: "Garage Pi" } }));
     expect(dev).toMatchObject({ name: "Garage Pi", nameFrom: "user", services: [{ name: "Home Assistant", port: 8123 }] });
+    const act = text(await client.callTool({ name: "get_device_activity", arguments: { device: "Garage Pi" } }));
+    expect(act).toMatchObject({ device: { name: "Garage Pi" }, now: { flows: [] }, recorded: { samples: 0 } });
     const log = text(await client.callTool({ name: "get_change_log", arguments: { limit: 1 } }));
     expect(log[0].target).toBe("device:00:00:5E:00:53:99");
     await client.close();
@@ -234,5 +236,12 @@ describe("web API sessions", () => {
     const net = await (await fetch(base + "/api/network", { headers: jar })).json();
     expect(net.meta.mode).toBe("demo");
     expect(net.model.site).toBe("Maple Street");
+    // Details of a device: who it talks to now (the demo's connection table) and its recorded day.
+    const act = await (await fetch(base + `/api/devices/${encodeURIComponent("mac:00:00:5E:00:53:70")}/activity?hours=24`, { headers: jar })).json();
+    expect(act.device.name).toBe("Alex MacBook");
+    expect(act.now.flows[0]).toMatchObject({ remote: "198.51.100.20", port: 443, names: ["video.stream.example", "edge-12.cdn.example.net"] });
+    expect(act.history.samples.length).toBeGreaterThan(100);
+    expect(act.history.talks[0].names[0]).toBe("video.stream.example");
+    expect((await fetch(base + "/api/devices/mac%3A00%3A00%3A5E%3A00%3A53%3AFF/activity", { headers: jar })).status).toBe(404);
   });
 });

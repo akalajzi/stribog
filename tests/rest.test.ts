@@ -62,6 +62,7 @@ const ROUTES: Record<string, unknown> = {
     { name: "sfp-sfpplus1", "rx-bits-per-second": "0", "tx-bits-per-second": "0" },
   ],
   "GET /ppp/secret": [{ name: "x", password: "nope" }],
+  "GET /container": [{ ".id": "*1", name: "dns-filter", tag: "example/dns-filter:latest", interface: "veth1", cmd: "--token hunter2", envlist: "ag", status: "running" }],
 };
 
 describe("RouterOsRest", () => {
@@ -177,6 +178,13 @@ describe("RouterOsRest", () => {
     const snap = await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl }).snapshot();
     expect(calls.filter((c) => c.method === "POST")).toEqual([]);
     expect(snap.state!["/interface/ethernet/monitor"]).toEqual([]);
+  });
+
+  it("keeps only identifying fields of containers", async () => {
+    const { fetchImpl } = fakeRouter(ROUTES);
+    const snap = await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl }).snapshot();
+    expect(snap.config.menus["/container"]).toEqual([{ name: "dns-filter", tag: "example/dns-filter:latest", interface: "veth1", status: "running" }]);
+    expect(JSON.stringify(snap)).not.toContain("hunter2");
   });
 
   it("never reads menus that hold secrets it does not need", async () => {

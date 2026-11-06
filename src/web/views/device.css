@@ -1,0 +1,34 @@
+.dv { display: grid; gap: 16px; align-content: start; }
+.dv-back { justify-self: start; font-size: 13px; }
+.dv-head { display: flex; gap: 16px; align-items: center; }
+.dv-head h1 { margin: 0 0 4px; }
+.dv-head p { margin: 0; line-height: 1.5; }
+.dv-head .ok { color: var(--ok); }
+.dv-ic { width: 60px; height: 60px; border-radius: 14px; display: grid; place-items: center; color: var(--tx-1); background: radial-gradient(circle at 50% 30%, var(--ink-4), var(--ink-2)); box-shadow: inset 0 0 0 1px var(--hair-2); flex: none; }
+.dv-range { justify-self: start; }
+.dv-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.dv-tile { display: grid; gap: 4px; padding: 14px 16px; }
+.dv-tile small { color: var(--tx-3); font-size: 12px; }
+.dv-tile b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dv-tile .faint { font-size: 12px; }
+.dv-sec { display: grid; gap: 12px; padding: 18px 20px; min-width: 0; }
+.dv-sec-h { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.dv-sec h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.dv-legend { display: flex; gap: 16px; color: var(--tx-2); font-size: 12px; margin-left: auto; }
+.dv-legend span, .dv-tip span { display: inline-flex; align-items: center; gap: 6px; }
+.dv-legend i, .dv-tip i { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.dv-chart { position: relative; min-width: 0; }
+.dv-chart svg { display: block; overflow: visible; }
+.dv-axis { fill: var(--tx-3); font-size: 11px; font-family: var(--mono); }
+.dv-tip { position: absolute; top: 8px; display: grid; gap: 4px; padding: 9px 11px; border-radius: 9px; background: var(--ink-1); box-shadow: inset 0 0 0 1px var(--hair-2), 0 8px 24px rgba(0, 0, 0, .25); font-size: 12px; pointer-events: none; min-width: 170px; }
+.dv-tip b { font-weight: 600; }
+.dv-tip .mono { margin-left: auto; padding-left: 10px; }
+.dv-foot { margin: 0; font-size: 12px; line-height: 1.5; }
+.dv-error { color: var(--bad); margin: 0; }
+.dv-tablewrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.dv-t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.dv-t th { text-align: left; font-weight: 500; color: var(--tx-3); padding: 6px 8px; position: sticky; top: 0; background: var(--ink-2); }
+.dv-t td { padding: 7px 8px; border-top: 1px solid var(--hair); vertical-align: top; }
+.dv-t .num { text-align: right; white-space: nowrap; }
+.dv-t a { color: var(--tx-1); text-decoration: none; border-bottom: 1px dotted var(--tx-3); }
+@media (max-width: 900px) { .dv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

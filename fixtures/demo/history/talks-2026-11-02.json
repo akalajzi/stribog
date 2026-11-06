@@ -1,0 +1,19 @@
+{
+ "00:00:5E:00:53:10": {
+  "out|tcp|198.51.100.60|443": {
+   "direction": "out",
+   "protocol": "tcp",
+   "remote": "198.51.100.60",
+   "port": 443,
+   "scope": "internet",
+   "down": 41000000,
+   "up": 152000000000,
+   "first": "2026-11-02T00:00:00.000Z",
+   "last": "2026-11-02T02:10:00.000Z",
+   "names": [
+    "backup.example.net"
+   ],
+   "service": "web (HTTPS)"
+  }
+ }
+}

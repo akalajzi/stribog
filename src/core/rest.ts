@@ -47,6 +47,8 @@ export const CONFIG_PATHS = [
   "/tool/mac-server",
   "/tool/mac-server/mac-winbox",
   "/disk/settings",
+  "/container",
+  "/interface/veth",
   "/ipv6/nd",
 ];
 
@@ -243,6 +245,21 @@ export class RouterOsRest {
     return rows.map((r, i) => ({ ...r, name: r.name ?? names[i]! }));
   }
 
+  /**
+   * The connection tracking table: who talks to whom, on which ports, how much. Read on demand
+   * (it can be large), trimmed to the fields Stribog uses. Only routed traffic is tracked.
+   */
+  async connections(): Promise<RosRecord[]> {
+    const fields = [".id", "protocol", "src-address", "dst-address", "reply-src-address", "reply-dst-address", "orig-bytes", "repl-bytes", "orig-packets", "repl-packets", "tcp-state", "timeout", "connection-type", "fasttrack"];
+    const rows = await this.call("POST", "/ip/firewall/connection/print", { ".proplist": fields }).catch(() => [] as RosRecord[]);
+    return rows.length ? rows : this.get("/ip/firewall/connection");
+  }
+
+  /** The router's DNS cache: names it resolved recently, to put names on addresses. */
+  dnsCache(): Promise<RosRecord[]> {
+    return this.get("/ip/dns/cache");
+  }
+
   async snapshot(): Promise<DeviceSnapshot> {
     // Fail loudly on a bad login instead of returning an empty network.
     const resource = await this.get("/system/resource");
@@ -258,6 +275,9 @@ export class RouterOsRest {
       this.get("/ip/dhcp-client").then((r) => (state["/ip/dhcp-client"] = r)).catch(failed("GET /ip/dhcp-client")),
       this.get("/ip/dhcp-server/lease").then((r) => (state["/ip/dhcp-server/lease"] = r)).catch(failed("GET /ip/dhcp-server/lease")),
     ]);
+    // Containers can carry secrets in their command line or environment: keep only what identifies them.
+    const keep = ["name", "tag", "remote-image", "interface", "hostname", "status", "running", "stopped"];
+    menus["/container"] = (menus["/container"] ?? []).map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => keep.includes(k))) as RosRecord);
     // REST lists dynamic leases too; the config view should only hold static ones.
     menus["/ip/dhcp-server/lease"] = (menus["/ip/dhcp-server/lease"] ?? []).filter((l) => l.dynamic !== "true");
     const ether = menus["/interface/ethernet"] ?? [];

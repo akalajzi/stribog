@@ -10,10 +10,12 @@ import type { Device, NetworkModel } from "../core/model.ts";
 import { normMac } from "../core/net.ts";
 import { NotesError, type NotesStore } from "./notes.ts";
 import type { NetworkPayload } from "./provider.ts";
+import type { DeviceActivity } from "./device-activity.ts";
 
 export interface McpContext {
   network: () => Promise<NetworkPayload | undefined>;
   notes: NotesStore;
+  activity: (id: string, hours: number) => Promise<DeviceActivity | undefined>;
 }
 
 const INSTRUCTIONS = `Stribog shows a MikroTik home network as read from its router, plus notes that people and agents add.
@@ -110,6 +112,43 @@ function buildServer(ctx: McpContext): McpServer {
       if (!d) return fail(`No device matches “${device}”. Use list_devices to see what exists.`);
       const findings = p.analysis.findings.filter((f) => f.severity !== "pass" && f.devices?.includes(d.id)).map((f) => ({ id: f.id, severity: f.severity, title: f.title, summary: f.summary }));
       return json({ ...brief(d, p.model), vendor: d.vendor, model: d.model, version: d.version, reserved: d.reserved, leaseComment: d.leaseComment, lastSeen: d.lastSeen, facts: d.facts, findings });
+    }),
+  );
+
+  server.registerTool(
+    "get_device_activity",
+    {
+      title: "Device activity",
+      description:
+        "Who a device talks to and how much: its connections through the router right now (other end, DNS name when the router knows it, port and what the port is usually for, bytes each way), what it talked to over the last hours as recorded, and its traffic and online history. Only routed traffic is visible (internet and between networks), not traffic between devices on the same LAN. Useful to work out what an unknown device is.",
+      inputSchema: { device: z.string().describe("MAC address, IP address or name."), hours: z.number().int().min(1).max(720).optional().describe("How far back, default 24.") },
+      annotations: read,
+    },
+    guard(async ({ device, hours }: { device: string; hours?: number }) => {
+      const p = await network();
+      const d = findDevice(p.model, device);
+      if (!d) return fail(`No device matches “${device}”. Use list_devices to see what exists.`);
+      const a = await ctx.activity(d.id, hours ?? 24);
+      if (!a) return fail("No activity available for this device.");
+      const s = a.history.samples;
+      const step = s.length > 1 ? (s.at(-1)![0] - s[0]![0]) / (s.length - 1) : 60_000;
+      const peak = s.reduce((m, x) => Math.max(m, x[2] ?? 0, x[3] ?? 0), 0);
+      return json({
+        device: a.device,
+        now: { at: a.now.at, note: a.now.note, flows: a.now.flows.slice(0, 40) },
+        recorded: {
+          from: new Date(a.history.from).toISOString(),
+          to: new Date(a.history.to).toISOString(),
+          recording: a.history.recording,
+          since: a.history.since,
+          samples: s.length,
+          onlineShare: s.length ? Math.round((s.filter((x) => x[1]).length / s.length) * 100) / 100 : undefined,
+          bytesDown: Math.round(s.reduce((t, x) => t + ((x[2] ?? 0) * step) / 8000, 0)),
+          bytesUp: Math.round(s.reduce((t, x) => t + ((x[3] ?? 0) * step) / 8000, 0)),
+          peakBps: peak,
+          talks: a.history.talks.slice(0, 40),
+        },
+      });
     }),
   );
 

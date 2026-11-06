@@ -7,6 +7,8 @@ import { getNetwork, getNetworkForAgent, notesFor, setup, SignedOutError } from 
 import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
+import { deviceActivity } from "./device-activity.ts";
+import { ensureRecorder } from "./recorder.ts";
 import { createSession, endSession, LoginError, sessionFrom, setSessionCookie, signIn, type Session } from "./session.ts";
 
 const DIST = resolve(import.meta.dirname, "../../dist");
@@ -31,6 +33,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
   const url = new URL(req.url ?? "/", "http://x");
   const route = `${req.method} ${url.pathname}`;
   if (!url.pathname.startsWith("/api/") && url.pathname !== "/mcp") return false;
+  ensureRecorder();
   try {
     const s = setup();
     // An agent token (Authorization: Bearer) or this app's own session cookie.
@@ -86,6 +89,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       await handleMcp(req, res, body, {
         network: () => (agent ? getNetworkForAgent() : getNetwork(session)),
         notes: notesFor(session?.kind === "demo"),
+        activity: (id, hours) => deviceActivity({ session, agent: !!agent, id, hours }),
       });
       return true;
     }
@@ -103,6 +107,13 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         setSessionCookie(res, undefined);
         return send(res, 401, { error: err.message }), true;
       }
+    }
+
+    const act = /^\/api\/devices\/([^/]+)\/activity$/.exec(url.pathname);
+    if (act && req.method === "GET") {
+      const hours = Math.min(24 * 30, Math.max(1, Number(url.searchParams.get("hours")) || 24));
+      const a = await deviceActivity({ session, agent: !!agent, id: decodeURIComponent(act[1]!), hours });
+      return a ? send(res, 200, a) : send(res, 404, { error: "No such device." }), true;
     }
 
     // ---- notes: same rights for people and agents ----

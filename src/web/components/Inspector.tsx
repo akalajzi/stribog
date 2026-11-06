@@ -17,7 +17,7 @@ export function SignalBars({ dbm }: { dbm?: number }) {
 
 const certLabel = (c?: string) => (c === "inferred" ? "probably" : c === "user" ? "noted" : undefined);
 
-export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved }: { data: NetworkPayload; id: string; onClose: () => void; onSelect: (id: string) => void; onFinding: (fid: string) => void; onNotesSaved: () => void }) {
+export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved, onDetails }: { data: NetworkPayload; id: string; onClose: () => void; onSelect: (id: string) => void; onFinding: (fid: string) => void; onNotesSaved: () => void; onDetails: (id: string) => void }) {
   const { model, analysis } = data;
   const planned = model.planned.find((p) => `planned:${p.id}` === id);
   if (planned) {
@@ -70,6 +70,12 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
         onClose={onClose}
       />
       <DeviceAbout key={`about-${d.id}`} d={d} onSaved={onNotesSaved} />
+      {d.mac && (
+        <button className="btn details-btn" onClick={() => onDetails(d.id)}>
+          Details: traffic, who it talks to, history
+          <span aria-hidden>→</span>
+        </button>
+      )}
 
       {d.via?.kind === "wifi" ? (
         <div className="stats">
