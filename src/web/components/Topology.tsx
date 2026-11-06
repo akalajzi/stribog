@@ -139,8 +139,10 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
                 <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.95 : 0.45) : 1} strokeWidth={wifi ? 2.2 : dashed ? 1.6 : width} strokeDasharray={wifi ? "8 6" : dashed} strokeLinecap="round" />
                 <Flow pathId={l.id} down={l.down} up={l.up} color={c} />
                 {(l.label || busy(l)) && l.labelAt && (
+                  // Port and speed on the first line, traffic now under it, so neighbours stay apart.
                   <text x={l.labelAt.x} y={l.labelAt.y} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
-                    {[l.label, busy(l)].filter(Boolean).join(" · ")}
+                    {l.label && <tspan>{l.label}</tspan>}
+                    {busy(l) && <tspan x={l.labelAt.x} dy={l.label ? 13 : 0}>{busy(l)}</tspan>}
                   </text>
                 )}
               </g>
