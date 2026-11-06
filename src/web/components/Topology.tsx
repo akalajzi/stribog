@@ -281,6 +281,7 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
             );
           })}
 
+          <InternetNow data={data} />
           {router && lan && <title>{lan.label}</title>}
         </svg>
       )}
@@ -299,7 +300,6 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           Moving dots are traffic now: light ones go to the device, coloured ones come back. A red line is at {Math.round(FULL * 100)}% or more of what it can carry.
         </span>
       </div>
-      <InternetNow data={data} />
       <div className="mapctl">
         <button title="Zoom in" onClick={() => (touch(), zoom(0.8))}>+</button>
         <button title="Zoom out" onClick={() => (touch(), zoom(1.25))}>−</button>
@@ -327,22 +327,33 @@ function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
 const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
 
 /** "↓ 48 Mb/s ↑ 2.1 Mb/s" once a link carries at least 1 Mb/s, else nothing. */
-/** Everything going through the router to and from the internet right now, in big numbers. */
+/** Everything going through the router to and from the internet right now, in big numbers beside the ISP's box. */
 function InternetNow({ data }: { data: NetworkPayload }) {
-  const m = data.model;
+  const { model: m, layout } = data;
   const router = m.devices.find((d) => d.id === m.routerId);
   const wan = m.ports.find((p) => p.name === router?.via?.port);
-  if (wan?.rxBps === undefined && wan?.txBps === undefined) return null;
+  const at = layout.nodes.find((n) => n.id === "upstream") ?? layout.nodes.find((n) => n.id === "internet");
+  if (!at || (wan?.rxBps === undefined && wan?.txBps === undefined)) return null;
   // The WAN port's rx comes down from the internet, its tx goes up.
-  const load = loadOf(wan.rxBps, wan.txBps, wan.speedMbps ? { down: wan.speedMbps * 1e6, up: wan.speedMbps * 1e6, label: "" } : undefined);
+  const cap = wan.speedMbps ? wan.speedMbps * 1e6 : undefined;
+  const full = loadOf(wan.rxBps, wan.txBps, cap ? { down: cap, up: cap, label: "" } : undefined);
+  const color = full !== undefined && full >= FULL ? "var(--bad)" : "var(--tx-1)";
+  // Left of the ISP's box, outside the upstream zone around it.
+  const zone = layout.zones.find((z) => at.x > z.x && at.x < z.x + z.w && at.y > z.y && at.y < z.y + z.h);
+  const x = zone ? zone.x - 28 : at.x - 64;
   return (
-    <div className={`mapnow${load !== undefined && load >= FULL ? " full" : ""}`} title={`Through the router's internet port ${wan.name}${wan.speedMbps ? ` (${fmtBps(wan.speedMbps * 1e6)})` : ""}, as it reads now`}>
-      <small>Internet now</small>
-      <div>
-        <span><i>↓</i>{fmtBps(wan.rxBps ?? 0)}</span>
-        <span><i>↑</i>{fmtBps(wan.txBps ?? 0)}</span>
-      </div>
-    </div>
+    <g className="internet-now" fontFamily="JetBrains Mono, monospace" textAnchor="end">
+      <title>{`Through the router's internet port ${wan.name}${cap ? ` (${fmtBps(cap)})` : ""}, as it reads now`}</title>
+      <text x={x} y={at.y - 30} fontSize={11} letterSpacing="0.08em" fill="var(--tx-3)" fontFamily="Inter, sans-serif">INTERNET NOW</text>
+      <text x={x} y={at.y + 4} fontSize={30} fontWeight={600} fill={color}>
+        <tspan fill="var(--tx-3)" fontSize={20}>↓ </tspan>
+        {fmtBps(wan.rxBps ?? 0)}
+      </text>
+      <text x={x} y={at.y + 40} fontSize={30} fontWeight={600} fill={color}>
+        <tspan fill="var(--tx-3)" fontSize={20}>↑ </tspan>
+        {fmtBps(wan.txBps ?? 0)}
+      </text>
+    </g>
   );
 }
 
