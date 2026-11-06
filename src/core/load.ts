@@ -19,6 +19,8 @@ export interface StribogConfig {
   sampleState?: boolean;
   /** The router the web app signs in to. Its data replaces the `router` file source while someone is signed in. */
   router?: RouterSpec;
+  /** Development: write each live read (secrets already scrubbed) to this file, for building fixtures and fixing the model. */
+  debug?: { saveSnapshot?: string };
 }
 
 export interface RouterSpec {

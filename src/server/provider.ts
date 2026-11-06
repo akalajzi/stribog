@@ -1,7 +1,7 @@
 // Where the network picture comes from: files (exports + state), a saved snapshot, the demo
 // network, or the router the user is signed in to.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { analyze, type Analysis } from "../core/analyze.ts";
 import { layoutTopology, type Layout } from "../core/layout.ts";
@@ -110,6 +110,7 @@ function liveNetwork(session: Session, login: RouterLogin, s: Setup, force: bool
 async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Cached | undefined): Promise<NetworkPayload> {
   try {
     const snap = await liveSnapshot(login, s);
+    if (s.config.debug?.saveSnapshot) writeFileSync(expand(s.config.debug.saveSnapshot, s.base), JSON.stringify(snap, null, 2) + "\n", { mode: 0o600 });
     const payload = build(snap, { mode: "live", sample: false, configPath: s.configPath, overridesPath: s.config.overrides ? expand(s.config.overrides, s.base) : undefined });
     session.cache = { at: Date.now(), payload };
     return payload;

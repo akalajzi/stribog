@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { candidateUrls, LoginError, signIn } from "../src/server/session.ts";
@@ -79,6 +79,7 @@ describe("web API sessions", () => {
   let router: Server;
   let app: Server;
   let base = "";
+  let snapFile = "";
   const seen: string[] = [];
   const AUTH = "Basic " + Buffer.from("admin:s3cret").toString("base64");
 
@@ -99,7 +100,8 @@ describe("web API sessions", () => {
     await new Promise<void>((r) => router.listen(0, "127.0.0.1", r));
     const port = (router.address() as { port: number }).port;
     const dir = mkdtempSync(join(tmpdir(), "stribog-"));
-    writeFileSync(join(dir, "stribog.config.json"), JSON.stringify({ router: { url: `http://127.0.0.1:${port}` } }));
+    snapFile = join(dir, "live.json");
+    writeFileSync(join(dir, "stribog.config.json"), JSON.stringify({ router: { url: `http://127.0.0.1:${port}` }, debug: { saveSnapshot: "live.json" } }));
     process.env.STRIBOG_CONFIG = join(dir, "stribog.config.json");
 
     app = createServer(async (req, res) => {
@@ -152,6 +154,11 @@ describe("web API sessions", () => {
     expect(net.meta.mode).toBe("live");
     expect(net.model.devices.find((d: { id: string }) => d.id === net.model.routerId)?.name).toBe("maple-gw");
     expect(JSON.stringify(net)).not.toContain("s3cret");
+    // The development snapshot holds the read, never the credentials.
+    const saved = readFileSync(snapFile, "utf8");
+    expect(JSON.parse(saved).devices[0].config.menus["/system/identity"]).toEqual([{ name: "maple-gw" }]);
+    expect(saved).not.toContain("s3cret");
+    expect(statSync(snapFile).mode & 0o777).toBe(0o600);
     // Signed in at the configured address, not the one the browser sent (192.0.2.1 would not answer).
     expect(seen.some((s) => s.startsWith("GET /rest/"))).toBe(true);
 

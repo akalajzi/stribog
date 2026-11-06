@@ -56,6 +56,8 @@ To pin the address, or to add what the router cannot know, create `stribog.confi
 
 `interval` is the number of seconds between reads while the app is open. Exports of CAPsMAN access points add detail the router itself does not have.
 
+For development, `"debug": { "saveSnapshot": "data/live.json" }` writes every live read to that file (secrets scrubbed, mode 600), which is handy for reproducing a problem in a test.
+
 ### Your own network, offline
 
 Export the configuration on the router (`/export file=router`, then download `router.rsc`) and do the same on each CAPsMAN access point. Then list them in `stribog.config.json` without a `router` entry; Stribog shows them without asking anyone to sign in:
