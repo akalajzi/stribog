@@ -173,7 +173,14 @@ function liveNetwork(session: Session, login: RouterLogin, s: Setup, force: bool
 async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Cached | undefined, touch: boolean): Promise<NetworkPayload> {
   try {
     const snap = await liveSnapshot(login, s);
-    if (s.config.debug?.saveSnapshot) writeFileSync(expand(s.config.debug.saveSnapshot, s.base), JSON.stringify(snap, null, 2) + "\n", { mode: 0o600 });
+    if (s.config.debug?.saveSnapshot) {
+      // The development snapshot also keeps the connection table and DNS cache, read on demand otherwise.
+      const rest = new RouterOsRest({ url: login.url, user: login.user, password: login.password, insecure: login.encrypted });
+      const [conns, dns] = await Promise.all([rest.connections().catch(() => []), rest.dnsCache().catch(() => [])]);
+      const st = snap.devices[0]!.state ?? {};
+      const saved = { ...snap, devices: [{ ...snap.devices[0]!, state: { ...st, "/ip/firewall/connection": conns, "/ip/dns/cache": dns } }, ...snap.devices.slice(1)] };
+      writeFileSync(expand(s.config.debug.saveSnapshot, s.base), JSON.stringify(saved, null, 2) + "\n", { mode: 0o600 });
+    }
     const c: Cached = { at: Date.now(), snap, meta: { mode: "live", sample: false, configPath: s.configPath }, payload: undefined as unknown as NetworkPayload, notes: Symbol() };
     session.cache = c;
     if (touch) LIVE.__stribogLastLive = session;
