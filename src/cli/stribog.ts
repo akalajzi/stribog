@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { analyze, CATEGORY_LABEL, type Analysis, type Finding, type Severity } from "../core/analyze.ts";
+import { analyze, CATEGORY_LABEL, STATUS_LABEL, statusLine, type Analysis, type Finding, type Severity } from "../core/analyze.ts";
 import { adviceRequest } from "../core/advice.ts";
 import { expand, snapshotFromFiles, type StribogConfig } from "../core/load.ts";
 import { buildModel, type NetworkModel } from "../core/model.ts";
@@ -83,8 +83,8 @@ ${c.bold("Usage")}
 
 ${c.bold("audit")}
   Reads the network the same way the web app does: --config, else $STRIBOG_CONFIG, else
-  ./stribog.config.json, else the built-in demo network. Prints the score and the findings
-  grouped by severity.
+  ./stribog.config.json, else the built-in demo network. Prints where the setup stands and
+  the findings grouped by severity. Ideas are optional and never change the status.
     --json        print the full analysis as JSON
     --details     include each finding's explanation and evidence
     --export      audit a single /export file without a config; add --cap for each access point
@@ -251,9 +251,8 @@ function report({ model: m, analysis: a, label, demo, sample, error }: Loaded, d
   if (error) out.push(c.amber(wrap(error, 2, w)));
   out.push("");
 
-  const gradeColor = a.grade === "great" ? c.green : a.grade === "good" ? c.teal : a.grade === "fair" ? c.amber : c.red;
-  const bar = scoreBar(a.score, 24);
-  out.push(`  ${c.bold("Score")} ${gradeColor(c.bold(String(a.score)))}${c.dim("/100")}  ${gradeColor(bar)}  ${gradeColor(a.grade)}`);
+  const statusColor = a.status === "attention" ? c.red : a.status === "loose-ends" ? c.amber : c.green;
+  out.push(`  ${statusColor(c.bold(STATUS_LABEL[a.status]))}  ${c.dim(statusLine(a))}`);
   const counts = ORDER.map((s) => {
     const n = a.counts[s];
     const lbl = s === "pass" ? "good" : s === "critical" ? "critical" : `${s === "info" ? "note" : s}${n === 1 ? "" : "s"}`;
@@ -294,11 +293,6 @@ function finding(f: Finding, details: boolean, w: number): string {
     }
   }
   return lines.join("\n");
-}
-
-function scoreBar(score: number, cells: number): string {
-  const full = Math.round((score / 100) * cells);
-  return "━".repeat(full) + (useColor ? c.dim("━".repeat(cells - full)) : "·".repeat(cells - full));
 }
 
 // ---- collect --------------------------------------------------------------------

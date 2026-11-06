@@ -117,7 +117,7 @@ function TopBar({ data, session }: { data: NetworkPayload; session: SessionInfo 
   return (
     <header className="top">
       <div className="site"><b>{model.site}</b><span className="faint mono" style={{ fontSize: 12 }}>{lan?.cidr}</span></div>
-      <span className="pill"><span className={`dot ${health}`} />{analysis.counts.critical ? "Needs attention" : analysis.counts.warning ? `${analysis.counts.warning} to fix` : "Healthy"}<span className="faint">· score {analysis.score}</span></span>
+      <span className="pill"><span className={`dot ${health}`} />{analysis.counts.critical ? "Needs attention" : analysis.counts.warning ? `${analysis.counts.warning} worth fixing` : "Healthy"}</span>
       <span className="pill">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.6 2.6 3.6 5.4 3.6 8.5s-1 5.9-3.6 8.5c-2.6-2.6-3.6-5.4-3.6-8.5s1-5.9 3.6-8.5z" /></svg>
         {isp ?? "Internet"}{up ? ` via ${up.name.split(" ")[0]}` : ""}

@@ -11,7 +11,7 @@ import { normMac } from "../core/net.ts";
 import { NotesError, type NotesStore } from "./notes.ts";
 import { snapshotOf, type NetworkPayload } from "./provider.ts";
 import { adviceRequest } from "../core/advice.ts";
-import { isOpen } from "../core/analyze.ts";
+import { isOpen, statusLine } from "../core/analyze.ts";
 import type { DeviceActivity } from "./device-activity.ts";
 
 export interface McpContext {
@@ -79,7 +79,7 @@ function buildServer(ctx: McpContext): McpServer {
 
   server.registerTool(
     "get_network_overview",
-    { title: "Network overview", description: "The network at a glance: router, internet connection, networks and DHCP, Wi-Fi names, access points, device counts, review score, and how fresh the data is.", annotations: read },
+    { title: "Network overview", description: "The network at a glance: router, internet connection, networks and DHCP, Wi-Fi names, access points, device counts, the review's status, and how fresh the data is.", annotations: read },
     guard(async () => json(overview(await network(), ctx.notes.get().notes))),
   );
 
@@ -192,15 +192,15 @@ function buildServer(ctx: McpContext): McpServer {
     {
       title: "Review findings",
       description:
-        "Stribog's review of the setup: what is fragile or wrong, worst first, with evidence. Diagnosis only, no fixes: use get_fix_request with a finding's id for everything needed to advise on fixing it. Findings the owner accepted are listed apart and do not count in the score.",
+        "Stribog's review of the setup: what is fragile or wrong, worst first, with evidence. Diagnosis only, no fixes: use get_fix_request with a finding's id for everything needed to advise on fixing it. Findings the owner accepted are listed apart and do not count. Ideas (severity \"suggestion\") are optional and never change the status.",
       inputSchema: { includePassed: z.boolean().optional().describe("Also list what is already good.") },
       annotations: read,
     },
     guard(async ({ includePassed }: { includePassed?: boolean }) => {
       const { analysis } = await network();
       return json({
-        score: analysis.score,
-        grade: analysis.grade,
+        status: analysis.status,
+        summary: statusLine(analysis),
         counts: analysis.counts,
         findings: analysis.findings.filter((f) => !f.accepted && (includePassed || f.severity !== "pass")),
         accepted: analysis.findings.filter((f) => f.accepted).map((f) => ({ id: f.id, title: f.title, ...f.accepted })),
@@ -213,7 +213,7 @@ function buildServer(ctx: McpContext): McpServer {
     {
       title: "Accept a review finding",
       description:
-        "Mark a finding as accepted because it is fine on this network (\"nobody uses that device\", \"we do not want a guest network\"). It stops counting in the score until it changes. Do this only when the owner says so, and give their reason. Logged like any note.",
+        "Mark a finding as accepted because it is fine on this network (\"nobody uses that device\", \"we do not want a guest network\"). It stops counting until it changes. Do this only when the owner says so, and give their reason. Logged like any note.",
       inputSchema: { finding: z.string().describe("The finding's id, from get_review."), reason: z.string().optional().describe("Why it is fine here, in the owner's words.") },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -335,7 +335,7 @@ function overview(p: NetworkPayload, networkNotes?: string) {
     accessPoints: m.devices.filter((d) => d.kind === "ap" && d.managed).map((d) => ({ name: d.name, mac: d.mac, ip: d.ip, status: d.status, model: d.model, version: d.version })),
     ports: m.ports.map((x) => ({ name: x.name, zone: x.zone, speedMbps: x.speedMbps, poeWatts: x.poeWatts, devices: x.deviceIds.map((id) => m.devices.find((d) => d.id === id)?.name ?? id) })),
     devices: { total: people.length, online: people.filter((d) => d.status === "online").length },
-    review: { score: a.score, grade: a.grade, counts: a.counts },
+    review: { status: a.status, summary: statusLine(a), counts: a.counts },
     notes: networkNotes,
   };
 }

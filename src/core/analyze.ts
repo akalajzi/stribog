@@ -1,7 +1,12 @@
-// The setup review: what is good, what is fragile, what to change, and exactly how.
+// The setup review: what is good and what is fragile, with the evidence. Diagnosis only: the fix
+// depends on the whole network, so it comes from an agent (see advice.ts).
 //
-// Rules read the normalized model plus the raw RouterOS config. Each finding explains why it
-// matters in plain words and, where the fix is on the router, gives a RouterOS script to review.
+// Rules read the normalized model plus the raw RouterOS config. Severity means:
+//   critical    broken or exposed right now (no firewall, management open to the internet)
+//   warning     does not work as configured, or reaches beyond the home (a reservation that no
+//               longer matches, a service open to the upstream network)
+//   suggestion  an idea that may or may not suit this network; never changes the status
+//   info        worth knowing, nothing to do
 // Nothing here changes anything.
 
 import { connectionViews, type Device, type NetworkModel, type Radio } from "./model.ts";
@@ -28,12 +33,30 @@ export interface Finding {
   changedSinceAccepted?: { title: string; reason?: string; at: string };
 }
 
+export const STATUS_LABEL: Record<Status, string> = { healthy: "Healthy", "loose-ends": "A few loose ends", attention: "Needs attention" };
+
+/** The status as one sentence: what to fix, and the ideas as optional. */
+export function statusLine(a: Pick<Analysis, "status" | "counts">): string {
+  const c = a.counts;
+  const ideas = c.suggestion ? ` ${plural(c.suggestion, "idea")} to look at if you like.` : "";
+  if (a.status === "attention") return `${plural(c.critical, "thing")} to fix now${c.warning ? `, ${c.warning} more worth fixing` : ""}.${ideas}`;
+  if (a.status === "loose-ends") return `${plural(c.warning, "thing")} worth fixing, nothing urgent.${ideas}`;
+  return `Nothing to fix.${ideas}`;
+}
+
 /** Something to look at: not good already, and not accepted by the owner. */
 export const isOpen = (f: Finding) => f.severity !== "pass" && !f.accepted;
 
+/**
+ * The state of the setup in words, from the worst open finding: "attention" when something is
+ * broken or exposed (critical), "loose-ends" when something does not work as configured or reaches
+ * beyond the home (warning), else "healthy". Ideas and notes never change it: they are
+ * suggestions, and may not suit this network at all.
+ */
+export type Status = "healthy" | "loose-ends" | "attention";
+
 export interface Analysis {
-  score: number;
-  grade: "great" | "good" | "fair" | "poor";
+  status: Status;
   findings: Finding[];
   /** Open findings by severity; accepted ones are counted in `accepted` instead. */
   counts: Record<Severity, number>;
@@ -49,9 +72,6 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   maintenance: "Maintenance",
   hardware: "Ports & power",
 };
-
-const WEIGHT: Record<Severity, number> = { critical: 20, warning: 5, suggestion: 1.5, info: 0, pass: 0 };
-const SUGGESTION_CAP = 20;
 
 interface Ctx {
   m: NetworkModel;
@@ -98,11 +118,8 @@ export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
   findings.sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
   const counted = findings.filter((f) => !f.accepted);
   const counts = Object.fromEntries(order.map((s) => [s, counted.filter((f) => f.severity === s).length])) as Record<Severity, number>;
-  // Suggestions are ideas, not faults: they can never sink the score on their own.
-  const penalty = counted.reduce((n, f) => n + (f.severity === "suggestion" ? 0 : WEIGHT[f.severity]), 0) + Math.min(SUGGESTION_CAP, counts.suggestion * WEIGHT.suggestion);
-  const score = Math.max(0, Math.round(100 - penalty));
-  const grade = score >= 85 ? "great" : score >= 65 ? "good" : score >= 40 ? "fair" : "poor";
-  return { score, grade, findings, counts, accepted: findings.length - counted.length };
+  const status: Status = counts.critical ? "attention" : counts.warning ? "loose-ends" : "healthy";
+  return { status, findings, counts, accepted: findings.length - counted.length };
 }
 
 /** The configuration with reads of its menus noted in `seen`. */
@@ -132,7 +149,7 @@ const doubleNat: Rule = ({ m }) => {
   const cgnat = m.wan.addressKind === "cgnat";
   return {
     id: "wan-double-nat",
-    severity: "warning",
+    severity: cgnat ? "warning" : "suggestion",
     category: "internet",
     title: cgnat ? "Behind carrier-grade NAT" : `Double NAT behind ${up?.name ?? "the ISP router"}`,
     summary: cgnat
@@ -242,7 +259,7 @@ const routerDns: Rule = ({ m, cfg }) => {
   const ntpNames = menu(cfg, "/system/ntp/client/servers").map((s) => s.address ?? "").filter((a) => /[a-z]/i.test(a));
   return {
     id: "dns-router-depends",
-    severity: "warning",
+    severity: "suggestion",
     category: "dns-dhcp",
     title: `The router itself only resolves names through ${host.name}`,
     summary: `The router's own resolver points only at ${servers[0]}. When ${host.name} is down, the router cannot look up its NTP servers${ntpNames.length ? ` (${ntpNames.join(", ")})` : ""} or check for updates.`,
@@ -266,7 +283,7 @@ const privateMacReservations: Rule = ({ m }) => {
     .filter((x): x is string => !!x);
   return {
     id: "dhcp-private-mac-reservations",
-    severity: offline.length ? "warning" : "suggestion",
+    severity: lookalikes.length ? "warning" : "suggestion",
     category: "dns-dhcp",
     title: `${plural(res.length, "reservation")} ${res.length === 1 ? "is" : "are"} tied to a private (random) MAC address`,
     summary: `Phones and laptops can rotate their private Wi-Fi address, and then a reservation silently stops matching. ${offline.length ? `${plural(offline.length, "of these is", "of these are")} not in use right now.` : ""}`.trim(),
@@ -416,7 +433,7 @@ const roaming: Rule = ({ m }) => {
   if (aps.length + plannedAps.length < 2) return undefined;
   return {
     id: "wifi-ft-off",
-    severity: aps.length >= 2 ? "warning" : "suggestion",
+    severity: "suggestion",
     category: "wifi",
     title: aps.length >= 2 ? "Fast roaming is off with several access points" : "Turn on fast roaming when the second access point arrives",
     summary: `With ${aps.length >= 2 ? `${aps.length} access points` : "a second access point planned"}, phones and laptops will hand over between them. Without 802.11r each move is a full reconnect, which drops calls and video for a moment.`,
@@ -478,7 +495,8 @@ const capVersions: Rule = ({ m, cfg, caps }) => {
   if (!behind.length) return { id: "cap-versions-match", severity: "pass", category: "maintenance", title: "Access points run the same RouterOS as the controller", summary: `All on ${router?.version}.` };
   return {
     id: "cap-versions-differ",
-    severity: "warning",
+    // A different major version (6 against 7) breaks CAPsMAN; a point release apart rarely matters.
+    severity: behind.some((a) => a.version?.split(".")[0] !== router?.version?.split(".")[0]) ? "warning" : "suggestion",
     category: "maintenance",
     title: `${plural(behind.length, "access point")} on a different RouterOS than the controller`,
     summary: `${join(behind.map((a) => `${a.name} runs ${a.version}`))}; the controller runs ${router?.version}. CAPsMAN features and fixes assume matching versions.`,
@@ -592,7 +610,7 @@ const usbSharing: Rule = ({ m, cfg }) => {
   const wan = m.networks.find((n) => n.bridge === iface)?.role === "wan";
   return {
     id: "usb-auto-sharing",
-    severity: wan ? "warning" : "suggestion",
+    severity: "suggestion",
     category: "security",
     title: wan ? "USB drives would be shared on the upstream side" : "USB drives are shared automatically",
     summary: `Any USB drive plugged into the router is shared over SMB${isTrue(d["auto-media-sharing"]) ? " and as media" : ""} on “${iface}”${wan ? ", which is the WAN/upstream bridge, not your home LAN" : ""}.`,

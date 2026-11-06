@@ -132,7 +132,7 @@ function Accept({ f }: { f: Finding }) {
       <div className="acc">
         <span>
           Accepted on {day(f.accepted.at)}
-          {f.accepted.reason ? <>: “{f.accepted.reason}”</> : null}. It does not count in the score until it changes.
+          {f.accepted.reason ? <>: “{f.accepted.reason}”</> : null}. It does not count until it changes.
         </span>
         <button className="btn ghost sm" onClick={() => void run(reopenFinding(f.id))}>Reopen</button>
         {error && <span className="st-error">{error}</span>}

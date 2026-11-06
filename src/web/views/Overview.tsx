@@ -1,26 +1,43 @@
 import { useMemo, useState } from "react";
 import type { Category, Finding, NetworkPayload, Severity } from "../api.ts";
-import { CATEGORY_LABEL, isOpen } from "../../core/analyze.ts";
+import { CATEGORY_LABEL, isOpen, STATUS_LABEL, statusLine } from "../../core/analyze.ts";
 import { FindingCard, SEV_LABEL, SEV_VAR } from "../components/FindingCard.tsx";
 
 const ORDER: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
 
-function ScoreRing({ score, grade }: { score: number; grade: string }) {
-  const r = 70;
-  const c = 2 * Math.PI * r;
-  const color = score >= 85 ? "var(--ok)" : score >= 65 ? "var(--g1)" : score >= 40 ? "var(--warn)" : "var(--bad)";
+/** Where the setup stands, in words. Ideas never change it: they may not suit this network. */
+function Status({ analysis }: { analysis: NetworkPayload["analysis"] }) {
+  const color = analysis.status === "attention" ? "var(--bad)" : analysis.status === "loose-ends" ? "var(--warn)" : "var(--ok)";
+  const rows: [Severity, string][] = [
+    ["critical", "to fix now"],
+    ["warning", "worth fixing"],
+    ["suggestion", "ideas, optional"],
+    ["info", "notes"],
+    ["pass", "good"],
+  ];
   return (
-    <div style={{ position: "relative", width: 180, height: 180 }}>
-      <svg width={180} height={180} viewBox="0 0 180 180">
-        <circle cx={90} cy={90} r={r} fill="none" stroke="var(--fg)" strokeOpacity={.06} strokeWidth={10} />
-        <circle cx={90} cy={90} r={r} fill="none" stroke={color} strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(score / 100) * c} ${c}`} transform="rotate(-90 90 90)" style={{ filter: `drop-shadow(0 0 8px ${color})`, transition: "stroke-dasharray .8s" }} />
-      </svg>
-      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>
-        <div>
-          <div className="num" style={{ fontSize: 46, fontWeight: 600, letterSpacing: "-.04em", lineHeight: 1 }}>{score}</div>
-          <div className="muted" style={{ marginTop: 6, textTransform: "capitalize" }}>{grade === "poor" ? "needs attention" : grade}</div>
-        </div>
+    <div className="status">
+      <div className="status-h">
+        <span className="dot" style={{ background: color, boxShadow: `0 0 0 4px color-mix(in srgb, ${color} 18%, transparent)` }} />
+        <b>{STATUS_LABEL[analysis.status]}</b>
       </div>
+      <p>{statusLine(analysis)}</p>
+      <ul>
+        {rows
+          .filter(([s]) => analysis.counts[s] || s === "warning")
+          .map(([s, label]) => (
+            <li key={s}>
+              <span className="dot" style={{ background: SEV_VAR[s], boxShadow: "none" }} />
+              <b className="mono">{analysis.counts[s]}</b> {label}
+            </li>
+          ))}
+        {analysis.accepted > 0 && (
+          <li>
+            <span className="dot" style={{ background: "var(--tx-3)", boxShadow: "none", opacity: 0.4 }} />
+            <b className="mono">{analysis.accepted}</b> accepted
+          </li>
+        )}
+      </ul>
     </div>
   );
 }
@@ -49,22 +66,14 @@ export function Overview({ data, onShow }: { data: NetworkPayload; onShow: (f: F
       <div className="page">
         <h1>{model.site}</h1>
         <p className="lede">
-          A review of how this network is set up: what is solid, what is fragile, and exactly what to change. Built from{" "}
+          A review of how this network is set up: what is solid and what is fragile. Ideas are optional; accept anything that is fine as it is here. Built from{" "}
           {model.sources.map((s) => s.label.split("/").pop()).join(", ")}
           {data.meta.sample ? ", with sample runtime data until a live router connection is configured" : ""}.
         </p>
 
         <div className="hero">
           <div className="card score">
-            <ScoreRing score={analysis.score} grade={analysis.grade} />
-            <div style={{ display: "flex", gap: 14, marginTop: 14, fontSize: 12 }}>
-              {(["warning", "suggestion", "pass"] as Severity[]).map((s) => (
-                <span key={s} className="muted" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                  <span className="dot" style={{ background: SEV_VAR[s], boxShadow: "none" }} />
-                  <b className="mono" style={{ color: "var(--tx-1)", fontWeight: 500 }}>{analysis.counts[s]}</b> {s === "pass" ? "good" : s === "warning" ? "to fix" : "ideas"}
-                </span>
-              ))}
-            </div>
+            <Status analysis={analysis} />
           </div>
           <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
             <div className="tiles">

@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { analyze, type Analysis, type Finding, type Severity } from "../src/core/analyze.ts";
+import { analyze, statusLine, type Analysis, type Finding, type Severity } from "../src/core/analyze.ts";
 import { readConfig, snapshotFromFiles } from "../src/core/load.ts";
 import { buildModel } from "../src/core/model.ts";
 import { parseExport, type RosRecord, type Snapshot } from "../src/core/ros.ts";
@@ -51,7 +51,7 @@ describe("analyze: demo network", () => {
     const expected: Record<string, Severity> = {
       "dhcp-private-mac-reservations": "warning",
       "wifi-5-one-block": "warning",
-      "cap-versions-differ": "warning",
+      "cap-versions-differ": "suggestion",
       "svc-insecure": "warning",
       "fw-temporary-rules": "suggestion",
       "wifi-24-capable-00:00:5E:00:53:76": "suggestion",
@@ -115,17 +115,17 @@ describe("analyze: demo network", () => {
     expect(find(a, "svc-insecure")!.reads).toContain("router /ip/service");
   });
 
-  it("sorts by severity, counts consistently and scores", () => {
+  it("sorts by severity, counts consistently and says where it stands", () => {
     const order: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
     const ranks = a.findings.map((f) => order.indexOf(f.severity));
     expect([...ranks].sort((x, y) => x - y)).toEqual(ranks);
     for (const s of order) expect(a.counts[s]).toBe(a.findings.filter((f) => f.severity === s).length);
-    // 4 warnings × 5 + suggestions × 1.5 (capped at 20)
-    const expectedScore = Math.round(100 - a.counts.warning * 5 - a.counts.critical * 20 - Math.min(20, a.counts.suggestion * 1.5));
-    expect(a.score).toBe(expectedScore);
-    expect(a.score).toBeGreaterThanOrEqual(60);
-    expect(a.score).toBeLessThan(85);
-    expect(a.grade).toBe(a.score >= 85 ? "great" : a.score >= 65 ? "good" : "fair");
+    expect(a.status).toBe(a.counts.critical ? "attention" : a.counts.warning ? "loose-ends" : "healthy");
+  });
+
+  it("never lets ideas change the status", () => {
+    const ideasOnly = { ...a, counts: { ...a.counts, critical: 0, warning: 0, suggestion: 40 } };
+    expect(statusLine({ status: "healthy", counts: ideasOnly.counts })).toBe("Nothing to fix. 40 ideas to look at if you like.");
   });
 
   it("gives every finding a unique id, a title and a summary", () => {
@@ -179,7 +179,7 @@ add address=pool.ntp.org
 `,
       ),
     );
-    expect(find(a, "dns-router-depends")).toMatchObject({ severity: "warning" });
+    expect(find(a, "dns-router-depends")).toMatchObject({ severity: "suggestion" });
     expect(find(a, "dns-router-depends")!.summary).toContain("pool.ntp.org");
   });
 
@@ -224,14 +224,14 @@ add action=drop chain=input in-interface-list=!LAN
     const a = run(snapOf(BASE));
     expect(find(a, "fw-empty")?.severity).toBe("critical");
     for (const id of ["router-identity", "backup-none", "ntp-off", "seg-no-guest", "svc-insecure"]) expect(ids(a), id).toContain(id);
-    expect(a.score).toBeLessThan(80);
+    expect(a.status).toBe("attention");
   });
 
-  it("wan-double-nat: a private WAN lease is a warning, CGNAT is named", () => {
+  it("wan-double-nat: a private WAN lease is an idea, CGNAT is a warning", () => {
     const priv = run(snapOf(BASE, { "/ip/dhcp-client": [{ interface: "ether1", address: "192.168.1.20/24", gateway: "192.168.1.1" }] }));
-    expect(find(priv, "wan-double-nat")).toMatchObject({ severity: "warning", title: "Double NAT behind ISP router" });
+    expect(find(priv, "wan-double-nat")).toMatchObject({ severity: "suggestion", title: "Double NAT behind ISP router" });
     const cg = run(snapOf(BASE, { "/ip/dhcp-client": [{ interface: "ether1", address: "100.70.1.2/10", gateway: "100.64.0.1" }] }));
-    expect(find(cg, "wan-double-nat")!.title).toBe("Behind carrier-grade NAT");
+    expect(find(cg, "wan-double-nat")).toMatchObject({ severity: "warning", title: "Behind carrier-grade NAT" });
   });
 
   it("reservations inside the pool are a suggestion", () => {
@@ -255,12 +255,12 @@ add configuration=c5 name=cap-wifi2
 `,
       ),
     );
-    expect(find(a, "wifi-ft-off")?.severity).toBe("warning");
+    expect(find(a, "wifi-ft-off")?.severity).toBe("suggestion");
   });
 
   it("never throws on an empty snapshot", () => {
     const a = run({ collectedAt: "x", devices: [] });
     expect(a.findings.filter((f: Finding) => f.id.startsWith("rule-error"))).toEqual([]);
-    expect(a.score).toBeGreaterThanOrEqual(0);
+    expect(a.status).toBe("attention"); // no firewall rules at all
   });
 });

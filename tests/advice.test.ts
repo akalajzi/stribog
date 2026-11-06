@@ -50,7 +50,7 @@ describe("a request for advice", () => {
 });
 
 describe("accepting a finding", () => {
-  const f = a.findings.find((x) => x.severity === "warning")!;
+  const f = a.findings.find((x) => x.severity === "warning" || x.severity === "suggestion")!;
   const withNotes = (accepted: Record<string, { title: string; reason?: string; at: string }>) => {
     const s = { ...snap, notes: { ...snap.notes, accepted } };
     return analyze(buildModel(s), s);
@@ -61,8 +61,8 @@ describe("accepting a finding", () => {
     const g = b.findings.find((x) => x.id === f.id)!;
     expect(g.accepted).toEqual({ reason: "nobody uses it", at: "2026-11-06T12:00:00Z" });
     expect(b.accepted).toBe(1);
-    expect(b.counts.warning).toBe(a.counts.warning - 1);
-    expect(b.score).toBeGreaterThan(a.score);
+    expect(b.counts[f.severity]).toBe(a.counts[f.severity] - 1);
+    expect(b.findings.filter((x) => x.accepted)).toHaveLength(1);
   });
 
   it("counts it again once it has changed", () => {
@@ -70,6 +70,6 @@ describe("accepting a finding", () => {
     const g = b.findings.find((x) => x.id === f.id)!;
     expect(g.accepted).toBeUndefined();
     expect(g.changedSinceAccepted?.title).toBe("something it used to say");
-    expect(b.score).toBe(a.score);
+    expect(b.counts).toEqual(a.counts);
   });
 });
