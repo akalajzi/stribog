@@ -57,7 +57,7 @@ An export has the configuration but no runtime state, so the review works fully 
 Create a user that can only read:
 
 ```
-/user group add name=stribog-read policy=read,api,rest-api,!write,!policy,!sensitive,!ftp,!reboot,!test,!password,!sniff,!romon
+/user group add name=stribog-read policy=read,api,rest-api
 /user add name=stribog group=stribog-read password="<long random password>"
 ```
 
