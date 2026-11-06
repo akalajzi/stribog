@@ -47,6 +47,15 @@ describe("connecting", () => {
     await expect(connectAdGuard("192.0.2.10", "admin", "pw", fetchImpl)).resolves.toMatchObject({ url: "https://192.0.2.10", version: "v0.107.99" });
     await expect(connectAdGuard("http://192.0.2.10", "admin", "nope", fetchImpl)).rejects.toThrow(AdGuardError);
   });
+
+  it("tells a web page that is not AdGuard (a NAS's own, before a reverse proxy) from no answer", async () => {
+    const page = (async () => new Response("<!DOCTYPE html><html></html>", { headers: { "content-type": "text/html" } })) as unknown as typeof fetch;
+    await expect(connectAdGuard("192.0.2.10", "admin", "pw", page)).rejects.toThrow(/not as AdGuard Home.*reverse proxy/);
+    const down = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    await expect(connectAdGuard("192.0.2.10", "admin", "pw", down)).rejects.toThrow(/Could not reach/);
+  });
 });
 
 describe("the query log", () => {

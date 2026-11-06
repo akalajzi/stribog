@@ -109,7 +109,11 @@ export class AdGuard implements DnsLog {
   }
 
   async status(): Promise<{ version?: string }> {
-    const s = await this.get<{ version?: unknown; dns_addresses?: unknown }>("/status");
+    const s = await this.get<{ version?: unknown; dns_addresses?: unknown }>("/status").catch((err) => {
+      // Something answered with a web page, not AdGuard's JSON: another server, or a proxy that routes by name.
+      if (err instanceof SyntaxError) throw new AdGuardError("That answers, but not as AdGuard Home.", 502);
+      throw err;
+    });
     if (!Array.isArray(s.dns_addresses) && typeof s.version !== "string") throw new AdGuardError("That answers, but not as AdGuard Home.", 502);
     return { version: typeof s.version === "string" ? s.version : undefined };
   }
@@ -149,7 +153,7 @@ export async function connectAdGuard(address: string, user: string, password: st
   const urls = candidateUrls(address);
   if (!urls.length) throw new AdGuardError("Enter AdGuard Home's address.", 400);
   if (!user) throw new AdGuardError("Enter a user name.", 400);
-  let last: AdGuardError | undefined;
+  let other = false;
   for (const url of urls) {
     const login: AdGuardLogin = { url, user, password, encrypted: url.startsWith("https://") };
     try {
@@ -158,10 +162,15 @@ export async function connectAdGuard(address: string, user: string, password: st
     } catch (err) {
       // A refused password stops at once, so it is never retried over plain http.
       if (err instanceof AdGuardError && err.status === 401) throw err;
-      if (err instanceof AdGuardError) last = err;
+      if (err instanceof AdGuardError) other = true;
     }
   }
-  throw last ?? new AdGuardError(`Could not reach AdGuard Home at ${address.trim()}. Check the address (the one its web page opens at).`, 502);
+  throw new AdGuardError(
+    other
+      ? `Something answers at ${address.trim()}, but not as AdGuard Home. If AdGuard sits behind a reverse proxy (on a NAS, say), use the address its web page opens at, with its name, e.g. http://adguard.lan.`
+      : `Could not reach AdGuard Home at ${address.trim()}. Check the address (the one its web page opens at).`,
+    502,
+  );
 }
 
 // ---- the connection in use ------------------------------------------------------------

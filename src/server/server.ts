@@ -32,7 +32,7 @@ export interface IntegrationsInfo {
     /** The demo reads a built-in sample instead. */
     sample?: boolean;
     /** The DNS server the router hands out, when it is not the router: probably the one to connect. */
-    suggested?: { address: string; name?: string };
+    suggested?: { address: string; ip: string; name?: string };
   };
 }
 
@@ -185,7 +185,11 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
             ? { connected: true, sample: true }
             : a
               ? { connected: true, url: a.login.url, user: a.login.user, encrypted: a.login.encrypted, version: a.login.version, error: adguardError() }
-              : { connected: false, suggested: dnsIp ? { address: dnsIp, name: owner?.name } : undefined },
+              : {
+                  connected: false,
+                  // A web address from the notes beats the bare address: AdGuard often sits behind a reverse proxy that routes by name.
+                  suggested: dnsIp ? { address: owner?.services?.find((x) => x.url && /adguard/i.test(`${x.name} ${x.url}`))?.url ?? dnsIp, ip: dnsIp, name: owner?.name } : undefined,
+                },
         };
         return send(res, 200, info), true;
       }

@@ -115,7 +115,7 @@ function Integrations() {
               <button className="btn pri" disabled={busy}>{busy ? "Connecting…" : "Connect"}</button>
               {a.suggested && (
                 <span className="faint">
-                  The router tells devices to ask {a.suggested.name ? <b>{a.suggested.name}</b> : null} <span className="mono">{a.suggested.address}</span> for names: probably this one. The password
+                  The router tells devices to ask {a.suggested.name ? <b>{a.suggested.name}</b> : null} <span className="mono">{a.suggested.ip}</span> for names: probably this one{a.suggested.address !== a.suggested.ip ? ", at the address in its notes" : ""}. The password
                   stays in Stribog's memory only.
                 </span>
               )}
