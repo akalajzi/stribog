@@ -116,11 +116,43 @@ const OUI: Record<string, [string, DeviceKind?]> = {
   "3C:2A:F4": ["Brother", "printer"],
 };
 
-export function vendorOf(mac: string | undefined): { vendor?: string; kind?: DeviceKind; private: boolean } {
+/** Looks a MAC up in the IEEE registry: the organisation its prefix is assigned to. */
+export type VendorRegistry = (mac: string) => string | undefined;
+
+/**
+ * Who made the device's network interface: the small table above (short names, a kind where the
+ * maker makes one kind of device), else the IEEE registry when one is given (`registered`: the
+ * name is the full organisation as registered).
+ */
+export function vendorOf(mac: string | undefined, registry?: VendorRegistry): { vendor?: string; kind?: DeviceKind; private: boolean; registered?: string } {
   const m = normMac(mac);
   if (isPrivateMac(m)) return { private: true };
   const hit = OUI[m.slice(0, 8)];
-  return { vendor: hit?.[0], kind: hit?.[1], private: false };
+  if (hit) return { vendor: hit[0], kind: hit[1], private: false };
+  const org = m && registry ? registry(m) : undefined;
+  return org ? { vendor: shortVendor(org), kind: kindFromVendor(org), private: false, registered: org } : { private: false };
+}
+
+/** "Tuya Smart Inc." → "Tuya Smart": the organisation without its legal form. */
+export function shortVendor(org: string): string {
+  const LEGAL = /[\s,.，]+(co\.?,?\s*ltd|company\s+limited|co\.?\s*limited|limited|ltd|inc|incorporated|corp|corporation|gmbh|ag|s\.?a|s\.?r\.?l|b\.?v|llc|l\.l\.c|pte|plc|oy|ab|a\/s|kg|co)\.?$/i;
+  let s = org.trim();
+  for (let i = 0; i < 4 && LEGAL.test(s); i++) s = s.replace(LEGAL, "").trim();
+  s = s.replace(/[\s,.]+$/, "");
+  return s.length > 28 ? `${s.slice(0, 27).trimEnd()}…` : s || org.trim();
+}
+
+// Makers whose name alone settles the kind: they make one kind of device.
+const VENDOR_KINDS: [RegExp, DeviceKind][] = [
+  [/\b(tuya|espressif|itead|allterco|shelly|signify|lifx|nanoleaf|ecovacs|roborock|dreame)\b/i, "iot"],
+  [/\b(synology|qnap)\b/i, "nas"],
+  [/\bbambu\b/i, "printer3d"],
+  [/\b(brother industries|seiko epson)\b/i, "printer"],
+  [/\b(nintendo|sony interactive)\b/i, "console"],
+];
+
+export function kindFromVendor(org: string): DeviceKind | undefined {
+  return VENDOR_KINDS.find(([re]) => re.test(org))?.[1];
 }
 
 /** Devices that are 2.4 GHz-only by design, so being on 2.4 GHz is expected rather than a problem. */

@@ -3,7 +3,7 @@
 // Every derived fact keeps track of how it is known: read from the router, inferred, or told by
 // the user. The UI uses that to say "probably" instead of pretending.
 
-import { KIND_LABEL, kindFromText, likelyOnly24, shortName, vendorOf, type DeviceKind } from "./classify.ts";
+import { KIND_LABEL, kindFromText, likelyOnly24, shortName, vendorOf, type DeviceKind, type VendorRegistry } from "./classify.ts";
 import {
   bandFromRos,
   cidrString,
@@ -328,7 +328,7 @@ const portSort = (a: string, b: string) => {
   return sa - sb || na - nb || a.localeCompare(b);
 };
 
-export function buildModel(snap: Snapshot): NetworkModel {
+export function buildModel(snap: Snapshot, opts: { vendors?: VendorRegistry } = {}): NetworkModel {
   const ov: Notes = snap.notes ?? {};
   const routerSnap = snap.devices.find((d) => d.role === "router");
   const capSnaps = snap.devices.filter((d) => d.role === "cap");
@@ -475,7 +475,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
   const gwMac = normMac(gwArp?.["mac-address"]);
   if (wan.doubleNat === true || ov.upstream) {
     const named = ov.upstream?.model ?? ov.upstream?.name;
-    const v = gwMac ? vendorOf(gwMac) : undefined;
+    const v = gwMac ? vendorOf(gwMac, opts.vendors) : undefined;
     add({
       id: "upstream",
       kind: "isp",
@@ -754,7 +754,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
     const upArp = arps.find((x) => upstreamSide(x.interface));
     const onLan = !!(lc || ls || reg || lanArp || (host && !upstreamSide(host["on-interface"])));
     const a = lanArp ?? (onLan ? undefined : upArp);
-    const v = vendorOf(mac);
+    const v = vendorOf(mac, opts.vendors);
     const hostname = ls?.["host-name"];
     const comment = lc?.comment ?? ls?.comment;
     // Prefer where the device actually is now: a bound lease, then ARP, then its reservation.
@@ -806,6 +806,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
     else if (ip && !lanNet?.cidr) d.zone = "lan";
     else if (ip && lanNet?.cidr && !inCidr(ip, lanNet.cidr) && d.network === undefined) d.zone = "upstream";
     if (comment) d.facts.push(`DHCP reservation note: “${comment}”`);
+    if (v.registered) d.facts.push(`Its network chip is registered to ${v.registered} (IEEE registry): often the maker of a module inside the device, not of the device itself`);
     if (container) d.facts.push(`A container running on the router itself: “${container.name}”${container.tag ?? container["remote-image"] ? `, image ${container.tag ?? container["remote-image"]}` : ""}${container.status ? `, ${container.status}` : ""}`);
     if (onLan && upArp?.address) d.facts.push(`Also known on the upstream network as ${upArp.address} (${arpWords(upArp)})`);
     if (!onLan && upArp) d.facts.push(`Seen only on the upstream network, in the router's address table: ${arpWords(upArp)}`);

@@ -11,6 +11,7 @@ import { AuthError, RouterOsRest } from "../core/rest.ts";
 import type { Snapshot } from "../core/ros.ts";
 import { dataDir, NotesStore } from "./notes.ts";
 import { ratesNow } from "./rates.ts";
+import { vendorDb } from "./vendors.ts";
 import { defaultRouterAddress, isAlive, type RouterLogin, type Session } from "./session.ts";
 
 export interface NetworkPayload {
@@ -228,7 +229,8 @@ async function liveSnapshot(login: RouterLogin, s: Setup): Promise<Snapshot> {
 }
 
 function build(snap: Snapshot, meta: Omit<NetworkPayload["meta"], "refreshedAt">): NetworkPayload {
-  const model = buildModel(snap);
+  // Makers from the IEEE registry for real networks; the demo's addresses are documentation ones.
+  const model = buildModel(snap, { vendors: meta.mode === "demo" ? undefined : vendorDb(setup().dataDir)?.lookup });
   if (meta.mode === "live") withMeasuredRates(model);
   return { model, analysis: analyze(model, snap), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
 }
