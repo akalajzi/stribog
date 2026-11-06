@@ -20,10 +20,24 @@ interface Props {
 
 type View = { x: number; y: number; w: number; h: number };
 
+/**
+ * Where the map was looked at, kept across data refreshes and visits to other pages. Until
+ * someone pans or zooms, the map fits the network; after that it stays where they left it.
+ */
+const kept: { view?: View; touched: boolean; size?: { w: number; h: number } } = { touched: false };
+
 export function Topology({ data, selected, highlight, onSelect, covered = 0 }: Props) {
   const { layout, model, analysis } = data;
   const ref = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState<View>();
+  const [view, setViewState] = useState<View | undefined>(kept.view);
+  const setView: typeof setViewState = (v) =>
+    setViewState((cur) => {
+      const next = typeof v === "function" ? v(cur) : v;
+      kept.view = next;
+      return next;
+    });
+  /** Someone moved the map: from now on refreshes and resizes keep their view. */
+  const touch = () => (kept.touched = true);
   const [drag, setDrag] = useState<{ x: number; y: number; v: View; moved: boolean }>();
   const byId = useMemo(() => new Map(model.devices.map((d) => [d.id, d])), [model]);
 
@@ -42,18 +56,45 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
   const fit = () => {
     const el = ref.current;
     if (!el) return;
+    kept.size = { w: el.clientWidth, h: el.clientHeight };
     const r = el.clientWidth / Math.max(1, el.clientHeight);
     const b = layout.bounds;
     if (b.w / b.h > r) setView({ x: b.x, w: b.w, h: b.w / r, y: b.y - (b.w / r - b.h) / 2 });
     else setView({ y: b.y, h: b.h, w: b.h * r, x: b.x - (b.h * r - b.w) / 2 });
   };
-  useEffect(() => {
+  /** The "Fit" button: back to the whole network, following it again on refresh. */
+  const refit = () => {
+    kept.touched = false;
     fit();
-    const ro = new ResizeObserver(fit);
-    if (ref.current) ro.observe(ref.current);
+  };
+  // New data arrives every refresh with a new layout: fit it only while nobody has moved the map.
+  const boundsKey = `${layout.bounds.x},${layout.bounds.y},${layout.bounds.w},${layout.bounds.h}`;
+  useEffect(() => {
+    if (!kept.touched || !kept.view) fit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundsKey]);
+  // A resized window keeps the same centre and scale once the map has been moved; else it refits.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const prev = kept.size;
+      if (!kept.touched || !prev || !kept.view) return fit();
+      const size = { w: el.clientWidth, h: el.clientHeight };
+      if (size.w === prev.w && size.h === prev.h) return;
+      kept.size = size;
+      setView((v) => {
+        if (!v) return v;
+        const scale = v.w / Math.max(1, prev.w);
+        const w = size.w * scale;
+        const h = size.h * scale;
+        return { x: v.x + (v.w - w) / 2, y: v.y + (v.h - h) / 2, w, h };
+      });
+    });
+    ro.observe(el);
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout]);
+  }, []);
 
   // A panel opened over the map must not hide what was clicked: slide the map just enough,
   // smoothly, and never zoom it.
@@ -95,14 +136,14 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
       const k = w / v.w;
       return { x: p.x - (p.x - v.x) * k, y: p.y - (p.y - v.y) * k, w, h: v.h * k };
     });
-  const onWheel = (e: RWheelEvent) => zoom(Math.exp(e.deltaY * 0.0015), e.clientX, e.clientY);
+  const onWheel = (e: RWheelEvent) => (touch(), zoom(Math.exp(e.deltaY * 0.0015), e.clientX, e.clientY));
   const onDown = (e: RPointerEvent) => view && setDrag({ x: e.clientX, y: e.clientY, v: view, moved: false });
   const onMove = (e: RPointerEvent) => {
     if (!drag || !ref.current) return;
     const r = ref.current.getBoundingClientRect();
     const dx = ((e.clientX - drag.x) / r.width) * drag.v.w;
     const dy = ((e.clientY - drag.y) / r.height) * drag.v.h;
-    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) setDrag({ ...drag, moved: true });
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) (touch(), setDrag({ ...drag, moved: true }));
     setView({ ...drag.v, x: drag.v.x - dx, y: drag.v.y - dy });
   };
   const onUp = () => setTimeout(() => setDrag(undefined), 0);
@@ -260,9 +301,9 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
       </div>
       <InternetNow data={data} />
       <div className="mapctl">
-        <button title="Zoom in" onClick={() => zoom(0.8)}>+</button>
-        <button title="Zoom out" onClick={() => zoom(1.25)}>−</button>
-        <button title="Fit" onClick={fit} style={{ fontSize: 12 }}>⤢</button>
+        <button title="Zoom in" onClick={() => (touch(), zoom(0.8))}>+</button>
+        <button title="Zoom out" onClick={() => (touch(), zoom(1.25))}>−</button>
+        <button title="Fit the whole network (and follow it again as it changes)" onClick={refit} style={{ fontSize: 12 }}>⤢</button>
       </div>
     </div>
   );
