@@ -30,6 +30,10 @@ export interface LLink {
   /** Current throughput along the link, bits per second: away from the router (down) and towards it (up). */
   down?: number;
   up?: number;
+  /** The whole way traffic travels when it differs from what is drawn (a device in a cluster: AP → trunk → branch → drop). */
+  route?: string;
+  /** Rough length of the way traffic travels, px, so dots move at the same speed on long and short links. */
+  len: number;
   reverse?: boolean;
 }
 
@@ -51,8 +55,7 @@ export interface LBus {
   medium: Medium;
   label: string;
   labelAt: { x: number; y: number };
-  /** The curve from the device to the cluster, alone, for showing the cluster's combined traffic. */
-  trunk: string;
+  /** The cluster's combined traffic, for its label. */
   down?: number;
   up?: number;
 }
@@ -177,6 +180,7 @@ export function layoutTopology(m: NetworkModel): Layout {
       from: router!.id,
       to: id,
       d: vcurve(px, y1, x, y2),
+      len: curveLen(px, y1, x, y2),
       medium,
       label: wifiFromRouter ? undefined : [s.port, speedLabel(port?.speedMbps), port?.poeWatts ? `PoE ${port.poeWatts} W` : ""].filter(Boolean).join(" · "),
       labelAt: { x: x + 8, y: y2 - 14, anchor: "start" },
@@ -214,6 +218,8 @@ export function layoutTopology(m: NetworkModel): Layout {
             from: id,
             to: d.id,
             d: `M ${round(cx)} ${round(branchY(r))} V ${round(cy - 40)}`,
+            route: `${trunk}${r > 0 ? ` V ${round(branchY(r))}` : ""} H ${round(cx)} V ${round(cy - 40)}`,
+            len: curveLen(x, lineTop, mid, branchY(0)) + (branchY(r) - branchY(0)) + Math.abs(cx - mid) + (cy - 40 - branchY(r)),
             medium: mediumOf(d),
             // The cluster's label says the medium; a lone cable also names its port there.
             label: d.via?.kind === "wifi" || c.kids.length === 1 ? undefined : (d.via?.port ?? ""),
@@ -226,7 +232,7 @@ export function layoutTopology(m: NetworkModel): Layout {
       const port = c.kids.length === 1 ? c.kids[0]!.via?.port : undefined;
       const label = c.medium === "wired" ? `Cable · ${port ?? c.kids.length}` : `${c.medium.replace("wifi-", "")} GHz Wi-Fi · ${c.kids.length}`;
       const sum = (k: "downBps" | "upBps") => (c.kids.some((d) => d.via?.[k] !== undefined) ? c.kids.reduce((t, d) => t + (d.via?.[k] ?? 0), 0) : undefined);
-      buses.push({ id: `bus:${id}:${c.medium}`, from: id, d: tree.join(" "), medium: c.medium === "wired" ? mediumOf(c.kids[0]!) : c.medium, label, labelAt: { x: left + 6, y: branchY(0) - 12 }, trunk, down: sum("downBps"), up: sum("upBps") });
+      buses.push({ id: `bus:${id}:${c.medium}`, from: id, d: tree.join(" "), medium: c.medium === "wired" ? mediumOf(c.kids[0]!) : c.medium, label, labelAt: { x: left + 6, y: branchY(0) - 12 }, down: sum("downBps"), up: sum("upBps") });
       left += w + CLUSTER_GAP;
     }
   });
@@ -239,7 +245,7 @@ export function layoutTopology(m: NetworkModel): Layout {
   nodes.push({ id: "internet", x: ix, y: ROW.internet, kind: "internet", label: "right" });
   if (upstream) {
     nodes.push({ id: "upstream", x: gx, y: ROW.upstream, kind: "isp", label: "right" });
-    links.push({ id: "l:upstream", from: "internet", to: "upstream", d: vcurve(ix, ROW.internet + 30, gx, ROW.upstream - 36), medium: "wan", down: wanP?.rxBps, up: wanP?.txBps });
+    links.push({ id: "l:upstream", from: "internet", to: "upstream", d: vcurve(ix, ROW.internet + 30, gx, ROW.upstream - 36), len: curveLen(ix, ROW.internet + 30, gx, ROW.upstream - 36), medium: "wan", down: wanP?.rxBps, up: wanP?.txBps });
   }
   if (router) {
     nodes.push({ id: router.id, x: gx, y: gy, kind: "router", label: "left" });
@@ -251,6 +257,7 @@ export function layoutTopology(m: NetworkModel): Layout {
       from: upstream ? "upstream" : "internet",
       to: router.id,
       d: vcurve(gx, fromY, wx, gy - GATEWAY_H / 2 - 4),
+      len: curveLen(gx, fromY, wx, gy - GATEWAY_H / 2 - 4),
       medium: "wan",
       label: [wanPort, speedLabel(ports.find((p) => p.name === wanPort)?.speedMbps), m.wan.doubleNat === true ? "double NAT" : ""].filter(Boolean).join(" · "),
       labelAt: { x: Math.max(gx, wx) + 14, y: (fromY + gy - 34) / 2 + 6, anchor: "start" },
@@ -271,7 +278,7 @@ export function layoutTopology(m: NetworkModel): Layout {
       nodes.push({ id: it.id, x, y, kind: it.kind, label: "below" });
       if (it.dev && router) {
         const px = portX[it.dev.via!.port!] ?? gx;
-        links.push({ id: `l:${it.id}`, from: router.id, to: it.id, d: `M ${px} ${gy - GATEWAY_H / 2 - 4} C ${px} ${gy - 120}, ${x} ${y + 150}, ${x} ${y + 76}`, medium: "legacy", label: it.dev.via!.port, labelAt: { x: (px + x) / 2 - 6, y: gy - 92, anchor: "end" }, down: portByNameL(it.dev.via!.port)?.txBps, up: portByNameL(it.dev.via!.port)?.rxBps });
+        links.push({ id: `l:${it.id}`, from: router.id, to: it.id, d: `M ${px} ${gy - GATEWAY_H / 2 - 4} C ${px} ${gy - 120}, ${x} ${y + 150}, ${x} ${y + 76}`, medium: "legacy", len: curveLen(px, gy, x, y + 76) * 1.3, label: it.dev.via!.port, labelAt: { x: (px + x) / 2 - 6, y: gy - 92, anchor: "end" }, down: portByNameL(it.dev.via!.port)?.txBps, up: portByNameL(it.dev.via!.port)?.rxBps });
       }
     });
     const minX = items.length ? gx - 250 - (items.length - 1) * UPSTREAM_COL_W - UPSTREAM_COL_W / 2 - 10 : gx - 140;
@@ -289,6 +296,9 @@ export function layoutTopology(m: NetworkModel): Layout {
   const y1 = Math.max(...ys) + 120;
   return { nodes, links, buses, zones, bounds: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, portX };
 }
+
+/** Length of a vcurve, near enough for pacing animation. */
+const curveLen = (x1: number, y1: number, x2: number, y2: number) => Math.hypot(x2 - x1, y2 - y1) * 1.08;
 
 function vcurve(x1: number, y1: number, x2: number, y2: number): string {
   const my = (y1 + y2) / 2;

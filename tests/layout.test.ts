@@ -282,6 +282,12 @@ describe("layout: traffic", () => {
     const bus = l.buses.find((b) => b.from === laptop.parent && b.medium === "wifi-5")!;
     const kids = m.devices.filter((d) => d.parent === laptop.parent && d.via?.band === "5");
     expect(bus.down).toBe(kids.reduce((t, d) => t + (d.via?.downBps ?? 0), 0));
-    expect(bus.trunk).toMatch(/^M /);
+    // Each device's dots travel the whole way: from the AP down the trunk, along its branch, down its drop.
+    const link = l.links.find((x) => x.to === laptop.id)!;
+    const ap = l.nodes.find((n) => n.id === laptop.parent)!;
+    const node = l.nodes.find((n) => n.id === laptop.id)!;
+    expect(link.route).toMatch(new RegExp(`^M ${Math.round(ap.x * 10) / 10} `));
+    expect(link.route).toMatch(new RegExp(`H ${Math.round(node.x * 10) / 10} V ${Math.round((node.y - 40) * 10) / 10}$`));
+    expect(link.len).toBeGreaterThan(node.y - ap.y);
   });
 });

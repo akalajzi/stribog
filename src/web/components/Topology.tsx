@@ -117,8 +117,6 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
             return (
               <g key={b.id} opacity={dim(b.from) ? 0.25 : 1}>
                 <path d={b.d} fill="none" stroke={c} strokeWidth={wifi ? 2.2 : 2.8} strokeOpacity={0.95} strokeDasharray={wifi ? "8 6" : undefined} strokeLinejoin="round" strokeLinecap="round" />
-                <path id={`${b.id}:trunk`} d={b.trunk} fill="none" stroke="none" />
-                <Flow pathId={`${b.id}:trunk`} down={b.down} up={b.up} color={c} />
                 <text x={b.labelAt.x} y={b.labelAt.y} fontSize={11} fontWeight={600} fill={c}>{[b.label, busy(b)].filter(Boolean).join(" · ")}</text>
               </g>
             );
@@ -137,7 +135,8 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
               <g key={l.id} opacity={faded ? 0.25 : 1}>
                 {cable && <path d={l.d} fill="none" stroke={c} strokeWidth={width + 3} opacity={l.medium === "2.5g" ? 0.5 : 0.28} filter="url(#soft)" />}
                 <path id={l.id} d={l.d} fill="none" stroke={c} strokeOpacity={l.medium === "wan" ? 0.5 : wifi ? (to?.status === "online" ? 0.95 : 0.45) : 1} strokeWidth={wifi ? 2.2 : dashed ? 1.6 : width} strokeDasharray={wifi ? "8 6" : dashed} strokeLinecap="round" />
-                <Flow pathId={l.id} down={l.down} up={l.up} color={c} />
+                {l.route && <path id={`${l.id}:route`} d={l.route} fill="none" stroke="none" />}
+                <Flow pathId={l.route ? `${l.id}:route` : l.id} len={l.len} down={l.down} up={l.up} color={c} />
                 {(l.label || busy(l)) && l.labelAt && (
                   // Port and speed on the first line, traffic now under it, so neighbours stay apart.
                   <text x={l.labelAt.x} y={l.labelAt.y} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
@@ -246,18 +245,22 @@ function busy(l: { down?: number; up?: number }): string {
 }
 
 /**
- * Traffic now, as moving dots: more of them and faster as throughput grows, none when idle.
- * Light dots travel away from the router (down), dots in the link's colour come back (up).
+ * Traffic now, as moving dots along the whole way it travels: closer together and faster as
+ * throughput grows, none when idle. Speed and spacing are in pixels, so a long route looks as
+ * busy as a short one carrying the same traffic. Light dots travel away from the router (down),
+ * dots in the link's colour come back (up).
  */
-function Flow({ pathId, down, up, color }: { pathId: string; down?: number; up?: number; color: string }) {
+function Flow({ pathId, len, down, up, color }: { pathId: string; len: number; down?: number; up?: number; color: string }) {
   const dots = (bps: number | undefined, back: boolean) => {
     const t = level(bps);
     if (!t) return null;
-    const n = 1 + Math.round(t * 4);
-    const dur = 3.4 - 2.4 * t;
+    const speed = 50 + 250 * t; // px per second
+    const gap = 170 - 120 * t; // px between dots
+    const dur = Math.max(0.6, len / speed);
+    const n = Math.max(1, Math.min(24, Math.round(len / gap)));
     return Array.from({ length: n }, (_, k) => (
       <circle key={`${back}${k}`} r={back ? 2 : 2.4} fill={back ? color : "var(--tx-1)"} opacity={0.9}>
-        <animateMotion dur={`${dur}s`} begin={`-${(k * dur) / n}s`} repeatCount="indefinite" {...(back ? { keyPoints: "1;0", keyTimes: "0;1", calcMode: "linear" } : {})}>
+        <animateMotion dur={`${dur.toFixed(2)}s`} begin={`-${((k * dur) / n).toFixed(2)}s`} repeatCount="indefinite" {...(back ? { keyPoints: "1;0", keyTimes: "0;1", calcMode: "linear" } : {})}>
           <mpath href={`#${pathId}`} />
         </animateMotion>
       </circle>
