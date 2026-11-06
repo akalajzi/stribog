@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from "react";
 import type { Device, LNode, NetworkPayload, Severity } from "../api.ts";
 import { GATEWAY_W, orbitRadius } from "../../core/layout.ts";
+import { UPSTREAM_GROUP } from "../../core/layout.ts";
 import { ArtDefs, bandColor, COLORS, DeviceArt, GatewayArt, Glyph, mediumColor } from "./DeviceArt.tsx";
 
 const SEV_COLOR: Partial<Record<Severity, string>> = { critical: COLORS.bad, warning: COLORS.warn, suggestion: "var(--idea)" };
@@ -163,6 +164,21 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
                 </g>
               );
             }
+            if (n.id === UPSTREAM_GROUP) {
+              const all = model.devices.filter((x) => x.zone === "upstream" && x.id !== "upstream" && x.mac && x.parent !== model.routerId);
+              const now = all.filter((x) => x.status === "online").length;
+              return (
+                <g key={n.id} transform={`translate(${n.x} ${n.y})`} className="node" onClick={click(n.id)} opacity={dim(n.id) ? 0.3 : 1}>
+                  <rect className="hit" x={-70} y={-42} width={140} height={130} />
+                  {isSel && <SelectRing r={46} />}
+                  {[10, 0, -10].map((o, i) => (
+                    <rect key={o} x={-20 + o} y={-20 - o} width={40} height={40} rx={9} fill="var(--ink-2)" stroke="var(--legacy)" strokeOpacity={0.35 + i * 0.2} strokeDasharray="3 3" />
+                  ))}
+                  <text x={10} y={-5} textAnchor="middle" dominantBaseline="middle" fill="var(--tx-1)" fontSize={14} fontWeight={600} className="mono">{all.length}</text>
+                  <Labels n={n} name={`${all.length === 1 ? "1 device" : `${all.length} devices`} seen there`} lines={["", now ? `${now} answering now` : "none answering now"]} />
+                </g>
+              );
+            }
             if (!d) return null;
             if (n.client) return <ClientBadge key={n.id} n={n} d={d} sel={isSel} sev={sev} dim={dim(n.id)} onClick={click(n.id)} />;
 
@@ -228,7 +244,7 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
     case "internet":
       return [model.wan.addressKind === "public" ? `${model.wan.address}` : "via ISP", ""];
     case "isp":
-      return [d.ip ?? "", model.devices.find((x) => x.id === "upstream")?.facts.find((f) => f.startsWith("ISP:"))?.replace("ISP: ", "") ?? "ISP router"];
+      return [d.ip ?? "", d.facts.find((f) => f.startsWith("ISP:"))?.replace("ISP: ", "") ?? ""];
     case model.routerId === d.id ? "router" : "-":
       return [`${d.ip ?? ""} · RouterOS ${d.version ?? "?"}`, `${model.ports.filter((p) => p.deviceIds.length).length} of ${model.ports.length} ports in use`];
     case "ap": {
@@ -294,7 +310,7 @@ function Labels({ n, name, lines, sev }: { n: LNode; name: string; lines: string
 
 function ClientBadge({ n, d, sel, sev, dim, onClick }: { n: LNode; d: Device; sel: boolean; sev?: Severity; dim: boolean; onClick: () => void }) {
   const c = bandColor(d.via?.band);
-  const standby = /standby|wi-?fi$/i.test(d.name) && d.kind === "server";
+  const standby = d.status !== "online";
   const right = n.side !== "left";
   const tx = right ? 20 : -20;
   const anchor = right ? "start" : "end";

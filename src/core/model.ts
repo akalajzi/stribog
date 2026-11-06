@@ -372,12 +372,11 @@ export function buildModel(snap: Snapshot): NetworkModel {
   const dhcpClient = menu(cfg, "/ip/dhcp-client").find((c) => enabled(c) && zoneOfIface(c.interface) === "upstream");
   const pppoe = menu(cfg, "/interface/pppoe-client").find(enabled);
   const wanState = stateMenu("/ip/dhcp-client").find((c) => c.interface === dhcpClient?.interface);
-  const wanPort = [...menu(cfg, "/interface/ethernet")].find((e) => zoneOfIface(e.name ?? e["default-name"]) === "upstream" && /wan|uplink|isp|ont|modem/i.test(e.comment ?? ""));
   const wan: Wan = {
     iface: pppoe?.name ?? dhcpClient?.interface,
     type: pppoe ? "pppoe" : dhcpClient ? "dhcp" : "unknown",
     doubleNat: "unknown",
-    upstreamName: ov.upstream?.name ?? upstreamFromComment(wanPort?.comment),
+    upstreamName: ov.upstream?.name,
   };
   const wanAddr = wanState?.address?.split("/")[0];
   if (wanAddr) {
@@ -408,20 +407,32 @@ export function buildModel(snap: Snapshot): NetworkModel {
     facts: [],
   });
 
-  if (wan.doubleNat === true || wan.upstreamName || ov.upstream) {
+  // The box in front of the router, when there is one: a private WAN address says so.
+  // Its MAC comes from the router's ARP entry for the WAN gateway.
+  const gwArp = wan.gateway ? stateMenu("/ip/arp").find((a) => a.address === wan.gateway && a["mac-address"]) : undefined;
+  const gwMac = normMac(gwArp?.["mac-address"]);
+  if (wan.doubleNat === true || ov.upstream) {
+    const named = ov.upstream?.model ?? ov.upstream?.name;
+    const v = gwMac ? vendorOf(gwMac) : undefined;
     add({
       id: "upstream",
       kind: "isp",
-      kindCertainty: ov.upstream?.model ? "user" : "inferred",
-      name: ov.upstream?.model ?? wan.upstreamName ?? "ISP router",
-      nameSource: ov.upstream?.model ? "user" : "comment",
+      kindCertainty: ov.upstream ? "user" : "inferred",
+      name: named ?? "ISP router",
+      nameSource: named ? "user" : "system",
+      mac: gwMac || undefined,
+      vendor: v?.vendor,
       ip: wan.gateway,
       model: ov.upstream?.model,
       zone: "upstream",
       status: hasState ? "online" : "unknown",
       parent: "internet",
       via: { kind: "upstream", certainty: "inferred" },
-      facts: [ov.upstream?.isp ? `ISP: ${ov.upstream.isp}` : "", wan.gateway ? `Gateway for the router's WAN` : ""].filter(Boolean),
+      facts: [
+        ov.upstream?.isp ? `ISP: ${ov.upstream.isp}` : "",
+        wan.gateway ? `Gateway for the router's WAN` : "",
+        v?.vendor ? `Probably made by ${v.vendor}, from its MAC address` : "",
+      ].filter(Boolean),
     });
   }
 
@@ -447,7 +458,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
       status: hasState ? "online" : "unknown",
       managed: true,
       parent: devices.has("upstream") ? "upstream" : "internet",
-      via: { kind: "upstream", port: wan.iface ? portForUpstream(cfg, wan.iface) : undefined, certainty: "read" },
+      via: { kind: "upstream", certainty: "read" },
       facts: [identity === "MikroTik" ? "Identity is still the default \"MikroTik\"" : `Identity ${identity}`],
     });
   }
@@ -626,9 +637,9 @@ export function buildModel(snap: Snapshot): NetworkModel {
   // ---- clients ------------------------------------------------------------------
   const regs = stateMenu("/interface/wifi/registration-table");
   const hosts = stateMenu("/interface/bridge/host").filter((h) => !isTrue(h.local));
-  // The WAN gateway shows up in ARP on a live router; it is the upstream device, not a client.
-  const wanGwArp = stateMenu("/ip/arp").find((a) => wan.gateway && a.address === wan.gateway);
-  const arp = stateMenu("/ip/arp").filter((a) => a !== wanGwArp);
+  // The WAN gateway is the upstream device, not a client, however the router saw it.
+  const arp = stateMenu("/ip/arp").filter((a) => !gwMac || normMac(a["mac-address"]) !== gwMac);
+  const upstreamSide = (iface?: string) => zoneOfIface(iface) === "upstream";
   const routerMacs = new Set(menu(cfg, "/interface/bridge").map((b) => normMac(b["admin-mac"])).filter(Boolean));
   const macs = new Set<string>();
   for (const l of leasesCfg) macs.add(normMac(l["mac-address"]));
@@ -638,6 +649,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
   for (const a of arp) if (a["mac-address"]) macs.add(normMac(a["mac-address"]));
   for (const k of Object.keys(ov.devices ?? {})) macs.add(normMac(k));
   macs.delete("");
+  if (gwMac) macs.delete(gwMac);
 
   const radioOfIface = (iface?: string) => {
     if (!iface) return undefined;
@@ -659,7 +671,13 @@ export function buildModel(snap: Snapshot): NetworkModel {
     const ls = leasesState.find((l) => normMac(l["mac-address"]) === mac);
     const reg = regs.find((r) => normMac(r["mac-address"]) === mac);
     const host = hosts.find((h) => normMac(h["mac-address"]) === mac);
-    const a = arp.find((x) => normMac(x["mac-address"]) === mac);
+    // A device can have ARP entries on both sides (an old address on the upstream network).
+    // Anything this router serves on the LAN side wins; the upstream entry is then only a fact.
+    const arps = arp.filter((x) => normMac(x["mac-address"]) === mac);
+    const lanArp = arps.find((x) => !upstreamSide(x.interface));
+    const upArp = arps.find((x) => upstreamSide(x.interface));
+    const onLan = !!(lc || ls || reg || lanArp || (host && !upstreamSide(host["on-interface"])));
+    const a = lanArp ?? (onLan ? undefined : upArp);
     const v = vendorOf(mac);
     const hostname = ls?.["host-name"];
     const comment = lc?.comment ?? ls?.comment;
@@ -702,10 +720,13 @@ export function buildModel(snap: Snapshot): NetworkModel {
       lastSeen: ls?.["last-seen"],
       facts: [],
     };
-    if (d.network && networks.find((n) => n.id === d.network)?.role === "wan") d.zone = "upstream";
+    if (!onLan && (upArp || host)) d.zone = "upstream";
+    else if (d.network && networks.find((n) => n.id === d.network)?.role === "wan") d.zone = "upstream";
     else if (ip && !lanNet?.cidr) d.zone = "lan";
     else if (ip && lanNet?.cidr && !inCidr(ip, lanNet.cidr) && d.network === undefined) d.zone = "upstream";
     if (comment) d.facts.push(`DHCP reservation note: “${comment}”`);
+    if (onLan && upArp?.address) d.facts.push(`Also known on the upstream network as ${upArp.address} (${arpWords(upArp)})`);
+    if (!onLan && upArp) d.facts.push(`Seen only on the upstream network, in the router's address table: ${arpWords(upArp)}`);
     if (lc?.address && currentIp && currentIp !== lc.address) d.facts.push(`Reserved ${lc.address}, but currently at ${currentIp}`);
 
     if (reg) {
@@ -767,11 +788,18 @@ export function buildModel(snap: Snapshot): NetworkModel {
     if (p?.poeWatts) ap.facts.push(`Powered over PoE from ${p.name}: ${p.poeVolts ?? "?"} V, ${p.poeWatts} W`);
   }
 
-  // Upstream legacy devices reached through a router port on the WAN side.
+  // The router port the WAN goes out of: the WAN interface itself, or the port of the WAN bridge
+  // where the gateway's MAC is learned, else the one with a link, else the first.
+  const wanPorts = wan.iface ? (portByName(wan.iface) ? [wan.iface] : bridgePorts.filter((p) => p.bridge === wan.iface).map((p) => p.interface ?? "")) : [];
+  const gwHost = gwMac ? hosts.find((h) => normMac(h["mac-address"]) === gwMac && wanPorts.includes(h["on-interface"] ?? "")) : undefined;
+  const upstreamPortName = gwHost?.["on-interface"] ?? wanPorts.find((n) => portByName(n)?.running) ?? wanPorts.find((n) => portByName(n));
+
+  // Devices on the upstream side: on a WAN-side router port other than the uplink they hang off
+  // the router; otherwise they are somewhere on the ISP router's network.
   for (const d of devices.values()) {
     if (d.zone !== "upstream" || d.id === "upstream") continue;
     const host = hosts.find((h) => normMac(h["mac-address"]) === d.mac);
-    if (host?.["on-interface"] && !/wan/i.test(portByName(host["on-interface"])?.comment ?? "") && portByName(host["on-interface"])?.zone === "upstream") {
+    if (host?.["on-interface"] && host["on-interface"] !== upstreamPortName && portByName(host["on-interface"])?.zone === "upstream") {
       d.parent = routerId;
       d.via = { kind: "port", port: host["on-interface"], certainty: "read" };
     } else {
@@ -784,7 +812,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
   for (const d of devices.values()) {
     if (d.parent === routerId && d.via?.kind === "port" && d.via.port) portByName(d.via.port)?.deviceIds.push(d.id);
   }
-  const upstreamPort = ports.find((p) => p.zone === "upstream" && /wan|uplink|isp|ont|modem/i.test(p.comment ?? ""));
+  const upstreamPort = portByName(upstreamPortName);
   if (upstreamPort && devices.has("upstream")) upstreamPort.deviceIds.unshift("upstream");
   if (routerId && devices.get(routerId)?.via && upstreamPort) devices.get(routerId)!.via!.port = upstreamPort.name;
   for (const pd of ov.planned ?? []) {
@@ -838,6 +866,14 @@ function labelFor(name: string, comment: string | undefined, role: NetworkRole):
   return name.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
+/** An ARP entry's state in plain words. */
+function arpWords(a: RosRecord): string {
+  const st = a.status ?? (a.complete === "true" ? "complete" : "incomplete");
+  if (/reachable|delay|probe|permanent/.test(st)) return "answering now";
+  if (st === "stale") return "not heard from recently";
+  return "not answering";
+}
+
 /** The descriptive parts of a device's notes, as they appear on the device. */
 function noteFields(n: DeviceNotes | undefined): Pick<Device, "labels" | "description" | "services" | "notes"> {
   if (!n) return {};
@@ -847,17 +883,6 @@ function noteFields(n: DeviceNotes | undefined): Pick<Device, "labels" | "descri
     ...(n.services?.length ? { services: n.services } : {}),
     ...(n.notes ? { notes: n.notes } : {}),
   };
-}
-
-function upstreamFromComment(comment?: string): string | undefined {
-  if (!comment) return undefined;
-  const m = comment.match(/(?:uplink to|to|via)\s+([A-Z][\w-]+)/);
-  return m?.[1];
-}
-
-function portForUpstream(cfg: RosConfig | undefined, wanIface: string): string | undefined {
-  const ports = menu(cfg, "/interface/bridge/port").filter((p) => p.bridge === wanIface);
-  return ports.find((p) => /wan|uplink|isp|nokia|ont|modem/i.test(p.comment ?? ""))?.interface ?? ports[0]?.interface ?? wanIface;
 }
 
 function guessBandFromNote(note?: string): Band | undefined {

@@ -283,12 +283,14 @@ describe("saved snapshots", () => {
 // becomes "Unknown device 53:FE" in the upstream zone, and analyze() reports a false
 // "wan-devices-outside" (… is outside your firewall, on 203.0.113.0/24). The ISP gateway should be
 // merged into the "upstream" device (or ARP entries on WAN interfaces ignored).
-it("does not turn the WAN gateway's ARP entry into a client", () => {
+it("does not turn the WAN gateway's ARP entry into a client; it is the upstream device", () => {
   const { config, base } = readConfig(DEMO);
   const s = snapshotFromFiles(config, base);
   s.devices[0]!.state!["/ip/arp"]!.push({ address: "203.0.113.1", "mac-address": "00:00:5E:00:53:FE", interface: "ether1", complete: "true" });
+  s.devices[0]!.state!["/interface/bridge/host"]!.push({ "mac-address": "00:00:5E:00:53:FE", "on-interface": "ether1", bridge: "bridge" });
   const mm = buildModel(s);
-  expect(mm.devices.filter((d) => d.zone === "upstream" && d.mac)).toEqual([]);
+  expect(mm.devices.filter((d) => d.zone === "upstream" && d.mac && d.id !== "upstream")).toEqual([]);
+  expect(mm.devices.find((d) => d.id === "upstream")!.mac).toBe("00:00:5E:00:53:FE");
 });
 
 describe("small configs", () => {

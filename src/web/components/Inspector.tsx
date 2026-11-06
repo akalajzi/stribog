@@ -3,6 +3,7 @@ import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { bandColor, Glyph } from "./DeviceArt.tsx";
 import { SEV_VAR } from "./FindingCard.tsx";
 import { NotesPanel } from "./NotesPanel.tsx";
+import { UPSTREAM_GROUP } from "../../core/layout.ts";
 
 export function SignalBars({ dbm }: { dbm?: number }) {
   const n = dbm === undefined ? 0 : dbm >= -55 ? 4 : dbm >= -62 ? 3 : dbm >= -70 ? 2 : 1;
@@ -32,6 +33,8 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
       </aside>
     );
   }
+
+  if (id === UPSTREAM_GROUP) return <UpstreamGroup data={data} onClose={onClose} onSelect={onSelect} />;
 
   const d = model.devices.find((x) => x.id === id);
   if (!d) return null;
@@ -153,6 +156,34 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
           <div style={{ display: "grid", gap: 6 }}>{d.facts.map((f, i) => <div key={i} className="fact">{f}</div>)}</div>
         </div>
       )}
+    </aside>
+  );
+}
+
+/** Devices the router has only glimpsed on the ISP router's network. */
+function UpstreamGroup({ data, onClose, onSelect }: { data: NetworkPayload; onClose: () => void; onSelect: (id: string) => void }) {
+  const { model } = data;
+  const up = model.devices.find((x) => x.id === "upstream");
+  const upName = up?.nameSource === "user" ? up.name : "the ISP router";
+  const list = model.devices
+    .filter((x) => x.zone === "upstream" && x.id !== "upstream" && x.mac && x.parent !== model.routerId)
+    .sort((a, b) => Number(b.status === "online") - Number(a.status === "online") || a.name.localeCompare(b.name));
+  return (
+    <aside className="side">
+      <Header kind="unknown" title={`${list.length} device${list.length === 1 ? "" : "s"} on the upstream network`} sub={<>On {upName}'s network, outside this router</>} onClose={onClose} />
+      <p className="faint" style={{ margin: 0, lineHeight: 1.5 }}>
+        This router is itself a device on {upName}'s network, so it only glimpses these in its address table (ARP): an address, a MAC, and whether they answered recently. It does not
+        know where they are connected.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {list.map((k) => (
+          <button key={k.id} onClick={() => onSelect(k.id)} style={{ display: "grid", gridTemplateColumns: "22px 1fr auto", gap: 9, alignItems: "center", padding: "7px 2px", border: 0, borderTop: "1px solid var(--hair)", background: "none", textAlign: "left", cursor: "pointer", color: "var(--tx-2)" }}>
+            <span style={{ color: k.status === "online" ? "var(--tx-1)" : "var(--tx-3)" }}><Glyph kind={k.kind} /></span>
+            <span style={{ color: "var(--tx-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.name} <span className="faint mono">{k.ip ?? ""}</span></span>
+            <span className="faint" style={{ fontSize: 11.5 }}>{k.status === "online" ? "answering now" : "not recently"}</span>
+          </button>
+        ))}
+      </div>
     </aside>
   );
 }

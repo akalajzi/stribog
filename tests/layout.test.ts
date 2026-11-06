@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { layoutTopology, orbitRadius, type Layout } from "../src/core/layout.ts";
+import { layoutTopology, orbitRadius, UPSTREAM_GROUP, type Layout } from "../src/core/layout.ts";
 import { readConfig, snapshotFromFiles } from "../src/core/load.ts";
 import { buildModel, type NetworkModel } from "../src/core/model.ts";
 import { parseExport } from "../src/core/ros.ts";
@@ -171,42 +171,32 @@ add interface=bridge
     expect(l.links.find((x) => x.id === "l:router")!.label).toContain("double NAT");
   });
 
-  it("packs many devices on the ISP network into a grid without a link each", () => {
+  it("stands one group node for devices seen only on the ISP network, without a link each", () => {
     const rsc = `/interface bridge
-add name=bridge comment="WAN to ISP"
+add name=wan-br
 add name=lan
 /interface list
 add name=WAN
 /interface list member
-add interface=bridge list=WAN
+add interface=wan-br list=WAN
 /interface bridge port
-add bridge=bridge interface=ether1
+add bridge=wan-br interface=ether1
 add bridge=lan interface=ether2
 /ip address
 add address=10.0.0.1/24 interface=lan
 /ip dhcp-client
-add interface=bridge
+add interface=wan-br
 `;
-    const arp = Array.from({ length: 17 }, (_, i) => ({ address: `192.168.1.${30 + i}`, "mac-address": `00:00:5E:00:53:${(0x60 + i).toString(16).toUpperCase()}`, interface: "bridge", complete: "true" }));
+    const arp = Array.from({ length: 17 }, (_, i) => ({ address: `192.168.1.${30 + i}`, "mac-address": `00:00:5E:00:53:${(0x60 + i).toString(16).toUpperCase()}`, interface: "wan-br", complete: "true", status: i < 2 ? "reachable" : "stale" }));
     const m = buildModel({
       collectedAt: "x",
-      devices: [{ role: "router", config: parseExport(rsc), state: { "/ip/dhcp-client": [{ interface: "bridge", address: "192.168.1.20/24", gateway: "192.168.1.1" }], "/ip/arp": arp }, sources: [] }],
+      devices: [{ role: "router", config: parseExport(rsc), state: { "/ip/dhcp-client": [{ interface: "wan-br", address: "192.168.1.20/24", gateway: "192.168.1.1" }], "/ip/arp": arp }, sources: [] }],
     });
     const l = layoutTopology(m);
     checkSane(m, l);
-    const legacy = l.nodes.filter((n) => n.id.startsWith("mac:"));
-    expect(legacy).toHaveLength(17);
-    expect(new Set(legacy.map((n) => n.x)).size).toBe(6);
-    expect(new Set(legacy.map((n) => n.y)).size).toBe(3);
-    expect(l.links.filter((x) => x.to.startsWith("mac:"))).toEqual([]);
-    // The grid stays above the router and inside its zone.
-    const z = l.zones[0]!;
-    const router = l.nodes.find((n) => n.id === m.routerId)!;
-    for (const n of legacy) {
-      expect(n.y + 60).toBeLessThan(router.y - 31);
-      expect(n.x).toBeGreaterThan(z.x);
-      expect(n.y + 45).toBeLessThan(z.y + z.h);
-    }
-    expect(z.sub).toContain("17 devices not behind this router");
+    expect(l.nodes.filter((n) => n.id.startsWith("mac:"))).toEqual([]);
+    expect(l.nodes.find((n) => n.id === UPSTREAM_GROUP)).toMatchObject({ kind: "group" });
+    expect(l.links.filter((x) => x.to === UPSTREAM_GROUP)).toEqual([]);
+    expect(m.devices.filter((d) => d.zone === "upstream" && d.status === "online" && d.id !== "upstream")).toHaveLength(2);
   });
 });

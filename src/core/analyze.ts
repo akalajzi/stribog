@@ -131,37 +131,72 @@ const doubleNat: Rule = ({ m }) => {
 };
 
 const upstreamDevices: Rule = ({ m }) => {
-  const outside = m.devices.filter((d) => d.zone === "upstream" && d.mac);
+  // Seen only on the ISP router's side. "Answering now" comes from the router's ARP state.
+  const outside = m.devices.filter((d) => d.zone === "upstream" && d.id !== "upstream" && d.mac);
   if (!outside.length) return undefined;
+  const now = outside.filter((d) => d.status === "online");
+  const earlier = outside.filter((d) => d.status !== "online");
+  const where = m.wan.gateway ? m.wan.gateway.replace(/\.\d+$/, ".0/24") : "the upstream network";
+  const evidence = [
+    ...now.map((d) => `${d.name}: ${d.ip ?? "?"}${d.via?.port ? ` on ${d.via.port}` : ""}, answering now`),
+    ...earlier.map((d) => `${d.name}: ${d.ip ?? "?"}, not answering recently`),
+  ];
+  if (!now.length)
+    return {
+      id: "wan-devices-outside",
+      severity: "info",
+      category: "segmentation",
+      title: `The router remembers ${plural(earlier.length, "device")} from the ISP router's network`,
+      summary: `None of them answered recently. They are entries in the router's address table (ARP) for ${where}, and may well be gone.`,
+      evidence,
+      devices: earlier.map((d) => d.id),
+    };
   return {
     id: "wan-devices-outside",
     severity: "suggestion",
     category: "segmentation",
-    title: `${plural(outside.length, "device")} still on the ISP router's network`,
-    summary: `${join(names(outside))} ${outside.length === 1 ? "is" : "are"} outside your firewall, on ${m.wan.gateway ? m.wan.gateway.replace(/\.\d+$/, ".0/24") : "the upstream network"}.`,
+    title: `${plural(now.length, "device")} on the ISP router's network`,
+    summary: `${join(names(now))} ${now.length === 1 ? "is" : "are"} on ${where}, outside this router's firewall.${earlier.length ? ` ${plural(earlier.length, "more was", "more were")} seen there earlier.` : ""}`,
     detail: [
-      "Devices on the upstream side are not protected by this router's firewall, cannot use your local DNS filtering, and reach home services only through compatibility NAT.",
-      "This is normal during a migration. Move them over, then retire the old network.",
+      "Devices on the upstream side are not protected by this router's firewall, do not use its DNS settings, and reach your network only through port forwards.",
+      "If they belong to you, move them to your own Wi-Fi or a LAN port.",
     ],
-    evidence: outside.map((d) => `${d.name}: ${d.ip ?? "?"}${d.via?.port ? ` via ${d.via.port}` : ""}${d.reserved ? " (a Home LAN reservation is waiting)" : ""}`),
+    evidence,
     devices: outside.map((d) => d.id),
-    fix: { where: "device", steps: outside.map((d) => `${d.name}: connect it to your Wi-Fi or a LAN port${d.reserved ? "; its reservation is already prepared" : ""}.`) },
+    fix: { where: "device", steps: now.map((d) => `${d.name}: connect it to your Wi-Fi or a LAN port.`) },
   };
 };
 
-const legacyCompat: Rule = ({ cfg }) => {
-  const nat = menu(cfg, "/ip/firewall/nat").filter((r) => enabled(r) && /legacy|compat/i.test(r.comment ?? ""));
-  const addrs = menu(cfg, "/ip/address").filter((r) => enabled(r) && /legacy|compat/i.test(r.comment ?? ""));
-  if (!nat.length && !addrs.length) return undefined;
+const legacyCompat: Rule = ({ m, cfg }) => {
+  // Extra addresses the router holds on the WAN side, forwarded into the LAN: devices that still
+  // live on the upstream network keep reaching LAN devices at their old addresses.
+  const wanIf = m.wan.iface;
+  if (!wanIf) return undefined;
+  const ipOf = (a?: string) => a?.split("/")[0];
+  const addrs = menu(cfg, "/ip/address").filter((a) => enabled(a) && !isTrue(a.dynamic) && a.interface === wanIf && ipOf(a.address) && ipOf(a.address) !== m.wan.address);
+  const extra = new Set(addrs.map((a) => ipOf(a.address)!));
+  const nat = menu(cfg, "/ip/firewall/nat").filter((r) => enabled(r) && r.action === "dst-nat" && extra.has(ipOf(r["dst-address"]) ?? ""));
+  if (!nat.length) return undefined;
+  const forwarded = [...extra].filter((ip) => nat.some((r) => ipOf(r["dst-address"]) === ip));
+  const target = (ip: string) => {
+    const to = nat.find((r) => ipOf(r["dst-address"]) === ip)?.["to-addresses"];
+    const dev = to ? m.devices.find((d) => d.ip === to) : undefined;
+    return `${ip} → ${to ?? "?"}${dev ? ` (${dev.name})` : ""}`;
+  };
   return {
     id: "lan-legacy-compat",
     severity: "info",
     category: "internet",
-    title: "Compatibility addresses for the old network are active",
-    summary: `${plural(addrs.length, "old address", "old addresses")} and ${plural(nat.length, "NAT rule")} keep references to the old addresses working while devices move.`,
-    detail: ["Useful during migration, but they hide stale configuration. Once no device uses the old addresses, remove them so problems surface instead of being silently translated."],
-    evidence: [...addrs.map((a) => `${a.address} on ${a.interface} — ${a.comment}`), ...nat.map((r) => `${r.chain} ${r.action} ${r["dst-address"] ?? ""} → ${r["to-addresses"] ?? ""} — ${r.comment}`)],
-    fix: { where: "router", cli: `# When nothing uses the old addresses any more:\n/ip firewall nat remove [find comment~"Legacy"]\n/ip address remove [find comment~"Legacy compatibility"]` },
+    title: `The router answers for ${plural(forwarded.length, "extra address", "extra addresses")} on the upstream network`,
+    summary: `It holds ${join(forwarded)} on ${wanIf} and forwards ${forwarded.length === 1 ? "it" : "them"} into your LAN, so devices on the ISP router's network can still reach LAN devices at those addresses. This is probably a migration aid.`,
+    detail: ["Useful while devices move, but it hides stale configuration. Once nothing uses those addresses, remove them so problems surface instead of being silently translated."],
+    evidence: forwarded.map(target),
+    fix: {
+      where: "router",
+      cli:
+        "# When nothing uses these addresses any more:\n" +
+        forwarded.flatMap((ip) => [`/ip firewall nat remove [find action=dst-nat dst-address="${ip}"]`, `/ip address remove [find interface="${wanIf}" address="${addrs.find((a) => ipOf(a.address) === ip)!.address}"]`]).join("\n"),
+    },
   };
 };
 
