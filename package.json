@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "start": "tsx src/server/server.ts",
-    "audit": "tsx src/cli/stribog.ts audit",
+    "review": "tsx src/cli/stribog.ts audit",
     "collect": "tsx src/cli/stribog.ts collect",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

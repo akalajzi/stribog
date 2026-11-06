@@ -13,7 +13,7 @@ export interface NetworkPayload {
   model: NetworkModel;
   analysis: Analysis;
   layout: Layout;
-  meta: { mode: "files" | "live" | "demo"; sample: boolean; error?: string; configPath: string; refreshedAt: string };
+  meta: { mode: "files" | "live" | "demo"; sample: boolean; error?: string; configPath: string; overridesPath?: string; refreshedAt: string };
 }
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -51,7 +51,7 @@ export async function getNetwork(force = false): Promise<NetworkPayload> {
     model,
     analysis: analyze(model, snap),
     layout: layoutTopology(model),
-    meta: { mode, sample: !!snap.sampleState && mode !== "live", error, configPath: path, refreshedAt: new Date().toISOString() },
+    meta: { mode, sample: !!snap.sampleState && mode !== "live", error, configPath: path, overridesPath: config.overrides ? expand(config.overrides, base) : undefined, refreshedAt: new Date().toISOString() },
   };
   cache = { at: Date.now(), payload };
   return payload;

@@ -70,8 +70,13 @@ export interface RestOptions {
   fetchImpl?: typeof fetch;
 }
 
+export class AuthError extends Error {}
+
 export class RouterOsRest {
-  constructor(private opt: RestOptions) {}
+  constructor(private opt: RestOptions) {
+    // Node's fetch has no per-request TLS option; self-signed router certificates need this.
+    if (opt.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  }
 
   private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<RosRecord[]> {
     const f = this.opt.fetchImpl ?? fetch;
@@ -88,6 +93,7 @@ export class RouterOsRest {
         },
         body: body ? JSON.stringify(body) : undefined,
       });
+      if (res.status === 401 || res.status === 403) throw new AuthError(`${method} ${path}: HTTP ${res.status} (check the user and its policies)`);
       if (res.status === 404 || res.status === 400) return []; // menu absent on this model / package
       if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}`);
       const data = (await res.json()) as unknown;
@@ -110,11 +116,13 @@ export class RouterOsRest {
   }
 
   async snapshot(): Promise<DeviceSnapshot> {
+    // Fail loudly on a bad login instead of returning an empty network.
+    const resource = await this.get("/system/resource");
     const menus: Record<string, RosRecord[]> = {};
     const state: Record<string, RosRecord[]> = {};
     await Promise.all([
       ...CONFIG_PATHS.map(async (p) => (menus[p] = await this.get(p).catch(() => []))),
-      ...STATE_PATHS.map(async (p) => (state[p] = await this.get(p).catch(() => []))),
+      ...STATE_PATHS.filter((p) => p !== "/system/resource").map(async (p) => (state[p] = await this.get(p).catch(() => []))),
       this.get("/ip/dhcp-client").then((r) => (state["/ip/dhcp-client"] = r)).catch(() => {}),
       this.get("/ip/dhcp-server/lease").then((r) => (state["/ip/dhcp-server/lease"] = r)).catch(() => {}),
     ]);
@@ -130,6 +138,7 @@ export class RouterOsRest {
     state["/interface/ethernet/monitor"] = mon;
     state["/interface/ethernet/poe/monitor"] = poe;
     state["/interface/wifi/monitor"] = wmon;
+    state["/system/resource"] = resource;
     const res = state["/system/resource"]?.[0];
     const at = new Date().toISOString();
     return {

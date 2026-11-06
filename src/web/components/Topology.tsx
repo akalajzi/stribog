@@ -116,7 +116,7 @@ export function Topology({ data, selected, highlight, onSelect }: Props) {
               {o.rings.map((r, i) => (
                 <circle key={r.dbm} cx={o.x} cy={o.y} r={r.r} fill="none" stroke={COLORS.w5} strokeOpacity={0.13} strokeDasharray={i === 0 ? undefined : i === 1 ? "2 4" : "1 6"} />
               ))}
-              <text x={o.x + orbitRadius(-75) * 0.74} y={o.y + orbitRadius(-75) * 0.74 + 16} fill="#5d636d" fontSize={9.5} fontFamily="JetBrains Mono, monospace">rings {o.rings.map((r) => r.dbm).join(" · ")} dBm</text>
+              <text x={o.x + 16} y={o.y - orbitRadius(-80) - 6} fill="#5d636d" fontSize={9.5} fontFamily="JetBrains Mono, monospace">rings {o.rings.map((r) => r.dbm).join(" · ")} dBm</text>
             </g>
           ))}
 

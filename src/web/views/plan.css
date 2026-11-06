@@ -1,0 +1,90 @@
+/* Setup & fix plan view. Prefix: pv- */
+
+.pv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.pv-tabs { margin-top: 4px; flex: none; }
+.pv-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
+.pv-split.setup { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); }
+.pv-preview { position: sticky; top: 0; display: grid; gap: 12px; min-width: 0; }
+.pv-preview pre.cli { max-height: calc(100vh - 330px); min-height: 220px; }
+.pv-split.setup .pv-preview pre.cli { max-height: calc(100vh - 420px); }
+
+/* ---------- fix list ---------- */
+.pv-list { display: grid; gap: 18px; }
+.pv-group { display: grid; gap: 6px; }
+.pv-group-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+.pv-fix { display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding: 12px 14px; border-radius: 11px; background: rgba(17, 21, 28, .7); box-shadow: inset 0 0 0 1px var(--hair); cursor: pointer; transition: box-shadow .12s, background .12s; }
+.pv-fix:hover { box-shadow: inset 0 0 0 1px var(--hair-2); }
+.pv-fix.on { background: rgba(23, 29, 39, .95); box-shadow: inset 0 0 0 1px var(--hair-3); }
+.pv-fix .body { display: grid; gap: 3px; min-width: 0; }
+.pv-fix .t { color: var(--tx-1); font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.pv-fix .t i, .pv-check-f .t i { width: 7px; height: 7px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+.pv-fix .s { color: var(--tx-2); font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pv-fix .m { display: flex; gap: 10px; align-items: center; font-size: 11.5px; margin-top: 3px; }
+.pv-fix .caution { color: var(--warn); }
+
+/* custom checkbox shared by fixes, steps and setup options */
+.pv input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.pv .box { width: 16px; height: 16px; border-radius: 5px; box-shadow: inset 0 0 0 1.5px var(--tx-3); margin-top: 1px; display: grid; place-items: center; transition: .12s; flex: none; }
+.pv input:checked + .box { background: var(--tx-1); box-shadow: none; }
+.pv input:checked + .box::after { content: ""; width: 8px; height: 4px; border-left: 2px solid var(--ink-0); border-bottom: 2px solid var(--ink-0); transform: rotate(-45deg) translate(1px, -1px); }
+.pv input:focus-visible + .box { outline: 2px solid var(--idea); outline-offset: 2px; }
+
+/* ---------- script preview ---------- */
+.pv-script { display: grid; gap: 8px; min-width: 0; }
+.pv-script-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pv-script-h b { font-weight: 600; }
+.pv-warnline { font-size: 12px; color: var(--warn); padding: 7px 11px; border-radius: 8px; background: rgba(243, 194, 90, .06); box-shadow: inset 0 0 0 1px rgba(243, 194, 90, .18); }
+.pv-empty { display: grid; gap: 4px; place-items: center; padding: 48px 16px; text-align: center; }
+.pv-never { display: flex; gap: 8px; align-items: flex-start; color: var(--tx-3); font-size: 12px; }
+.pv-never svg { flex: none; margin-top: 1px; color: var(--ok); }
+
+/* ---------- checklist ---------- */
+.pv-check { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.pv-check-g { display: grid; gap: 14px; align-content: start; }
+.pv-check-f { display: grid; gap: 6px; }
+.pv-check-f .t { color: var(--tx-1); font-weight: 500; display: flex; gap: 8px; align-items: baseline; }
+.pv-step { display: grid; grid-template-columns: 16px 1fr; gap: 10px; color: var(--tx-2); cursor: pointer; padding: 2px 0 2px 15px; position: relative; }
+.pv-step.done > span:last-child { color: var(--tx-3); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .2); }
+
+/* ---------- setup form ---------- */
+.pv-form { display: grid; gap: 10px; }
+.pv-sec { padding: 14px 16px; display: grid; gap: 12px; }
+.pv-sec.off { padding-bottom: 14px; }
+.pv-sec.off .pv-sec-h b { color: var(--tx-2); }
+.pv-sec-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pv-sec-h b { font-weight: 600; font-size: 13.5px; }
+.pv-sec-b { display: grid; gap: 10px; }
+.pv-field { display: grid; grid-template-columns: 104px 1fr; gap: 12px; align-items: baseline; }
+.pv-field .l { color: var(--tx-3); font-size: 12.5px; }
+.pv-field .c { display: grid; gap: 4px; min-width: 0; justify-items: start; }
+.pv-form input:not([type="checkbox"]), .pv-form select {
+  width: 100%; height: 30px; padding: 0 10px; border-radius: 8px; border: 0; outline: 0;
+  background: var(--ink-1); color: var(--tx-1); box-shadow: inset 0 0 0 1px var(--hair-2); font: inherit;
+}
+.pv-form input.mono { font-family: var(--mono); font-size: 12px; }
+.pv-form input:focus, .pv-form select:focus { box-shadow: inset 0 0 0 1px var(--hair-3), 0 0 0 3px rgba(143, 184, 255, .15); }
+.pv-form select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--tx-3) 50%), linear-gradient(135deg, var(--tx-3) 50%, transparent 50%); background-position: calc(100% - 15px) 13px, calc(100% - 10px) 13px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 26px; }
+.pv-form input[type="number"] { width: 110px; }
+.pv-hint { display: block; color: var(--tx-3); font-size: 11.5px; line-height: 1.4; margin: 0; }
+.pv-fixed { color: var(--tx-2); font-size: 12.5px; }
+.pv-checkline { display: grid; grid-template-columns: 16px 1fr; gap: 10px; cursor: pointer; color: var(--tx-1); padding-left: 116px; position: relative; }
+.pv-checkline .box { grid-column: 1; }
+.pv-switch { width: 34px; height: 20px; border-radius: 999px; border: 0; padding: 0; background: var(--ink-4); box-shadow: inset 0 0 0 1px var(--hair-2); position: relative; cursor: pointer; flex: none; transition: .15s; }
+.pv-switch i { position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--tx-3); transition: .15s; }
+.pv-switch.on { background: rgba(99, 214, 162, .25); box-shadow: inset 0 0 0 1px rgba(99, 214, 162, .5); }
+.pv-switch.on i { left: 17px; background: var(--ok); }
+.pv-ports { display: flex; gap: 6px; flex-wrap: wrap; }
+.pv-port { position: relative; min-width: 40px; height: 30px; padding: 0 10px; display: grid; place-items: center; border-radius: 7px; background: var(--ink-1); box-shadow: inset 0 0 0 1px var(--hair-2); color: var(--tx-3); cursor: pointer; font-size: 12px; }
+.pv-port.on { color: var(--ink-0); background: var(--w5); box-shadow: none; }
+.pv-notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--tx-2); }
+.pv-notes li::marker { color: var(--warn); }
+
+@media (max-width: 1100px) {
+  .pv-split, .pv-split.setup { grid-template-columns: 1fr; }
+  .pv-preview { position: static; }
+}
+
+/* Long script lines scroll inside the block instead of widening the column. */
+.pv-script > div, .pv-script pre.cli { min-width: 0; max-width: 100%; }
+.pv-sec-b > .seg, .pv-sec > .seg { justify-self: start; }
+.pv-never .mono { white-space: nowrap; }

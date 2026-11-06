@@ -171,6 +171,80 @@ export interface NetworkModel {
   radios: Radio[];
   wan: Wan;
   planned: PlannedDevice[];
+  /** Management services (/ip service), defaults filled in. */
+  services?: Service[];
+  /** IPv4 firewall rules in router order, reduced to the fields the UI explains. */
+  firewall?: { filter: FwRule[]; nat: FwRule[] };
+}
+
+export interface Service {
+  name: string;
+  enabled: boolean;
+  /** Allowed source addresses; absent means any. */
+  address?: string;
+  port?: string;
+}
+
+/** A firewall rule as RouterOS stores it, limited to the fields worth explaining. */
+export interface FwRule {
+  chain: string;
+  action: string;
+  comment?: string;
+  disabled?: boolean;
+  protocol?: string;
+  "src-port"?: string;
+  "dst-port"?: string;
+  "src-address"?: string;
+  "dst-address"?: string;
+  "src-address-list"?: string;
+  "dst-address-list"?: string;
+  "in-interface"?: string;
+  "out-interface"?: string;
+  "in-interface-list"?: string;
+  "out-interface-list"?: string;
+  "connection-state"?: string;
+  "connection-nat-state"?: string;
+  "ipsec-policy"?: string;
+  "to-addresses"?: string;
+  "to-ports"?: string;
+  "jump-target"?: string;
+}
+
+const FW_FIELDS = [
+  "protocol", "src-port", "dst-port", "src-address", "dst-address", "src-address-list", "dst-address-list",
+  "in-interface", "out-interface", "in-interface-list", "out-interface-list", "connection-state",
+  "connection-nat-state", "ipsec-policy", "to-addresses", "to-ports", "jump-target",
+] as const;
+
+function fwRule(r: RosRecord): FwRule {
+  const out: FwRule = { chain: r.chain ?? "", action: r.action ?? "accept" };
+  if (r.comment) out.comment = r.comment;
+  if (isTrue(r.disabled)) out.disabled = true;
+  for (const k of FW_FIELDS) if (r[k]) out[k] = r[k];
+  return out;
+}
+
+/** RouterOS defaults: exports only list services that differ from these. */
+const SERVICE_DEFAULTS: [string, string, boolean][] = [
+  ["telnet", "23", true], ["ftp", "21", true], ["www", "80", true], ["ssh", "22", true],
+  ["www-ssl", "443", false], ["api", "8728", true], ["winbox", "8291", true], ["api-ssl", "8729", true],
+];
+
+function servicesOf(cfg: RosConfig | undefined): Service[] | undefined {
+  if (!cfg) return undefined;
+  const recs = menu(cfg, "/ip/service");
+  const out: Service[] = SERVICE_DEFAULTS.map(([name, port, on]) => {
+    const r = recs.find((x) => x.name === name);
+    const address = r?.address && r.address !== "0.0.0.0/0" ? r.address : undefined;
+    return { name, enabled: r?.disabled !== undefined ? !isTrue(r.disabled) : on, ...(address ? { address } : {}), port: r?.port ?? port };
+  });
+  // Anything else the router reports (newer RouterOS adds services over time).
+  for (const r of recs) {
+    if (!r.name || out.some((s) => s.name === r.name)) continue;
+    const address = r.address && r.address !== "0.0.0.0/0" ? r.address : undefined;
+    out.push({ name: r.name, enabled: !isTrue(r.disabled), ...(address ? { address } : {}), ...(r.port ? { port: r.port } : {}) });
+  }
+  return out;
 }
 
 const ROUTER_PORTS: Record<string, string[]> = {
@@ -470,6 +544,11 @@ export function buildModel(snap: Snapshot): NetworkModel {
   const ssids = new Map<string, Ssid>();
   const radios: Radio[] = [];
 
+  const datapaths = menu(cfg, "/interface/wifi/datapath");
+  const networkOfConf = (conf: RosRecord) => {
+    const vlan = Number(conf["datapath.vlan-id"] ?? datapaths.find((d) => d.name === conf.datapath)?.["vlan-id"]);
+    return (vlan && networks.find((n) => n.vlan === vlan)?.id) || lanNet?.id;
+  };
   const ssidFor = (confName: string | undefined) => {
     const conf = wifiCfgs.find((c) => c.name === confName);
     if (!conf?.ssid) return undefined;
@@ -483,7 +562,7 @@ export function buildModel(snap: Snapshot): NetworkModel {
         bands: [],
         auth: list(sec?.["authentication-types"] ?? conf["security.authentication-types"]),
         ft: isTrue(sec?.ft ?? conf["security.ft"]),
-        network: lanNet?.id,
+        network: networkOfConf(conf),
         configs: [],
         aps: [],
         clients: 0,
@@ -539,7 +618,9 @@ export function buildModel(snap: Snapshot): NetworkModel {
   // ---- clients ------------------------------------------------------------------
   const regs = stateMenu("/interface/wifi/registration-table");
   const hosts = stateMenu("/interface/bridge/host").filter((h) => !isTrue(h.local));
-  const arp = stateMenu("/ip/arp");
+  // The WAN gateway shows up in ARP on a live router; it is the upstream device, not a client.
+  const wanGwArp = stateMenu("/ip/arp").find((a) => wan.gateway && a.address === wan.gateway);
+  const arp = stateMenu("/ip/arp").filter((a) => a !== wanGwArp);
   const routerMacs = new Set(menu(cfg, "/interface/bridge").map((b) => normMac(b["admin-mac"])).filter(Boolean));
   const macs = new Set<string>();
   for (const l of leasesCfg) macs.add(normMac(l["mac-address"]));
@@ -713,6 +794,11 @@ export function buildModel(snap: Snapshot): NetworkModel {
     radios,
     wan,
     planned: ov.planned ?? [],
+    services: servicesOf(cfg),
+    // Dynamic rules (the live fasttrack counter, UPnP) are not part of the configuration.
+    firewall: cfg
+      ? { filter: menu(cfg, "/ip/firewall/filter").filter((r) => !isTrue(r.dynamic)).map(fwRule), nat: menu(cfg, "/ip/firewall/nat").filter((r) => !isTrue(r.dynamic)).map(fwRule) }
+      : undefined,
   };
 }
 

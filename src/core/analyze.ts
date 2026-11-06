@@ -92,6 +92,7 @@ export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
 
 const names = (ds: (Device | undefined)[]) => ds.filter(Boolean).map((d) => d!.name);
 const join = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 // ---------------------------------------------------------------------------
@@ -188,7 +189,7 @@ const singleDns: Rule = ({ m, lan }) => {
     devices: [host.id],
     fix: {
       where: "router",
-      cli: `# Let the router answer as a fallback, using ${host.name} first and a public resolver behind it\n/ip dns set allow-remote-requests=yes servers=${dns[0]},1.1.1.1\n/ip dhcp-server network set [find address="${lan.cidr}"] dns-server=${dns[0]},${lan.gateway}`,
+      cli: `# Let the router answer as a fallback, using ${host.name} first and a public resolver behind it\n/ip dns set allow-remote-requests=yes servers=${dns[0]},1.1.1.1,9.9.9.9\n/ip dhcp-server network set [find address="${lan.cidr}"] dns-server=${dns[0]},${lan.gateway}`,
       caution: "allow-remote-requests is safe only while the input firewall drops DNS from the WAN side (the default rules here do).",
     },
   };
@@ -208,7 +209,7 @@ const routerDns: Rule = ({ m, cfg }) => {
     detail: ["Infrastructure should not depend on the devices it serves. A wrong clock after a power cut breaks certificates and logs, and it is hard to diagnose."],
     evidence: [`/ip dns servers=${servers.join(",")}`, ...ntpNames.map((n) => `NTP server by name: ${n}`)],
     devices: [host.id, m.routerId ?? "router"],
-    fix: { where: "router", cli: `/ip dns set servers=${servers[0]},1.1.1.1,9.9.9.9` },
+    fix: { where: "router", cli: `# Same line as the DNS fallback fix above; applying either covers both.\n/ip dns set servers=${servers[0]},1.1.1.1,9.9.9.9` },
   };
 };
 
@@ -516,7 +517,7 @@ const services: Rule = ({ cfg, lan }) => {
   const out: Finding[] = [];
   const legacy = ["telnet", "ftp"].filter((n) => state(n).on);
   if (legacy.length)
-    out.push({ id: "svc-insecure", severity: "warning", category: "security", title: `${join(legacy)} ${legacy.length === 1 ? "is" : "are"} enabled`, summary: "These send passwords in clear text and are not needed for anything modern.", fix: { where: "router", cli: legacy.map((n) => `/ip service disable ${n}`).join("\n") } });
+    out.push({ id: "svc-insecure", severity: "warning", category: "security", title: `${cap(join(legacy.map((n) => n.toUpperCase().replace("TELNET", "Telnet"))))} ${legacy.length === 1 ? "is" : "are"} enabled`, summary: "These send passwords in clear text and are not needed for anything modern.", fix: { where: "router", cli: legacy.map((n) => `/ip service disable ${n}`).join("\n") } });
   else out.push({ id: "svc-legacy-off", severity: "pass", category: "security", title: "Telnet and FTP are off", summary: "No clear-text management protocols are listening." });
 
   const open = ["www", "ssh", "winbox"].filter((n) => state(n).on && !state(n).address);
@@ -526,13 +527,13 @@ const services: Rule = ({ cfg, lan }) => {
       severity: "suggestion",
       category: "security",
       title: "Management is open to every device on the LAN",
-      summary: `${join(open.map((n) => (n === "www" ? "WebFig (plain HTTP)" : n === "ssh" ? "SSH" : "WinBox")))} accept connections from any address. Any compromised TV, printer or guest laptop can try to log in.`,
+      summary: `${join(open.map((n) => (n === "www" ? "WebFig (plain HTTP)" : n === "ssh" ? "SSH" : "WinBox")))} accept${open.length === 1 ? "s" : ""} connections from any address. Any compromised TV, printer or guest laptop can try to log in.`,
       detail: [
         state("www").on ? "WebFig over HTTP also sends the admin password unencrypted across Wi-Fi. Prefer www-ssl, or restrict www to the machines you administer from." : "",
         "The firewall already blocks the internet side; this is about the inside.",
       ].filter(Boolean),
       evidence: open.map((n) => `/ip service ${n}: enabled, address=(any)`),
-      fix: { where: "router", cli: open.map((n) => `/ip service set ${n} address=${lan?.cidr ?? "10.0.0.0/24"}`).join("\n") + `\n# Tighter: list only your admin machines, e.g. address=192.168.88.10/32,192.168.88.20/32`, caution: "Make sure the machine you manage from is inside the allowed range before applying, or you lock yourself out of that service." },
+      fix: { where: "router", cli: open.map((n) => `/ip service set ${n} address=${lan?.cidr ?? "10.0.0.0/24"}`).join("\n") + `\n# Tighter: list only your admin machines, e.g. address=192.168.88.10/32,192.168.88.11/32`, caution: "Make sure the machine you manage from is inside the allowed range before applying, or you lock yourself out of that service." },
     });
   return out;
 };

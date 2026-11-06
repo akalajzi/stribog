@@ -119,7 +119,8 @@ export function layoutTopology(m: NetworkModel): Layout {
   const widthOf = (s: Slot) => {
     if (s.kind === "device" && s.dev.kind === "ap") {
       const wifi = children(s.dev.id).filter((c) => c.via?.kind === "wifi");
-      return wifi.length ? 2 * ORBIT_MAX + 120 : NODE_W;
+      // Room for the orbit plus client labels on both sides.
+      return wifi.length ? 2 * ORBIT_MAX + 300 : NODE_W;
     }
     return NODE_W;
   };
@@ -149,7 +150,8 @@ export function layoutTopology(m: NetworkModel): Layout {
       d: vcurve(px, y1, x, y2),
       medium,
       label: [s.port, speedLabel(port?.speedMbps), port?.poeWatts ? `PoE ${port.poeWatts} W` : ""].filter(Boolean).join(" · "),
-      labelAt: { x: (px + x) / 2 + (x >= px ? 8 : -8), y: (y1 + y2) / 2 + 4, anchor: x >= px ? "start" : "end" },
+      // Label next to the device it leads to, where links are far apart; APs keep it mid-way, clear of the orbit.
+      labelAt: isAp && wifiKids.length ? { x: (px + x) / 2 + (x >= px ? 8 : -8), y: (y1 + y2) / 2 + 4, anchor: x >= px ? "start" : "end" } : { x: x + 8, y: y2 - 14, anchor: "start" },
       weight: s.kind === "ghost" ? 0 : medium === "2.5g" ? 0.9 : 0.5,
     });
 
@@ -162,10 +164,10 @@ export function layoutTopology(m: NetworkModel): Layout {
       const right = sorted.filter((_, k) => k % 2 === 0);
       const leftSide = sorted.filter((_, k) => k % 2 === 1);
       const place = (list: Device[], side: "left" | "right") => {
-        // Avoid straight up (uplink) and straight down (wired children): use ±(25°..155°) arcs.
+        // Keep clear of the uplink arriving from above and the wired drop below: -35°..65° on each side.
         list.forEach((c, k) => {
-          const t = list.length === 1 ? 0.5 : k / (list.length - 1);
-          const deg = -62 + t * 124; // -62..62 around the horizontal
+          const t = list.length === 1 ? 0.4 : k / (list.length - 1);
+          const deg = -35 + t * 100;
           const rad = ((side === "right" ? deg : 180 - deg) * Math.PI) / 180;
           const r = orbitRadius(c.via?.signal);
           nodes.push({ id: c.id, x: x + r * Math.cos(rad), y: y + r * Math.sin(rad), kind: c.kind, label: side, client: true, side });

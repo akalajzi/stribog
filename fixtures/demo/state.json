@@ -1,0 +1,86 @@
+{
+  "_about": "Runtime state for the fictional Maple Street demo network, shaped like the RouterOS REST API. Addresses come from documentation ranges (RFC 5737, RFC 7042).",
+  "/system/resource": [
+    { "version": "7.20.4 (stable)", "board-name": "RB5009UPr+S+", "cpu-load": "3", "uptime": "12d6h41m", "free-memory": "812.4MiB", "total-memory": "1024.0MiB" }
+  ],
+  "/system/routerboard": [{ "model": "RB5009UPr+S+", "current-firmware": "7.20.4" }],
+  "/ip/dhcp-client": [{ "interface": "ether1", "address": "203.0.113.47/24", "gateway": "203.0.113.1", "status": "bound" }],
+  "/interface/ethernet/monitor": [
+    { "name": "ether1", "status": "link-ok", "rate": "1Gbps" },
+    { "name": "ether2", "status": "link-ok", "rate": "1Gbps" },
+    { "name": "ether3", "status": "link-ok", "rate": "1Gbps" },
+    { "name": "ether4", "status": "link-ok", "rate": "100Mbps" },
+    { "name": "ether5", "status": "no-link" },
+    { "name": "ether6", "status": "no-link" },
+    { "name": "ether7", "status": "link-ok", "rate": "1Gbps" },
+    { "name": "ether8", "status": "link-ok", "rate": "1Gbps" },
+    { "name": "sfp-sfpplus1", "status": "no-link" }
+  ],
+  "/interface/ethernet/poe/monitor": [
+    { "name": "ether2", "poe-out-status": "waiting-for-load" },
+    { "name": "ether3", "poe-out-status": "waiting-for-load" },
+    { "name": "ether4", "poe-out-status": "waiting-for-load" },
+    { "name": "ether5", "poe-out-status": "waiting-for-load" },
+    { "name": "ether6", "poe-out-status": "disabled" },
+    { "name": "ether7", "poe-out-status": "powered-on", "poe-out-voltage": "53.1", "poe-out-current": "128", "poe-out-power": "6.8" },
+    { "name": "ether8", "poe-out-status": "powered-on", "poe-out-voltage": "52.9", "poe-out-current": "140", "poe-out-power": "7.4" }
+  ],
+  "/interface/wifi/capsman/remote-cap": [
+    { "address": "00:00:5E:00:53:A0%bridge", "base-mac": "00:00:5E:00:53:A0", "identity": "cap-living", "board": "cAPGi-5HaxD2HaxD", "version": "7.20.4", "state": "Ok" },
+    { "address": "00:00:5E:00:53:B0%bridge", "base-mac": "00:00:5E:00:53:B0", "identity": "cap-upstairs", "board": "cAPGi-5HaxD2HaxD", "version": "7.19.6", "state": "Ok" }
+  ],
+  "/interface/wifi/monitor": [
+    { "name": "cap-wifi1", "channel": "2412/ax" },
+    { "name": "cap-wifi2", "channel": "5180/ax/Ceee" },
+    { "name": "cap-wifi3", "channel": "2462/ax" },
+    { "name": "cap-wifi4", "channel": "5220/ax/eeCe" }
+  ],
+  "/interface/bridge/host": [
+    { "mac-address": "00:00:5E:00:53:A0", "on-interface": "ether7", "bridge": "bridge" },
+    { "mac-address": "00:00:5E:00:53:B0", "on-interface": "ether8", "bridge": "bridge" },
+    { "mac-address": "00:00:5E:00:53:10", "on-interface": "ether2", "bridge": "bridge" },
+    { "mac-address": "00:00:5E:00:53:20", "on-interface": "ether3", "bridge": "bridge" },
+    { "mac-address": "00:00:5E:00:53:30", "on-interface": "ether4", "bridge": "bridge" },
+    { "mac-address": "00:00:5E:00:53:01", "on-interface": "bridge", "bridge": "bridge", "local": "true" }
+  ],
+  "/ip/arp": [
+    { "address": "192.168.50.2", "mac-address": "00:00:5E:00:53:A0", "interface": "bridge", "complete": "true" },
+    { "address": "192.168.50.3", "mac-address": "00:00:5E:00:53:B0", "interface": "bridge", "complete": "true" },
+    { "address": "192.168.50.10", "mac-address": "00:00:5E:00:53:10", "interface": "bridge", "complete": "true" },
+    { "address": "192.168.50.20", "mac-address": "00:00:5E:00:53:20", "interface": "bridge", "complete": "true" },
+    { "address": "192.168.50.30", "mac-address": "00:00:5E:00:53:30", "interface": "bridge", "complete": "true" }
+  ],
+  "/ip/dhcp-server/lease": [
+    { "address": "192.168.50.2", "mac-address": "00:00:5E:00:53:A0", "server": "home-dhcp", "status": "bound", "host-name": "cap-living", "comment": "cAP living room" },
+    { "address": "192.168.50.3", "mac-address": "00:00:5E:00:53:B0", "server": "home-dhcp", "status": "bound", "host-name": "cap-upstairs", "comment": "cAP upstairs landing" },
+    { "address": "192.168.50.10", "mac-address": "00:00:5E:00:53:10", "server": "home-dhcp", "status": "bound", "host-name": "family-nas", "comment": "Family NAS - AdGuard Home" },
+    { "address": "192.168.50.20", "mac-address": "00:00:5E:00:53:20", "server": "home-dhcp", "status": "bound", "host-name": "study-pc", "comment": "Study desktop" },
+    { "address": "192.168.50.25", "mac-address": "00:00:5E:00:53:25", "server": "home-dhcp", "status": "waiting", "comment": "Workshop Pi - sensors", "last-seen": "3w2d" },
+    { "address": "192.168.50.30", "mac-address": "00:00:5E:00:53:30", "server": "home-dhcp", "status": "bound", "host-name": "living-room-tv", "comment": "Living room TV" },
+    { "address": "192.168.50.40", "mac-address": "00:00:5E:00:53:40", "server": "home-dhcp", "status": "bound", "host-name": "shellyplug-s-kitchen", "comment": "Kitchen Shelly plug" },
+    { "address": "192.168.50.41", "mac-address": "00:00:5E:00:53:41", "server": "home-dhcp", "status": "bound", "host-name": "esp-thermostat", "comment": "Hallway thermostat sensor" },
+    { "address": "192.168.50.50", "mac-address": "00:00:5E:00:53:50", "server": "home-dhcp", "status": "bound", "host-name": "BRN-PRINTER", "comment": "Brother printer – study" },
+    { "address": "192.168.50.60", "mac-address": "3A:00:5E:00:53:60", "server": "home-dhcp", "status": "waiting", "comment": "Emma iPhone", "last-seen": "9d4h" },
+    { "address": "192.168.50.101", "mac-address": "00:00:5E:00:53:70", "server": "home-dhcp", "status": "bound", "host-name": "Alex-MacBook-Air", "dynamic": "true" },
+    { "address": "192.168.50.102", "mac-address": "5E:00:5E:00:53:71", "server": "home-dhcp", "status": "bound", "host-name": "Pixel-8", "dynamic": "true" },
+    { "address": "192.168.50.103", "mac-address": "00:00:5E:00:53:72", "server": "home-dhcp", "status": "bound", "host-name": "PS5-living", "dynamic": "true" },
+    { "address": "192.168.50.104", "mac-address": "9E:00:5E:00:53:74", "server": "home-dhcp", "status": "bound", "host-name": "Zoes-iPad", "dynamic": "true" },
+    { "address": "192.168.50.105", "mac-address": "D6:00:5E:00:53:75", "server": "home-dhcp", "status": "bound", "host-name": "Emma-iPhone", "dynamic": "true" },
+    { "address": "192.168.50.106", "mac-address": "00:00:5E:00:53:76", "server": "home-dhcp", "status": "bound", "host-name": "old-thinkpad", "dynamic": "true" },
+    { "address": "192.168.50.107", "mac-address": "F2:00:5E:00:53:77", "server": "home-dhcp", "status": "bound", "host-name": "Galaxy-S23", "dynamic": "true" },
+    { "address": "192.168.60.101", "mac-address": "7A:00:5E:00:53:73", "server": "guest-dhcp", "status": "bound", "host-name": "guest-laptop", "dynamic": "true" }
+  ],
+  "/interface/wifi/registration-table": [
+    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:70", "signal": "-52", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "960.7Mbps", "uptime": "6h12m" },
+    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "5E:00:5E:00:53:71", "signal": "-48", "band": "5ghz-ax", "tx-rate": "1200.9Mbps", "rx-rate": "1080.6Mbps", "uptime": "2h40m" },
+    { "interface": "cap-wifi2", "ssid": "Maple", "mac-address": "00:00:5E:00:53:72", "signal": "-57", "band": "5ghz-ax", "tx-rate": "864.8Mbps", "rx-rate": "720.6Mbps", "uptime": "1d3h" },
+    { "interface": "cap-guest2", "ssid": "Maple Guest", "mac-address": "7A:00:5E:00:53:73", "signal": "-66", "band": "5ghz-ax", "tx-rate": "432.4Mbps", "rx-rate": "288.2Mbps", "uptime": "48m" },
+    { "interface": "cap-wifi1", "ssid": "Maple", "mac-address": "00:00:5E:00:53:40", "signal": "-67", "band": "2ghz-n", "tx-rate": "65Mbps", "rx-rate": "52Mbps", "uptime": "12d6h" },
+    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "9E:00:5E:00:53:74", "signal": "-60", "band": "5ghz-ax", "tx-rate": "720.6Mbps", "rx-rate": "576.5Mbps", "uptime": "5h02m" },
+    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "D6:00:5E:00:53:75", "signal": "-63", "band": "5ghz-ax", "tx-rate": "576.5Mbps", "rx-rate": "432.4Mbps", "uptime": "3h31m" },
+    { "interface": "cap-wifi4", "ssid": "Maple", "mac-address": "F2:00:5E:00:53:77", "signal": "-76", "band": "5ghz-ax", "tx-rate": "86.6Mbps", "rx-rate": "54Mbps", "uptime": "22m" },
+    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:41", "signal": "-58", "band": "2ghz-n", "tx-rate": "72.2Mbps", "rx-rate": "65Mbps", "uptime": "12d6h" },
+    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:50", "signal": "-62", "band": "2ghz-n", "tx-rate": "65Mbps", "rx-rate": "58.5Mbps", "uptime": "4d11h" },
+    { "interface": "cap-wifi3", "ssid": "Maple", "mac-address": "00:00:5E:00:53:76", "signal": "-69", "band": "2ghz-ax", "tx-rate": "103.2Mbps", "rx-rate": "86Mbps", "uptime": "1h15m" }
+  ]
+}

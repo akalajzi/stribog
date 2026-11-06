@@ -1,0 +1,93 @@
+/* Wi-Fi view. Band colours carry meaning; everything else stays in the ink scale. */
+
+.wf-grow { flex: 1; }
+
+/* ---------- SSID cards ---------- */
+.wf-ssids { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; }
+.wf-ssid { display: grid; gap: 14px; padding: 16px 18px; }
+.wf-ssid-head { display: flex; align-items: center; gap: 9px; }
+.wf-ssid-head b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.wf-ssid .kv { grid-template-columns: 104px 1fr; row-gap: 8px; }
+.wf-hint { display: block; font-size: 11.5px; margin-top: 1px; }
+
+/* ---------- spectrum ---------- */
+.wf-spec { padding: 14px 18px 16px; }
+.wf-spec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; font-size: 12.5px; }
+.wf-legend { display: inline-flex; gap: 14px; color: var(--tx-3); font-size: 11.5px; flex-wrap: wrap; }
+.wf-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.wf-legend .sw { width: 14px; height: 9px; border-radius: 3px 3px 1px 1px; border: 1px solid; display: inline-block; }
+.wf-legend .sw.dashed { border-style: dashed; background: transparent; }
+.wf-legend .sw.hatch { border-color: var(--hair-2); background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .14) 0 1.5px, transparent 1.5px 4px); }
+.wf-legend .br { width: 14px; height: 5px; border: 1px solid var(--tx-3); border-top: 0; display: inline-block; }
+.wf-spec-plot { width: 100%; min-height: 40px; }
+.wf-spec-plot svg { display: block; overflow: visible; }
+.wf-svg-name { fill: var(--tx-1); font: 500 12.5px var(--sans); }
+.wf-svg-sub { font: 11px var(--mono); }
+.wf-svg-tick { fill: var(--tx-3); font: 10px var(--mono); }
+.wf-svg-tick.on { font-weight: 600; }
+.wf-svg-cap { fill: var(--tx-3); font: 600 9.5px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
+.wf-svg-span { fill: var(--tx-2); font: 10px var(--mono); opacity: .8; }
+.wf-spec-notes { display: grid; gap: 10px; margin-top: 4px; }
+.wf-spec-notes p { margin: 0; max-width: 92ch; font-size: 12.5px; }
+.wf-callout { --c: var(--idea); display: grid; grid-template-columns: 8px 1fr; gap: 12px; align-items: baseline; padding: 11px 14px; border-radius: 10px; background: color-mix(in srgb, var(--c) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 22%, transparent); color: var(--tx-2); font-size: 12.5px; }
+.wf-callout.ok { --c: var(--ok); }
+.wf-callout b { color: var(--tx-1); font-weight: 600; }
+.wf-callout a { color: var(--c); text-decoration: none; white-space: nowrap; font-weight: 500; }
+.wf-callout a:hover { text-decoration: underline; }
+.wf-callout .dot { transform: translateY(-1px); }
+
+/* ---------- signal strip ---------- */
+.wf-sig { padding: 16px 18px; }
+.wf-sig-grid { display: grid; grid-template-columns: 96px 1fr; column-gap: 14px; }
+.wf-sig-zones { position: relative; height: 22px; }
+.wf-sig-zones span { position: absolute; top: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; text-align: center; opacity: .8; }
+.wf-sig-band { display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; gap: 4px; padding-bottom: 10px; border-top: 1px solid var(--hair); padding-top: 10px; }
+.wf-sig-track { position: relative; border-top: 1px solid var(--hair); }
+.wf-sig-track::after { content: ""; position: absolute; left: 0; right: 0; bottom: 10px; border-top: 1px solid var(--hair-2); }
+.wf-zone { position: absolute; top: 0; bottom: 0; }
+.wf-zone + .wf-zone { box-shadow: inset 1px 0 0 rgba(255, 255, 255, .035); }
+.wf-dot { position: absolute; bottom: 7px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; z-index: 1; box-shadow: 0 0 0 3px var(--ink-1); }
+.wf-stem { position: absolute; width: 1px; margin-left: -.5px; background: rgba(255, 255, 255, .14); }
+.wf-pill { position: absolute; height: 26px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px 0 7px; border-radius: 999px; border: 0; background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--hair-2), 0 4px 14px rgba(0, 0, 0, .3); cursor: pointer; white-space: nowrap; z-index: 2; transition: background .15s, box-shadow .15s; }
+.wf-pill:hover { background: var(--ink-4); box-shadow: inset 0 0 0 1px var(--hair-3), 0 4px 14px rgba(0, 0, 0, .3); }
+.wf-pill .nm { color: var(--tx-1); font-weight: 500; font-size: 12.5px; }
+.wf-pill .db { color: var(--tx-3); font-size: 11px; }
+.wf-only { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--w24); border: 1px dashed color-mix(in srgb, var(--w24) 45%, transparent); padding: 0 5px; border-radius: 4px; }
+.wf-sig-ticks { position: relative; height: 22px; border-top: 1px solid var(--hair); }
+.wf-sig-ticks span { position: absolute; top: 6px; transform: translateX(-50%); color: var(--tx-3); font-size: 10.5px; }
+.wf-sig-ticks .unit { right: 0; left: auto; transform: none; font-size: 10.5px; }
+.wf-sig-help { margin: 10px 0 0; font-size: 12px; max-width: 92ch; }
+.wf-sig-notes { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; margin-top: 14px; }
+.wf-note { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; text-align: left; padding: 11px 13px; border-radius: 10px; border: 0; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--hair); cursor: pointer; font-size: 12.5px; }
+.wf-note:hover { box-shadow: inset 0 0 0 1px var(--hair-2); }
+.wf-note .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--ink-3); }
+.wf-note b { color: var(--tx-1); font-weight: 600; display: block; margin-bottom: 2px; }
+
+/* ---------- access points ---------- */
+.wf-aps { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+.wf-ap { display: grid; gap: 12px; align-content: start; padding: 16px 18px; }
+.wf-ap.planned { background: transparent; box-shadow: none; border: 1px dashed var(--hair-3); }
+.wf-ap-head { display: flex; align-items: center; gap: 12px; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; width: 100%; }
+div.wf-ap-head { cursor: default; }
+.wf-ap-head b { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+button.wf-ap-head:hover b { color: #fff; }
+.wf-ap-ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: var(--tx-1); background: radial-gradient(circle at 50% 30%, #1d2431, #12161d); box-shadow: inset 0 0 0 1px var(--hair-2); flex: none; }
+.wf-ap-ic.ghost { background: none; box-shadow: inset 0 0 0 1px var(--hair-2); color: var(--tx-3); }
+.wf-planned-tag { color: var(--w5); background: rgba(196, 166, 255, .08); }
+.wf-radios { display: grid; gap: 1px; border-radius: 10px; overflow: hidden; background: var(--hair); box-shadow: inset 0 0 0 1px var(--hair); }
+.wf-radio { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: var(--ink-2); }
+.wf-radio .tx { color: var(--tx-1); font-size: 12.5px; }
+.wf-radio-ssids { flex-basis: 100%; font-size: 12px; }
+.wf-chip-warn { color: var(--warn); background: rgba(243, 194, 90, .08); box-shadow: none; }
+
+/* ---------- "what's good" ---------- */
+.wf-good { margin-top: 14px; }
+.wf-good summary { list-style: none; display: inline-flex; align-items: center; gap: 9px; height: 30px; padding: 0 13px; border-radius: 999px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--hair); color: var(--tx-2); cursor: pointer; user-select: none; }
+.wf-good summary::-webkit-details-marker { display: none; }
+.wf-good summary:hover { color: var(--tx-1); }
+.wf-chev { transition: transform .15s; display: inline-block; color: var(--tx-3); }
+.wf-good[open] .wf-chev { transform: rotate(90deg); }
+
+@media (max-width: 1180px) {
+  .wf-aps { grid-template-columns: 1fr; }
+}

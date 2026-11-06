@@ -90,7 +90,7 @@ export const enabled = (rec: RosRecord | undefined) => !!rec && !isTrue(rec.disa
 export const list = (v: string | undefined) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : []);
 
 /** Keys that must never leave the parser. */
-const SENSITIVE = /(passphrase|password|secret|private-key|preshared|psk|token)$/i;
+const SENSITIVE = /(passphrase|password|secret|key|psk|token)$/i;
 
 export function scrub(rec: RosRecord): RosRecord {
   for (const k of Object.keys(rec)) if (SENSITIVE.test(k)) rec[k] = "<hidden>";

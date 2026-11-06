@@ -13,6 +13,8 @@ export interface SourceSpec {
 
 export interface StribogConfig {
   sources?: SourceSpec[];
+  /** A saved Snapshot (or DeviceSnapshot[]) JSON, as written by `stribog collect`. Appended to `sources`. */
+  snapshot?: string;
   overrides?: string;
   sampleState?: boolean;
   live?: LiveSpec;
@@ -59,12 +61,31 @@ export function snapshotFromFiles(config: StribogConfig, base: string): Snapshot
     }
     return dev;
   });
-  const overrides = config.overrides ? (JSON.parse(readFileSync(expand(config.overrides, base), "utf8")) as Overrides) : undefined;
+  const saved = config.snapshot ? loadSnapshot(expand(config.snapshot, base)) : undefined;
+  if (saved) devices.push(...saved.devices);
+  const overrides = config.overrides ? (JSON.parse(readFileSync(expand(config.overrides, base), "utf8")) as Overrides) : saved?.overrides;
   const exportTimes = devices.map((d) => d.config.meta.exportedAt).filter(Boolean).sort();
   return {
-    collectedAt: exportTimes.at(-1) ?? new Date().toISOString(),
+    collectedAt: saved?.collectedAt ?? exportTimes.at(-1) ?? new Date().toISOString(),
     devices,
     overrides,
     sampleState: config.sampleState,
   };
+}
+
+/** Read a saved snapshot: a full Snapshot or a bare DeviceSnapshot[]. Secrets are scrubbed again on the way in. */
+export function loadSnapshot(path: string): { collectedAt?: string; devices: DeviceSnapshot[]; overrides?: Overrides } {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as Snapshot | DeviceSnapshot[];
+  const list = Array.isArray(raw) ? raw : (raw.devices ?? []);
+  const clean = (menus: Record<string, RosRecord[]> | undefined) =>
+    Object.fromEntries(Object.entries(menus ?? {}).map(([k, rows]) => [k, (rows ?? []).map((r) => scrub({ ...r }))]));
+  const devices = list.map(
+    (d): DeviceSnapshot => ({
+      role: d.role ?? "router",
+      config: { meta: d.config?.meta ?? {}, menus: clean(d.config?.menus) },
+      state: d.state ? clean(d.state) : undefined,
+      sources: d.sources?.length ? d.sources : [{ kind: "rest", label: path }],
+    }),
+  );
+  return Array.isArray(raw) ? { devices } : { collectedAt: raw.collectedAt, devices, overrides: raw.overrides };
 }
