@@ -228,9 +228,17 @@ async function liveSnapshot(login: RouterLogin, s: Setup): Promise<Snapshot> {
   return { collectedAt: new Date().toISOString(), devices: [router, ...files.devices] };
 }
 
+/** The router data each payload was built from: advice on a finding shows its configuration. */
+const SNAPS = new WeakMap<NetworkModel, Snapshot>();
+export function snapshotOf(p: NetworkPayload): Snapshot | undefined {
+  return SNAPS.get(p.model);
+}
+
 function build(snap: Snapshot, meta: Omit<NetworkPayload["meta"], "refreshedAt">): NetworkPayload {
   // Makers from the IEEE registry for real networks; the demo's addresses are documentation ones.
   const model = buildModel(snap, { vendors: meta.mode === "demo" ? undefined : vendorDb(setup().dataDir)?.lookup });
   if (meta.mode === "live") withMeasuredRates(model);
-  return { model, analysis: analyze(model, snap), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
+  const payload: NetworkPayload = { model, analysis: analyze(model, snap), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
+  SNAPS.set(model, snap);
+  return payload;
 }

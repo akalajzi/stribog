@@ -186,9 +186,10 @@ pre.cli .c { color: var(--tx-3); }
 .finding .body p { margin: 0; color: var(--tx-2); max-width: 78ch; }
 .finding .ev { display: grid; gap: 4px; }
 .finding .ev div { font: 11.5px/1.5 var(--mono); color: var(--tx-2); padding-left: 12px; border-left: 2px solid var(--hair-2); }
-.finding .fix { display: grid; gap: 8px; }
-.finding .fix ol { margin: 0; padding-left: 18px; color: var(--tx-2); }
-.finding .fix ol li { margin: 3px 0; }
+.finding .ask { display: grid; gap: 8px; }
+.finding .ask p { margin: 0; color: var(--tx-2); font-size: 12.5px; line-height: 1.5; }
+.finding .ask .faint { font-size: 12px; }
+.finding .ask-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .finding .caution { color: var(--warn); font-size: 12px; }
 .lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx-3); display: flex; align-items: center; gap: 8px; }
 

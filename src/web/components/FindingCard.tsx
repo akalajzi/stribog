@@ -1,11 +1,9 @@
 import { useState } from "react";
-import type { Finding, Severity } from "../api.ts";
+import { fetchFixRequest, type Finding, type Severity } from "../api.ts";
 import { CATEGORY_LABEL } from "../../core/analyze.ts";
 
 export const SEV_LABEL: Record<Severity, string> = { critical: "Fix now", warning: "Worth fixing", suggestion: "Idea", info: "Note", pass: "Good" };
 export const SEV_VAR: Record<Severity, string> = { critical: "var(--bad)", warning: "var(--warn)", suggestion: "var(--idea)", info: "var(--tx-3)", pass: "var(--ok)" };
-
-const WHERE: Record<string, string> = { router: "On the router", ap: "On the access point", isp: "With your ISP", device: "On the device", plan: "Plan" };
 
 export function CliBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -34,7 +32,7 @@ export function CliBlock({ code }: { code: string }) {
 
 export function FindingCard({ f, open: openProp, onShow, deviceName }: { f: Finding; open?: boolean; onShow?: (f: Finding) => void; deviceName?: (id: string) => string }) {
   const [open, setOpen] = useState(!!openProp);
-  const expandable = !!(f.detail?.length || f.evidence?.length || f.fix);
+  const expandable = f.severity !== "pass" || !!(f.detail?.length || f.evidence?.length);
   return (
     <div className={`finding${open ? " open" : ""}`} id={`f-${f.id}`}>
       <button className="head" onClick={() => expandable && setOpen(!open)} style={{ cursor: expandable ? "pointer" : "default" }}>
@@ -57,15 +55,7 @@ export function FindingCard({ f, open: openProp, onShow, deviceName }: { f: Find
               {f.evidence.map((e, i) => <div key={i}>{e}</div>)}
             </div>
           ) : null}
-          {f.fix && (
-            <div className="fix">
-              <div className="lbl">How to fix · {WHERE[f.fix.where]}</div>
-              {f.fix.steps?.length ? <ol>{f.fix.steps.map((s, i) => <li key={i}>{s}</li>)}</ol> : null}
-              {f.fix.cli && <CliBlock code={f.fix.cli} />}
-              {f.fix.caution && <div className="caution">⚠ {f.fix.caution}</div>}
-              {f.fix.cli && <div className="faint" style={{ fontSize: 12 }}>Stribog never applies changes. Review the script, then paste it into the router terminal.</div>}
-            </div>
-          )}
+          {f.severity !== "pass" && <AskAgent id={f.id} />}
           {onShow && f.devices?.length ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn sm" onClick={() => onShow(f)}>Show on map</button>
@@ -74,6 +64,43 @@ export function FindingCard({ f, open: openProp, onShow, deviceName }: { f: Find
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Fixes come from an agent, not from Stribog: it hands over the finding with the configuration
+ * involved, and the agent works out what to change on this network.
+ */
+function AskAgent({ id }: { id: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "copied" | string>("idle");
+  const copy = async () => {
+    setState("busy");
+    try {
+      await navigator.clipboard.writeText(await fetchFixRequest(id));
+      setState("copied");
+      setTimeout(() => setState("idle"), 2000);
+    } catch (e) {
+      setState((e as Error).message);
+    }
+  };
+  return (
+    <div className="ask">
+      <div className="lbl">How to fix it</div>
+      <p>
+        Stribog only finds problems; the right fix depends on the rest of your network. Ask an AI agent: the request gives it this finding, the configuration involved and your notes, and asks for options, exact
+        commands, how to check and how to undo.
+      </p>
+      <div className="ask-row">
+        <button className="btn sm" onClick={() => void copy()} disabled={state === "busy"}>
+          {state === "copied" ? "Copied" : state === "busy" ? "Copying…" : "Copy request for an agent"}
+        </button>
+        <span className="faint">
+          or, in an agent connected to Stribog (Settings → Agents), use the prompt <span className="mono">fix_finding</span> with <span className="mono">{id}</span>
+        </span>
+      </div>
+      {state !== "idle" && state !== "busy" && state !== "copied" && <p className="st-error">{state}</p>}
+      <p className="faint">Check what the agent suggests before you change anything. Stribog never applies changes.</p>
     </div>
   );
 }

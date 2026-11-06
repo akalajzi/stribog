@@ -1,22 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Finding, NetworkPayload, Severity } from "../api.ts";
-import { CATEGORY_LABEL } from "../../core/analyze.ts";
-import { CliBlock, SEV_LABEL, SEV_VAR } from "../components/FindingCard.tsx";
+import type { NetworkPayload } from "../api.ts";
+import { CliBlock } from "../components/FindingCard.tsx";
 import { defaultSetupOptions, generateSetup, type SetupOptions, type SetupPreset, type SideNetwork } from "../../core/setup.ts";
 import "./plan.css";
 
-// Two ways forward: fix what the review found (scripts to paste, steps to do), or start over with a
-// clean, opinionated setup. Either way Stribog only writes text; nothing is ever applied.
-
-type Tab = "fix" | "setup";
-type Target = "router" | "ap";
-
-const ORDER: Severity[] = ["critical", "warning", "suggestion", "info", "pass"];
-const TARGET_LABEL: Record<Target, string> = { router: "On the router", ap: "On each access point" };
-const STEP_LABEL: Record<string, string> = { isp: "With your ISP", device: "On the devices", plan: "Plans", router: "On the router", ap: "On the access points" };
+// A clean, opinionated setup to start over with. Stribog only writes text; nothing is ever applied.
+// Fixes for what the review finds come from an agent (see core/advice.ts), not from here.
 
 const today = () => new Date().toISOString().slice(0, 10);
-const tabFromHash = (): Tab => (new URLSearchParams(location.hash.split("?")[1] ?? "").get("tab") === "setup" ? "setup" : "fix");
 
 function download(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
@@ -28,197 +19,17 @@ function download(name: string, text: string) {
 }
 
 export function PlanView({ data }: { data: NetworkPayload }) {
-  const [tab, setTab] = useState<Tab>(tabFromHash);
-  useEffect(() => {
-    const on = () => setTab(tabFromHash());
-    addEventListener("hashchange", on);
-    return () => removeEventListener("hashchange", on);
-  }, []);
-  const go = (t: Tab) => {
-    setTab(t);
-    history.replaceState(null, "", t === "setup" ? "#/plan?tab=setup" : "#/plan");
-  };
   return (
     <div className="scroll">
       <div className="page pv">
         <div className="pv-head">
           <div>
-            <h1>Setup &amp; fix plan</h1>
-            <p className="lede">
-              {tab === "fix"
-                ? "Everything the review found that a script can fix, in one place. Pick what to include, read the script, and paste it into the router yourself."
-                : "A clean, opinionated MikroTik setup for a router reset with no default configuration. Choose the options; the script updates as you go."}
-            </p>
-          </div>
-          <div className="seg pv-tabs">
-            <button className={tab === "fix" ? "on" : undefined} onClick={() => go("fix")}>Fix plan</button>
-            <button className={tab === "setup" ? "on" : undefined} onClick={() => go("setup")}>New setup</button>
+            <h1>New setup</h1>
+            <p className="lede">A clean, opinionated MikroTik setup for a router reset with no default configuration. Choose the options; the script updates as you go.</p>
           </div>
         </div>
-        {tab === "fix" ? <FixPlan data={data} /> : <NewSetup data={data} />}
+        <NewSetup data={data} />
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Fix plan
-
-function buildFixScript(target: Target, picked: Finding[], data: NetworkPayload): string {
-  const { model } = data;
-  const router = model.devices.find((d) => d.id === model.routerId);
-  const L: string[] = [
-    `# Stribog fix plan for ${model.site}: ${target === "router" ? `run on the router${router ? ` (${router.name})` : ""}` : "run on each access point"}`,
-    `# Generated ${today()} from ${model.sources.map((s) => s.label.split("/").pop()).join(", ")}.`,
-    `# Includes ${picked.length} fix${picked.length === 1 ? "" : "es"}:`,
-    ...picked.map((f) => `#   - ${f.title} (${SEV_LABEL[f.severity].toLowerCase()})`),
-    "# Review before pasting; Stribog never applies changes.",
-  ];
-  const cautions = picked.filter((f) => f.fix?.caution);
-  if (cautions.length) L.push("#", "# Cautions:", ...cautions.map((f) => `#   ! ${f.fix!.caution}`));
-  picked.forEach((f, i) => {
-    const t = `${i + 1}. ${f.title}`;
-    L.push("", `# ---- ${t} ${"-".repeat(Math.max(4, 70 - t.length))}`);
-    if (f.fix?.caution) L.push(`# ! ${f.fix.caution}`);
-    L.push(f.fix!.cli!.trim());
-  });
-  return L.join("\n") + "\n";
-}
-
-function FixPlan({ data }: { data: NetworkPayload }) {
-  const { analysis, model } = data;
-  const scripted = useMemo(
-    () => analysis.findings.filter((f) => f.fix?.cli && (f.fix.where === "router" || f.fix.where === "ap")).sort((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity)),
-    [analysis],
-  );
-  const [on, setOn] = useState<Set<string>>(() => new Set(scripted.filter((f) => f.severity === "critical" || f.severity === "warning").map((f) => f.id)));
-  const toggle = (id: string) => setOn((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const setMany = (ids: string[], v: boolean) => setOn((s) => { const n = new Set(s); ids.forEach((id) => (v ? n.add(id) : n.delete(id))); return n; });
-
-  const byTarget = (t: Target) => scripted.filter((f) => f.fix!.where === t);
-  const targets = (["router", "ap"] as Target[]).filter((t) => byTarget(t).length);
-  const scripts = targets
-    .map((t) => ({ t, picked: byTarget(t).filter((f) => on.has(f.id)) }))
-    .filter((x) => x.picked.length)
-    .map((x) => ({ ...x, code: buildFixScript(x.t, x.picked, data) }));
-
-  const steps = analysis.findings.filter((f) => f.fix?.steps?.length && f.severity !== "pass" && !(f.fix.cli && (f.fix.where === "router" || f.fix.where === "ap")));
-  const slug = (model.devices.find((d) => d.id === model.routerId)?.name ?? "router").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-
-  return (
-    <>
-      <div className="pv-split">
-        <div className="pv-list">
-          {targets.map((t) => {
-            const fs = byTarget(t);
-            const n = fs.filter((f) => on.has(f.id)).length;
-            return (
-              <div key={t} className="pv-group">
-                <div className="pv-group-h">
-                  <span className="lbl">{TARGET_LABEL[t]} <em className="faint mono" style={{ fontStyle: "normal" }}>{n}/{fs.length}</em></span>
-                  <span style={{ display: "flex", gap: 4 }}>
-                    <button className="btn ghost sm" onClick={() => setMany(fs.map((f) => f.id), true)}>All</button>
-                    <button className="btn ghost sm" onClick={() => setMany(fs.map((f) => f.id), false)}>None</button>
-                  </span>
-                </div>
-                {fs.map((f) => (
-                  <label key={f.id} className={`pv-fix${on.has(f.id) ? " on" : ""}`}>
-                    <input type="checkbox" checked={on.has(f.id)} onChange={() => toggle(f.id)} />
-                    <span className="box" />
-                    <span className="body">
-                      <span className="t"><i style={{ background: SEV_VAR[f.severity] }} />{f.title}</span>
-                      <span className="s">{f.summary}</span>
-                      <span className="m">
-                        <span className="chip">{CATEGORY_LABEL[f.category]}</span>
-                        <span style={{ color: SEV_VAR[f.severity] }}>{SEV_LABEL[f.severity]}</span>
-                        {f.fix?.caution && <span className="caution" title={f.fix.caution}>⚠ has a caution</span>}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            );
-          })}
-          {!targets.length && <div className="card muted">No scripted fixes. Nice.</div>}
-        </div>
-
-        <div className="pv-preview">
-          {scripts.length ? (
-            scripts.map((s) => (
-              <div key={s.t} className="pv-script">
-                <div className="pv-script-h">
-                  <div>
-                    <b>{s.t === "router" ? "Router script" : "Access point script"}</b>
-                    <span className="faint"> · {s.picked.length} fix{s.picked.length === 1 ? "" : "es"} · <span className="mono">{s.code.split("\n").length}</span> lines</span>
-                  </div>
-                  <button className="btn sm" onClick={() => download(`stribog-fix-${s.t === "router" ? slug : "ap"}-${today()}.rsc`, s.code)}>Download .rsc</button>
-                </div>
-                {s.t === "ap" && <div className="pv-warnline">Paste this on each access point, not on the router.</div>}
-                <CliBlock code={s.code} />
-              </div>
-            ))
-          ) : (
-            <div className="card pv-empty">
-              <b>Nothing selected</b>
-              <span className="muted">Tick the fixes on the left to build a script.</span>
-            </div>
-          )}
-          <div className="pv-never">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z" /><path d="m9 12 2 2 4-4" /></svg>
-            <span>Stribog never applies changes. Take an export first (<span className="mono">/export file=before-fixes</span>), then paste one section at a time.</span>
-          </div>
-        </div>
-      </div>
-
-      {steps.length > 0 && (
-        <>
-          <div className="sec-title">Things to do by hand <em className="faint">no script; tick them off as you go</em></div>
-          <Checklist findings={steps} />
-        </>
-      )}
-    </>
-  );
-}
-
-function Checklist({ findings }: { findings: Finding[] }) {
-  const KEY = "stribog.plan.done";
-  const [done, setDone] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(KEY) ?? "[]") as string[]);
-    } catch {
-      return new Set();
-    }
-  });
-  const flip = (k: string) =>
-    setDone((s) => {
-      const n = new Set(s);
-      n.has(k) ? n.delete(k) : n.add(k);
-      try { localStorage.setItem(KEY, JSON.stringify([...n])); } catch { /* private mode */ }
-      return n;
-    });
-  const groups = ["isp", "router", "ap", "device", "plan"].map((w) => ({ w, fs: findings.filter((f) => f.fix!.where === w) })).filter((g) => g.fs.length);
-  return (
-    <div className="pv-check">
-      {groups.map((g) => (
-        <div key={g.w} className="card pv-check-g">
-          <div className="lbl" style={{ marginBottom: 10 }}>{STEP_LABEL[g.w]}</div>
-          {g.fs.map((f) => (
-            <div key={f.id} className="pv-check-f">
-              <div className="t"><i style={{ background: SEV_VAR[f.severity] }} />{f.title}</div>
-              {f.fix!.steps!.map((s, i) => {
-                const k = `${f.id}#${i}`;
-                return (
-                  <label key={k} className={`pv-step${done.has(k) ? " done" : ""}`}>
-                    <input type="checkbox" checked={done.has(k)} onChange={() => flip(k)} />
-                    <span className="box" />
-                    <span>{s}</span>
-                  </label>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      ))}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { analyze, CATEGORY_LABEL, type Analysis, type Finding, type Severity } from "../core/analyze.ts";
+import { adviceRequest } from "../core/advice.ts";
 import { expand, snapshotFromFiles, type StribogConfig } from "../core/load.ts";
 import { buildModel, type NetworkModel } from "../core/model.ts";
 import { RouterOsRest } from "../core/rest.ts";
@@ -64,12 +65,6 @@ function wrap(text: string, indent: number, max = width()): string {
   return out.join("\n");
 }
 
-const indentBlock = (text: string, indent: number) =>
-  text
-    .split("\n")
-    .map((l) => (l.trim() ? " ".repeat(indent) + l : ""))
-    .join("\n");
-
 /** A wrapped list item whose continuation lines align with the text, not the bullet. */
 const bullet = (mark: string, text: string, indent: number, max: number) => " ".repeat(indent) + mark + " " + wrap(text, indent + 2, max).slice(indent + 2);
 
@@ -79,8 +74,9 @@ const bullet = (mark: string, text: string, indent: number, max: number) => " ".
 const HELP = `${c.bold("stribog")} ${c.dim("— a calm, honest review of a MikroTik home network")}
 
 ${c.bold("Usage")}
-  stribog audit [--config stribog.config.json] [--json] [--fix]
+  stribog audit [--config stribog.config.json] [--json] [--details]
   stribog audit --export router.rsc [--cap ap.rsc ...] [--state state.json] [--notes notes.json]
+  stribog advise <finding-id> [--config … | --export …]
   stribog collect --url https://192.168.88.1 --user stribog [--password-file file] [--insecure] --out snapshot.json
   stribog serve [--port 4517] [--host 127.0.0.1]
   stribog help
@@ -90,9 +86,14 @@ ${c.bold("audit")}
   ./stribog.config.json, else the built-in demo network. Prints the score and the findings
   grouped by severity.
     --json        print the full analysis as JSON
-    --fix         include evidence and the suggested RouterOS scripts (review before running)
+    --details     include each finding's explanation and evidence
     --export      audit a single /export file without a config; add --cap for each access point
                   export and --state for runtime state JSON
+
+${c.bold("advise")}
+  Prints a request for advice on one finding, for an AI agent: the finding, the configuration
+  it is about (secrets hidden), the owner's notes, and what a good answer contains. Stribog only
+  diagnoses; the fix comes from the agent and is applied by you. Takes the same sources as audit.
 
 ${c.bold("collect")}
   Reads the router over the RouterOS REST API (GET and "monitor once" only) and writes a
@@ -126,7 +127,7 @@ async function main(argv: string[]) {
       options: {
         config: { type: "string", short: "c" },
         json: { type: "boolean" },
-        fix: { type: "boolean" },
+        details: { type: "boolean" },
         export: { type: "string" },
         cap: { type: "string", multiple: true },
         state: { type: "string" },
@@ -147,6 +148,10 @@ async function main(argv: string[]) {
   const [cmd = "help", ...rest] = parsed.positionals;
   const flags = parsed.values as Flags;
   if (flags.help || cmd === "help") return void process.stdout.write(HELP);
+  if (cmd === "advise") {
+    if (rest.length !== 1) fail("give one finding id, e.g. `stribog advise wan-double-nat` (ids are in `stribog audit --json`).", 2);
+    return advise(flags, rest[0]!);
+  }
   if (rest.length) fail(`unexpected argument${rest.length > 1 ? "s" : ""}: ${rest.join(" ")}`, 2);
   switch (cmd) {
     case "audit":
@@ -169,6 +174,7 @@ interface Loaded {
   demo: boolean;
   sample: boolean;
   error?: string;
+  snap?: Snapshot;
 }
 
 async function load(flags: Flags): Promise<Loaded> {
@@ -186,7 +192,7 @@ async function load(flags: Flags): Promise<Loaded> {
     if (config.notes) exists(config.notes);
     const snap = snapshotFromFiles(config, cwd);
     const model = buildModel(snap);
-    return { model, analysis: analyze(model, snap), label: flags.export as string, demo: false, sample: false };
+    return { model, analysis: analyze(model, snap), label: flags.export as string, demo: false, sample: false, snap };
   }
   if (flags.state || flags.cap || flags.notes) fail("--cap, --state and --notes go with --export", 2);
 
@@ -196,11 +202,18 @@ async function load(flags: Flags): Promise<Loaded> {
     if (!existsSync(path)) fail(`config not found: ${flags.config}`);
     process.env.STRIBOG_CONFIG = path;
   }
-  const { getNetwork, resolveConfigPath } = await import("../server/provider.ts");
+  const { getNetwork, resolveConfigPath, snapshotOf } = await import("../server/provider.ts");
   const path = resolveConfigPath() ?? DEMO_CONFIG;
   const p = await getNetwork(undefined, true);
   const demo = p.meta.mode === "demo" || resolve(path) === DEMO_CONFIG;
-  return { model: p.model, analysis: p.analysis, label: path, demo, sample: p.meta.sample, error: p.meta.error };
+  return { model: p.model, analysis: p.analysis, label: path, demo, sample: p.meta.sample, error: p.meta.error, snap: snapshotOf(p) };
+}
+
+async function advise(flags: Flags, id: string) {
+  const loaded = await load(flags);
+  const f = loaded.analysis.findings.find((x) => x.id === id);
+  if (!f) fail(`no finding “${id}”. Current ones: ${loaded.analysis.findings.filter((x) => x.severity !== "pass").map((x) => x.id).join(", ")}`);
+  process.stdout.write(adviceRequest({ finding: f, model: loaded.model, snap: loaded.snap!, notes: loaded.snap?.notes }) + "\n");
 }
 
 async function audit(flags: Flags) {
@@ -209,10 +222,10 @@ async function audit(flags: Flags) {
     process.stdout.write(JSON.stringify(loaded.analysis, null, 2) + "\n");
     return;
   }
-  process.stdout.write(report(loaded, !!flags.fix));
+  process.stdout.write(report(loaded, !!flags.details));
 }
 
-function report({ model: m, analysis: a, label, demo, sample, error }: Loaded, fix: boolean): string {
+function report({ model: m, analysis: a, label, demo, sample, error }: Loaded, details: boolean): string {
   const out: string[] = [];
   const w = width();
   const router = m.devices.find((d) => d.id === m.routerId);
@@ -258,31 +271,25 @@ function report({ model: m, analysis: a, label, demo, sample, error }: Loaded, f
       for (const f of group) out.push(`  ${SEV.pass.color(SEV.pass.mark)} ${f.title}`);
       continue;
     }
-    for (const f of group) out.push(finding(f, fix, w));
+    for (const f of group) out.push(finding(f, details, w));
   }
   out.push("");
-  if (!fix && a.findings.some((f) => f.fix && f.severity !== "pass")) out.push(c.dim("  Run with --fix to see evidence and the suggested RouterOS scripts.\n"));
+  if (!details) out.push(c.dim("  Run with --details for evidence. For how to fix one: stribog advise <id>, then give it to an AI agent.\n"));
+  else out.push(c.dim("  For how to fix one: stribog advise <id>, then give it to an AI agent.\n"));
   return out.join("\n") + "\n";
 }
 
-function finding(f: Finding, fix: boolean, w: number): string {
+function finding(f: Finding, details: boolean, w: number): string {
   const s = SEV[f.severity];
   const lines: string[] = [];
   lines.push("");
-  lines.push(`  ${s.color(s.mark)} ${c.bold(f.title)}  ${c.dim(CATEGORY_LABEL[f.category])}`);
+  lines.push(`  ${s.color(s.mark)} ${c.bold(f.title)}  ${c.dim(CATEGORY_LABEL[f.category])}  ${c.grey(f.id)}`);
   lines.push(wrap(f.summary, 4, w));
-  if (fix) {
+  if (details) {
     for (const d of f.detail ?? []) lines.push(c.dim(wrap(d, 4, w)));
     if (f.evidence?.length) {
       lines.push(`    ${c.dim("Evidence")}`);
       for (const e of f.evidence) lines.push(c.grey(bullet("·", e, 6, w)));
-    }
-    if (f.fix) {
-      const where = { router: "on the router", ap: "on the access point", isp: "with the ISP", device: "on the device", plan: "plan" }[f.fix.where];
-      lines.push(`    ${c.teal("Fix")} ${c.dim(where)}`);
-      for (const step of f.fix.steps ?? []) lines.push(bullet("–", step, 6, w));
-      if (f.fix.cli) lines.push(c.teal(indentBlock(f.fix.cli, 6)));
-      if (f.fix.caution) lines.push(c.amber(wrap(`Caution: ${f.fix.caution}`, 6, w)));
     }
   }
   return lines.join("\n");

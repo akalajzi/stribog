@@ -3,7 +3,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { getNetwork, getNetworkForAgent, notesFor, setup, SignedOutError } from "./provider.ts";
+import { getNetwork, getNetworkForAgent, notesFor, setup, SignedOutError, snapshotOf } from "./provider.ts";
+import { adviceRequest } from "../core/advice.ts";
 import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
@@ -121,6 +122,16 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         setSessionCookie(res, undefined);
         return send(res, 401, { error: err.message }), true;
       }
+    }
+
+    // A finding as a request for advice, for a person to hand to an agent (agents use MCP's get_fix_request).
+    const req4 = /^\/api\/review\/([^/]+)\/request$/.exec(url.pathname);
+    if (req4 && req.method === "GET") {
+      const p = agent ? await getNetworkForAgent() : await getNetwork(session);
+      const f = p?.analysis.findings.find((x) => x.id === decodeURIComponent(req4[1]!));
+      const snap = p && snapshotOf(p);
+      if (!p || !f || !snap) return send(res, 404, { error: "No such finding right now." }), true;
+      return send(res, 200, { text: adviceRequest({ finding: f, model: p.model, snap, notes: snap.notes }) }), true;
     }
 
     const act = /^\/api\/devices\/([^/]+)\/activity$/.exec(url.pathname);

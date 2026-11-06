@@ -11,13 +11,6 @@ import { enabled, isTrue, list, menu, prop, single, type RosConfig, type Snapsho
 export type Severity = "critical" | "warning" | "suggestion" | "info" | "pass";
 export type Category = "internet" | "dns-dhcp" | "wifi" | "security" | "segmentation" | "maintenance" | "hardware";
 
-export interface Fix {
-  where: "router" | "ap" | "isp" | "device" | "plan";
-  steps?: string[];
-  cli?: string;
-  caution?: string;
-}
-
 export interface Finding {
   id: string;
   severity: Severity;
@@ -27,7 +20,8 @@ export interface Finding {
   detail?: string[];
   evidence?: string[];
   devices?: string[];
-  fix?: Fix;
+  /** Configuration the check read, as "<device> <menu>" ("router /ip/service"): what an agent needs to see to advise on it. */
+  reads?: string[];
 }
 
 export interface Analysis {
@@ -74,8 +68,12 @@ export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
   const findings: Finding[] = [];
   for (const rule of RULES) {
     try {
-      const out = rule(ctx);
-      if (out) findings.push(...(Array.isArray(out) ? out : [out]));
+      // Note which menus the check reads, so advice on a finding can show exactly that configuration.
+      const seen = new Set<string>();
+      const out = rule({ ...ctx, cfg: cfg && watched(cfg, "router", seen), caps: ctx.caps.map((c, i) => watched(c, `ap${i + 1}`, seen)) });
+      const list = out ? (Array.isArray(out) ? out : [out]) : [];
+      for (const f of list) if (seen.size && f.severity !== "pass") f.reads = [...seen].sort();
+      findings.push(...list);
     } catch (err) {
       findings.push({ id: `rule-error-${findings.length}`, severity: "info", category: "maintenance", title: "A check could not run", summary: String(err) });
     }
@@ -88,6 +86,16 @@ export function analyze(model: NetworkModel, snap: Snapshot): Analysis {
   const score = Math.max(0, Math.round(100 - penalty));
   const grade = score >= 85 ? "great" : score >= 65 ? "good" : score >= 40 ? "fair" : "poor";
   return { score, grade, findings, counts };
+}
+
+/** The configuration with reads of its menus noted in `seen`. */
+function watched(cfg: RosConfig, who: string, seen: Set<string>): RosConfig {
+  const note = (k: string | symbol) => typeof k === "string" && k.startsWith("/") && seen.add(`${who} ${k}`);
+  const menus = new Proxy(cfg.menus, {
+    get: (t, k) => (note(k), Reflect.get(t, k)),
+    has: (t, k) => (note(k), Reflect.has(t, k)),
+  });
+  return { ...cfg, menus };
 }
 
 const names = (ds: (Device | undefined)[]) => ds.filter(Boolean).map((d) => d!.name);
@@ -119,14 +127,6 @@ const doubleNat: Rule = ({ m }) => {
     ],
     evidence: [`WAN ${m.wan.iface}: ${m.wan.address ?? "private address"}${m.wan.gateway ? ` via ${m.wan.gateway}` : ""}`, m.wan.doubleNatCertainty === "inferred" ? "Inferred from private addresses on the WAN bridge" : "Read from the DHCP client"],
     devices: ["upstream", m.routerId ?? "router"],
-    fix: {
-      where: "isp",
-      steps: [
-        `Ask the ISP to put ${up?.name ?? "the ISP router"} in bridge mode (or the ONT in pass-through) so this router receives the public address.`,
-        "If bridge mode is not offered, set the router as DMZ / exposed host on the ISP router as a fallback.",
-        "Before the switch: remove temporary management access from the old network and check that the WAN firewall drops everything not coming from LAN.",
-      ],
-    },
   };
 };
 
@@ -163,7 +163,6 @@ const upstreamDevices: Rule = ({ m }) => {
     ],
     evidence,
     devices: outside.map((d) => d.id),
-    fix: { where: "device", steps: now.map((d) => `${d.name}: connect it to your Wi-Fi or a LAN port.`) },
   };
 };
 
@@ -191,12 +190,6 @@ const legacyCompat: Rule = ({ m, cfg }) => {
     summary: `It holds ${join(forwarded)} on ${wanIf} and forwards ${forwarded.length === 1 ? "it" : "them"} into your LAN, so devices on the ISP router's network can still reach LAN devices at those addresses. This is probably a migration aid.`,
     detail: ["Useful while devices move, but it hides stale configuration. Once nothing uses those addresses, remove them so problems surface instead of being silently translated."],
     evidence: forwarded.map(target),
-    fix: {
-      where: "router",
-      cli:
-        "# When nothing uses these addresses any more:\n" +
-        forwarded.flatMap((ip) => [`/ip firewall nat remove [find action=dst-nat dst-address="${ip}"]`, `/ip address remove [find interface="${wanIf}" address="${addrs.find((a) => ipOf(a.address) === ip)!.address}"]`]).join("\n"),
-    },
   };
 };
 
@@ -208,7 +201,7 @@ const singleDns: Rule = ({ m, lan }) => {
   if (!lan?.dhcp) return undefined;
   if (dns.length >= 2) return { id: "dns-redundant", severity: "pass", category: "dns-dhcp", title: "Clients get two DNS servers", summary: `DHCP hands out ${dns.join(" and ")}.` };
   const host = m.devices.find((d) => d.ip && d.ip === dns[0] && !d.managed);
-  if (!dns.length) return { id: "dns-none", severity: "warning", category: "dns-dhcp", title: "DHCP hands out no DNS server", summary: "Clients fall back to whatever they remember; name resolution may fail after a reboot.", fix: { where: "router", cli: `/ip dhcp-server network set [find address="${lan.cidr}"] dns-server=${lan.gateway}` } };
+  if (!dns.length) return { id: "dns-none", severity: "warning", category: "dns-dhcp", title: "DHCP hands out no DNS server", summary: "Clients fall back to whatever they remember; name resolution may fail after a reboot." };
   if (!host) return { id: "dns-single-router", severity: "pass", category: "dns-dhcp", title: "The router answers DNS", summary: `Clients use ${dns[0]}, which is the router itself.` };
   return {
     id: "dns-single-host",
@@ -222,11 +215,6 @@ const singleDns: Rule = ({ m, lan }) => {
     ],
     evidence: [`/ip dhcp-server network ${lan.cidr}: dns-server=${dns.join(",")}`],
     devices: [host.id],
-    fix: {
-      where: "router",
-      cli: `# Let the router answer as a fallback, using ${host.name} first and a public resolver behind it\n/ip dns set allow-remote-requests=yes servers=${dns[0]},1.1.1.1,9.9.9.9\n/ip dhcp-server network set [find address="${lan.cidr}"] dns-server=${dns[0]},${lan.gateway}`,
-      caution: "allow-remote-requests is safe only while the input firewall drops DNS from the WAN side (the default rules here do).",
-    },
   };
 };
 
@@ -244,7 +232,6 @@ const routerDns: Rule = ({ m, cfg }) => {
     detail: ["Infrastructure should not depend on the devices it serves. A wrong clock after a power cut breaks certificates and logs, and it is hard to diagnose."],
     evidence: [`/ip dns servers=${servers.join(",")}`, ...ntpNames.map((n) => `NTP server by name: ${n}`)],
     devices: [host.id, m.routerId ?? "router"],
-    fix: { where: "router", cli: `# Same line as the DNS fallback fix above; applying either covers both.\n/ip dns set servers=${servers[0]},1.1.1.1,9.9.9.9` },
   };
 };
 
@@ -272,16 +259,6 @@ const privateMacReservations: Rule = ({ m }) => {
     ],
     evidence: [...res.map((d) => `${d.leaseComment ?? d.name}: ${d.mac} → ${d.ip} (${d.status})`), ...new Set(lookalikes)],
     devices: res.map((d) => d.id),
-    fix: {
-      where: "device",
-      steps: [
-        "macOS / iOS: Wi-Fi → network details → Private Wi-Fi Address → Fixed (or Off).",
-        "Android: Wi-Fi → network → Privacy → Use device MAC.",
-        "Windows: Wi-Fi → network properties → Random hardware addresses → Off.",
-        "Then bind the reservation to the new address and delete the stale ones.",
-      ],
-      cli: `# After the device reconnects with its fixed address:\n/ip dhcp-server lease make-static [find mac-address=<NEW-MAC>]\n/ip dhcp-server lease remove [find mac-address=<OLD-MAC>]`,
-    },
   };
 };
 
@@ -320,7 +297,7 @@ const poolCheck: Rule = ({ m, lan }) => {
     const pct = d.size ? d.used / d.size : 0;
     out.push(
       pct > 0.8
-        ? { id: "dhcp-pool-full", severity: "warning", category: "dns-dhcp", title: "The address pool is nearly full", summary: `${d.used} of ${d.size} addresses in use. New devices may not get an address.`, fix: { where: "router", cli: `/ip pool set [find name="${d.server}"] ranges=...` } }
+        ? { id: "dhcp-pool-full", severity: "warning", category: "dns-dhcp", title: "The address pool is nearly full", summary: `${d.used} of ${d.size} addresses in use. New devices may not get an address.` }
         : { id: "dhcp-pool-ok", severity: "pass", category: "dns-dhcp", title: "Plenty of free addresses", summary: `${d.used} of ${d.size} pool addresses in use.` },
     );
   }
@@ -351,7 +328,6 @@ const band24Clients: Rule = ({ clients }) => {
         ],
         evidence: [`${d.via?.ssid ?? "?"} on ${d.via?.radio ?? "?"}: ${sig ?? "?"} dBm, tx ${d.via?.txRate ?? "?"}, rx ${d.via?.rxRate ?? "?"}`],
         devices: [d.id],
-        fix: sig !== undefined && sig < -65 ? { where: "plan", steps: [`Place the next access point closer to ${d.name}.`] } : undefined,
       };
     return {
       id: `wifi-24-capable-${d.mac}`,
@@ -394,7 +370,6 @@ const duplicateSsids: Rule = ({ m }) => {
       summary: `${join(ss)} all end up on ${n?.label ?? net}. Every extra SSID broadcasts its own beacons on every radio, using airtime, and splits devices for no benefit.`,
       detail: ["Keep one name per purpose. If a second name is needed, give it a different purpose, such as a guest or IoT network with its own rules."],
       evidence: m.ssids.filter((s) => s.network === net).map((s) => `${s.name}: ${s.bands.join(" + ")} GHz, ${s.auth.join("/")}, ${s.clients} clients`),
-      fix: { where: "router", steps: ["Move the remaining devices to the SSID you keep, then disable the other one (or repurpose it as a guest network)."] },
     });
   }
   return out;
@@ -411,7 +386,6 @@ const wpa2Only: Rule = ({ m }) => {
     summary: `WPA2-PSK is still solid with a long passphrase, but WPA3 protects against offline password guessing. WPA2/WPA3 mixed mode lets newer devices use WPA3 while older ones keep working.`,
     detail: ["Test mixed mode with the oldest device on this SSID first. Some printers and IoT devices refuse to join when WPA3 is offered; those belong on a separate WPA2 network for IoT anyway."],
     evidence: [`${s.name}: ${s.auth.join(", ")}`],
-    fix: { where: "router", cli: `/interface wifi security set [find name="${s.security ?? "<profile>"}"] authentication-types=wpa2-psk,wpa3-psk` },
   }));
   if (strong.length) out.push({ id: "wifi-wpa3-available", severity: "pass", category: "wifi", title: "WPA3 is available", summary: `${join(strong.map((s) => `“${s.name}”`))} offer${strong.length === 1 ? "s" : ""} WPA3 alongside WPA2.` });
   return out;
@@ -431,7 +405,6 @@ const roaming: Rule = ({ m }) => {
     summary: `With ${aps.length >= 2 ? `${aps.length} access points` : "a second access point planned"}, phones and laptops will hand over between them. Without 802.11r each move is a full reconnect, which drops calls and video for a moment.`,
     detail: ["Enable FT per SSID and test with every important device; a few older clients misbehave with FT and can stay on a separate SSID."],
     evidence: noFt.map((s) => `${s.name}: ft=no`),
-    fix: { where: "router", cli: `/interface wifi security set [find] ft=yes ft-over-ds=yes`, caution: "Test each SSID after the change; if a device cannot reconnect, revert FT on that SSID's security profile." },
   };
 };
 
@@ -441,7 +414,8 @@ const fiveGhzPlan: Rule = ({ m }) => {
   const plannedAps = m.planned.filter((p) => p.kind === "ap").length;
   const aps = new Set(r5.map((r) => r.apId)).size;
   const sample = r5[0]!;
-  const freqs = sample.plan?.frequencies ?? [];
+  // Every access point can have its own channel plan: count what all of them allow together.
+  const freqs = [...new Set(r5.flatMap((r) => r.plan?.frequencies ?? []))].sort((a, b) => Number(a) - Number(b));
   const width = sample.current?.width ?? (sample.plan?.width?.includes("80") ? 80 : sample.plan?.width?.includes("40") ? 40 : 20);
   const blocks = freqs.length ? Math.max(1, Math.floor(freqs.length / (width / 20))) : 0;
   const out: Finding[] = [];
@@ -452,16 +426,12 @@ const fiveGhzPlan: Rule = ({ m }) => {
       severity: aps >= 2 ? "warning" : "suggestion",
       category: "wifi",
       title: "Only one 5 GHz channel is available for two access points",
-      summary: `The channel plan allows ${freqs.join(", ")} MHz at ${width} MHz width${sample.plan?.skipDfs ? " and skips radar (DFS) channels" : ""}. That is exactly one ${width} MHz block, so a second access point would share it and both would slow down where they overlap.`,
+      summary: `The channel plans allow ${freqs.join(", ")} MHz at ${width} MHz width${sample.plan?.skipDfs ? " and skip radar (DFS) channels" : ""}. That is room for ${plural(blocks, `${width} MHz block`)}, so access points share one and slow each other down where they overlap.`,
       detail: [
         "Pick one: allow DFS channels (52–64, 100–140 in the EU) so each access point gets its own 80 MHz block, or drop to 40 MHz (36–40 and 44–48), which still gives each AP plenty for a home.",
         "DFS channels can go quiet for about a minute when radar is detected; for a home that is usually acceptable, and it is the way to keep 80 MHz on two access points.",
       ],
       evidence: r5.map((r) => `${r.iface}: allowed ${r.plan?.frequencies.join(",") ?? "?"}, width ${r.plan?.width ?? "?"}${r.current ? `, now ch ${r.current.channel} @ ${r.current.width} MHz` : ""}`),
-      fix: {
-        where: "router",
-        cli: `# Option A: allow DFS so the second AP can use 52-64\n/interface wifi channel set [find band~"5ghz"] skip-dfs-channels=10min-cac frequency=5180,5200,5220,5240,5260,5280,5300,5320\n\n# Option B: stay on 36-48 and use 40 MHz\n/interface wifi channel set [find band~"5ghz"] width=20/40mhz`,
-      },
     });
   }
   return out;
@@ -480,11 +450,10 @@ const band24Plan: Rule = ({ m }) => {
     category: "wifi",
     title: "2.4 GHz channel plan could overlap",
     summary: "On 2.4 GHz, only 20 MHz on channels 1, 6 or 11 avoids overlapping with neighbours.",
-    fix: { where: "router", cli: `/interface wifi channel set [find band~"2ghz"] width=20mhz frequency=2412,2437,2462` },
   };
 };
 
-const capVersions: Rule = ({ m }) => {
+const capVersions: Rule = ({ m, cfg, caps }) => {
   const router = m.devices.find((d) => d.id === m.routerId);
   const aps = m.devices.filter((d) => d.kind === "ap" && d.managed && d.version);
   const behind = aps.filter((a) => router?.version && a.version !== router.version);
@@ -496,13 +465,13 @@ const capVersions: Rule = ({ m }) => {
     category: "maintenance",
     title: `${plural(behind.length, "access point")} on a different RouterOS than the controller`,
     summary: `${join(behind.map((a) => `${a.name} runs ${a.version}`))}; the controller runs ${router?.version}. CAPsMAN features and fixes assume matching versions.`,
-    evidence: [`${router?.name}: ${router?.version}`, ...behind.map((a) => `${a.name} (${a.model ?? "AP"}): ${a.version}`)],
+    // Update channels decide which version each one moves to next.
+    evidence: [
+      `${router?.name}: ${router?.version}, update channel ${prop(single(cfg, "/system/package/update"), "channel", "stable")}`,
+      ...behind.map((a) => `${a.name} (${a.model ?? "AP"}): ${a.version}`),
+      ...caps.map((c) => `${prop(single(c, "/system/identity"), "name", "access point")}: update channel ${prop(single(c, "/system/package/update"), "channel", "stable")}`),
+    ],
     devices: behind.map((a) => a.id),
-    fix: {
-      where: "ap",
-      cli: `# On each access point (same update channel as the router)\n/system package update set channel=long-term\n/system package update install\n\n# Optional, on the router: let CAPsMAN suggest matching versions\n/interface wifi capsman set upgrade-policy=suggest-same-version`,
-      caution: "The AP reboots; Wi-Fi on it is gone for 2–3 minutes.",
-    },
   };
 };
 
@@ -516,7 +485,6 @@ const updateChannels: Rule = ({ m, cfg, caps }) => {
     category: "maintenance",
     title: "The router and access points follow different update channels",
     summary: `The router checks “${rc}”${rc === "stable" ? " (the default)" : ""}, while ${plural(differing.length, "access point")} check${differing.length === 1 ? "s" : ""} “${prop(single(differing[0], "/system/package/update"), "channel", "stable")}”. Pick one so they stay on matching versions.`,
-    fix: { where: "router", cli: `/system package update set channel=long-term` },
     devices: [m.routerId ?? "router"],
   };
 };
@@ -533,7 +501,7 @@ const wifiBasics: Rule = ({ m, cfg }) => {
     out.push(
       ifs.length && !wanSide.length
         ? { id: "capsman-scope", severity: "pass", category: "wifi", title: "Access points are managed only from the home LAN", summary: `CAPsMAN listens on ${ifs.join(", ")}.` }
-        : { id: "capsman-scope-wide", severity: "warning", category: "security", title: "CAPsMAN listens beyond the home LAN", summary: "Limit CAPsMAN to LAN interfaces so nothing on the upstream side can register as an access point.", fix: { where: "router", cli: `/interface wifi capsman set interfaces=${m.networks.find((n) => n.role === "lan")?.bridge ?? "<lan-bridge>"}` } },
+        : { id: "capsman-scope-wide", severity: "warning", category: "security", title: "CAPsMAN listens beyond the home LAN", summary: "Limit CAPsMAN to LAN interfaces so nothing on the upstream side can register as an access point."},
     );
   }
   return out;
@@ -552,7 +520,7 @@ const services: Rule = ({ cfg, lan }) => {
   const out: Finding[] = [];
   const legacy = ["telnet", "ftp"].filter((n) => state(n).on);
   if (legacy.length)
-    out.push({ id: "svc-insecure", severity: "warning", category: "security", title: `${cap(join(legacy.map((n) => n.toUpperCase().replace("TELNET", "Telnet"))))} ${legacy.length === 1 ? "is" : "are"} enabled`, summary: "These send passwords in clear text and are not needed for anything modern.", fix: { where: "router", cli: legacy.map((n) => `/ip service disable ${n}`).join("\n") } });
+    out.push({ id: "svc-insecure", severity: "warning", category: "security", title: `${cap(join(legacy.map((n) => n.toUpperCase().replace("TELNET", "Telnet"))))} ${legacy.length === 1 ? "is" : "are"} enabled`, summary: "These send passwords in clear text and are not needed for anything modern." });
   else out.push({ id: "svc-legacy-off", severity: "pass", category: "security", title: "Telnet and FTP are off", summary: "No clear-text management protocols are listening." });
 
   const open = ["www", "ssh", "winbox"].filter((n) => state(n).on && !state(n).address);
@@ -568,7 +536,6 @@ const services: Rule = ({ cfg, lan }) => {
         "The firewall already blocks the internet side; this is about the inside.",
       ].filter(Boolean),
       evidence: open.map((n) => `/ip service ${n}: enabled, address=(any)`),
-      fix: { where: "router", cli: open.map((n) => `/ip service set ${n} address=${lan?.cidr ?? "10.0.0.0/24"}`).join("\n") + `\n# Tighter: list only your admin machines, e.g. address=192.168.88.10/32,192.168.88.11/32`, caution: "Make sure the machine you manage from is inside the allowed range before applying, or you lock yourself out of that service." },
     });
   return out;
 };
@@ -587,13 +554,12 @@ const tempRules: Rule = ({ cfg }) => {
       ? `${plural(fromWan.length, "active rule")} let${fromWan.length === 1 ? "s" : ""} the old network reach the router's login (ports ${[...new Set(fromWan.map((r) => r["dst-port"]).filter(Boolean))].join(", ")}). Anyone on the ISP router's Wi-Fi can reach the management pages, and after a bridge-mode switch the same rule would face the internet.`
       : "Disabled leftovers from setup. They do nothing, but they make the rule list harder to trust.",
     evidence: rules.map((r) => `${enabled(r) ? "active" : "disabled"}: ${r.chain} ${r.action} ${r["src-address"] ?? ""} ${r.protocol ?? ""} ${r["dst-port"] ?? ""} — “${r.comment}”`),
-    fix: { where: "router", cli: `# Remove once you no longer manage the router from the old network\n/ip firewall filter remove [find comment~"TEMP"]` },
   };
 };
 
 const firewallDefaults: Rule = ({ cfg }) => {
   const f = menu(cfg, "/ip/firewall/filter").filter(enabled);
-  if (!f.length) return { id: "fw-empty", severity: "critical", category: "security", title: "No IPv4 firewall rules", summary: "Nothing stops the internet side from reaching the router or, through NAT gaps, the LAN.", fix: { where: "router", steps: ["Restore the default configuration firewall (System → Reset Configuration keeps a backup) or apply the defconf filter rules."] } };
+  if (!f.length) return { id: "fw-empty", severity: "critical", category: "security", title: "No IPv4 firewall rules", summary: "Nothing stops the internet side from reaching the router or, through NAT gaps, the LAN." };
   const inputDrop = f.some((r) => r.chain === "input" && r.action === "drop" && (r["in-interface-list"] === "!LAN" || r["in-interface-list"] === "WAN"));
   const fwdDrop = f.some((r) => r.chain === "forward" && r.action === "drop" && r["connection-nat-state"] === "!dstnat");
   const invalid = f.some((r) => r.action === "drop" && r["connection-state"] === "invalid");
@@ -615,7 +581,6 @@ const usbSharing: Rule = ({ m, cfg }) => {
     summary: `Any USB drive plugged into the router is shared over SMB${isTrue(d["auto-media-sharing"]) ? " and as media" : ""} on “${iface}”${wan ? ", which is the WAN/upstream bridge, not your home LAN" : ""}.`,
     detail: [wan ? "The input firewall currently drops this traffic, so it is not exposed today; but it is the wrong side, and one firewall change away from being reachable by everything on the old network." : "Fine if intended; otherwise turn it off so a forgotten stick is not visible to every device."],
     evidence: [`/disk settings auto-media-interface=${iface} auto-smb-sharing=${d["auto-smb-sharing"] ?? "no"} auto-media-sharing=${d["auto-media-sharing"] ?? "no"}`],
-    fix: { where: "router", cli: `/disk settings set auto-smb-sharing=no auto-media-sharing=no\n# or, to keep it on the home LAN only:\n# /disk settings set auto-media-interface=${m.networks.find((n) => n.role === "lan")?.bridge ?? "<lan-bridge>"}` },
   };
 };
 
@@ -628,7 +593,6 @@ const sshForwarding: Rule = ({ cfg }) => {
     category: "security",
     title: "SSH port forwarding is enabled on the router",
     summary: `forwarding-enabled=${v} lets an SSH session to the router tunnel into the LAN. It is handy for reaching access points during setup, but it widens what a stolen admin login can do.`,
-    fix: { where: "router", cli: `/ip ssh set forwarding-enabled=no` },
   };
 };
 
@@ -650,7 +614,6 @@ const identity: Rule = ({ m, cfg }) => {
     title: "The router still has the default name",
     summary: "Its identity is “MikroTik”. A real name shows up in logs, CAPsMAN, neighbour lists and backups, and makes the shell prompt tell you which device you are on.",
     devices: [m.routerId ?? "router"],
-    fix: { where: "router", cli: `/system identity set name=${(m.devices.find((d) => d.id === m.routerId)?.name ?? "router").toLowerCase()}-gateway` },
   };
 };
 
@@ -669,7 +632,6 @@ const leftovers: Rule = ({ cfg }) => {
     title: `${items.length} unused leftovers from the default configuration`,
     summary: "Harmless, but they make the configuration harder to read and are easy to re-enable by mistake.",
     evidence: items,
-    fix: { where: "router", cli: `/ip address remove [find disabled=yes]\n/ip dhcp-server remove [find disabled=yes]\n/ip dns static remove [find disabled=yes]` },
   };
 };
 
@@ -685,13 +647,12 @@ const backups: Rule = ({ cfg }) => {
     title: "No automatic configuration backup",
     summary: "The router does not export its configuration on a schedule. If it fails, the latest copy is whatever was saved by hand.",
     detail: ["A nightly export is tiny. Keep a copy off the router (NAS, git), because the router's own storage dies with the router."],
-    fix: { where: "router", cli: `/system scheduler add name=nightly-export interval=1d start-time=03:30:00 on-event="/export show-sensitive=no file=nightly-export"\n# Then copy nightly-export.rsc off the router, e.g. with scp from the NAS.` },
   };
 };
 
 const ntp: Rule = ({ cfg }) => {
   const c = single(cfg, "/system/ntp/client");
-  if (!isTrue(c?.enabled)) return { id: "ntp-off", severity: "suggestion", category: "maintenance", title: "Time sync is off", summary: "Without NTP the router's clock drifts, which breaks certificates, logs and scheduled tasks.", fix: { where: "router", cli: `/system ntp client set enabled=yes\n/system ntp client servers add address=pool.ntp.org` } };
+  if (!isTrue(c?.enabled)) return { id: "ntp-off", severity: "suggestion", category: "maintenance", title: "Time sync is off", summary: "Without NTP the router's clock drifts, which breaks certificates, logs and scheduled tasks." };
   return { id: "ntp-on", severity: "pass", category: "maintenance", title: "The clock is synchronised", summary: `NTP client on${isTrue(single(cfg, "/system/ntp/server")?.enabled) ? ", and the router serves time to the LAN" : ""}.` };
 };
 
@@ -718,7 +679,6 @@ const segmentation: Rule = ({ m }) => {
         "For a small office the same idea becomes: staff, guests and devices on separate networks.",
       ],
       devices: [...iot, ...valuable].map((d) => d.id),
-      fix: { where: "plan", steps: ["Create an IoT network (VLAN + SSID, WPA2 for compatibility).", "Allow IoT → internet, LAN → IoT; block IoT → LAN.", "Move devices over one by one; reserve their addresses on the new network."] },
     });
   if (!hasGuest)
     out.push({
@@ -727,7 +687,6 @@ const segmentation: Rule = ({ m }) => {
       category: "segmentation",
       title: "No guest Wi-Fi",
       summary: "Visitors get your main Wi-Fi password and full access to the home network. A guest network gives them internet only, and its password can be shared freely.",
-      fix: { where: "plan", steps: ["Add a guest SSID on its own network with client isolation and internet-only access."] },
     });
   return out;
 };
@@ -747,7 +706,6 @@ const plannedPorts: Rule = ({ m }) => {
         category: "hardware",
         title: `PoE is off on ${port.name}, where ${p.name} is planned`,
         summary: `${p.name} would need its own power adapter on ${port.name}${port.comment ? ` (“${port.comment}”)` : ""}. Turn PoE on for that port before plugging it in.`,
-        fix: { where: "router", cli: `/interface ethernet set ${port.name} poe-out=auto-on comment="${p.name}"` },
       });
   }
   return out;
@@ -757,7 +715,7 @@ const hwOffload: Rule = ({ m }) => {
   const lanPorts = m.ports.filter((p) => p.zone === "lan" && p.bridge);
   if (!lanPorts.length) return undefined;
   const off = lanPorts.filter((p) => p.hwOffload === false);
-  if (off.length) return { id: "hw-offload-off", severity: "suggestion", category: "hardware", title: "Some LAN ports switch in software", summary: `${off.map((p) => p.name).join(", ")} have hardware offload off, so traffic between them goes through the CPU.`, fix: { where: "router", cli: off.map((p) => `/interface bridge port set [find interface=${p.name}] hw=yes`).join("\n") } };
+  if (off.length) return { id: "hw-offload-off", severity: "suggestion", category: "hardware", title: "Some LAN ports switch in software", summary: `${off.map((p) => p.name).join(", ")} have hardware offload off, so traffic between them goes through the CPU.` };
   return { id: "hw-offload", severity: "pass", category: "hardware", title: "LAN ports switch in hardware", summary: "Traffic between LAN ports stays in the switch chip and does not load the CPU." };
 };
 

@@ -41,6 +41,7 @@ export const fetchActivity = (id: string, hours: number) => api<DeviceActivity>(
 export const fetchIntegrations = () => api<IntegrationsInfo>("/api/integrations");
 export const connectAdGuard = (body: { address: string; user?: string; password?: string; sameAs?: string }) => api<{ ok: true }>("/api/integrations/adguard", { method: "POST", body: JSON.stringify(body) });
 export const disconnectAdGuard = (url: string) => api<{ ok: true }>(`/api/integrations/adguard?url=${encodeURIComponent(url)}`, { method: "DELETE" });
+export const fetchFixRequest = (id: string) => api<{ text: string }>(`/api/review/${encodeURIComponent(id)}/request`).then((r) => r.text);
 export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
 
 export type Theme = "dark" | "light" | "system";

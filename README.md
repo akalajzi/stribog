@@ -4,14 +4,14 @@ A calm, honest control room for MikroTik home networks.
 
 Stribog signs in to a RouterOS router with the same user and password as WinBox or WebFig (or reads `/export` files) and shows you:
 
-- **Review**: how the network is set up, what is solid, what is fragile, and exactly what to change. Every finding explains why it matters in plain words and, where the fix is on the router, gives a RouterOS script to review.
+- **Review**: how the network is set up, what is solid and what is fragile. Every finding explains why it matters in plain words, with the evidence. The review only diagnoses: how to fix something depends on the rest of the network, so each finding hands an AI agent a request with the configuration involved (see Agents below).
 - **Topology**: a tidy map with drawings of the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), each with its own line in that colour, strongest signal first.
 - **Wi-Fi**: networks, a channel map per band (including where a planned access point would have to go), and every client on a signal scale.
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
 - **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.
-- **Setup & fix plan**: a combined fix script for the findings you pick, and a generator for a clean, opinionated home or small-office setup.
+- **New setup**: a generator for a clean, opinionated home or small-office setup, as a script to review.
 
-Stribog never changes anything on the router. Scripts are for you to read and paste.
+Stribog never changes anything on the router. Whatever you change, you apply yourself.
 
 ![Review](docs/screenshots/review.jpg)
 ![Topology](docs/screenshots/map.jpg)
@@ -21,7 +21,7 @@ Stribog never changes anything on the router. Scripts are for you to read and pa
 ![Wi-Fi](docs/screenshots/wifi.jpg)
 ![LAN & internet](docs/screenshots/network.jpg)
 ![Clients](docs/screenshots/clients.jpg)
-![Setup & fix plan](docs/screenshots/plan.jpg)
+![New setup](docs/screenshots/plan.jpg)
 
 </details>
 
@@ -113,13 +113,16 @@ Under **Settings → Agents**, create a token for an AI agent. It is shown once;
 claude mcp add --transport http stribog http://127.0.0.1:4517/mcp --header "Authorization: Bearer stb_…"
 ```
 
-An agent has the same rights as a person for notes, and sees the network through the most recent signed-in session (or its last read, marked stale, when nobody is signed in). Tools: `get_network_overview`, `list_devices`, `get_device`, `get_device_activity`, `update_device_notes`, `update_network_notes`, `get_review`, `get_change_log`. The token also works for the HTTP API above.
+An agent has the same rights as a person for notes, and sees the network through the most recent signed-in session (or its last read, marked stale, when nobody is signed in). Tools: `get_network_overview`, `list_devices`, `get_device`, `get_device_activity`, `update_device_notes`, `update_network_notes`, `get_review`, `get_fix_request`, `get_change_log`. The token also works for the HTTP API above.
+
+Fixes come from the agent, not from Stribog. `get_fix_request` (also the prompt `fix_finding`) gives it one finding with its evidence, the network, the devices involved, your notes, the configuration the check read (secrets hidden) and what a good answer contains: whether it is a real problem here, the options, exact commands that touch only the items involved, how to check and how to undo, and the risk of losing access. In the app, **Copy request for an agent** on a finding copies the same text for an agent that is not connected.
 
 ## Command line
 
 ```sh
 pnpm review                                  # terminal report for ./stribog.config.json (or the demo)
-pnpm review -- --fix                         # include evidence and fix scripts
+pnpm review -- --details                     # include explanations and evidence
+pnpm exec tsx src/cli/stribog.ts advise <id>  # a request for advice on one finding, for an AI agent
 pnpm review -- --export router.rsc --cap ap.rsc [--notes notes.json]
 pnpm collect -- --url https://192.168.88.1 --user stribog --password-file ~/.config/stribog/router-password --insecure --out data/snapshot.json
 ```
@@ -145,7 +148,7 @@ Stribog has no accounts of its own: signing in means signing in to the router. T
 
 - `src/core/ros.ts` parses `/export` scripts (line continuations, quoting, `\XX` escapes, `set [ find … ]`) into the same shape the REST API returns, and hides secrets.
 - `src/core/model.ts` builds one model of devices, ports, networks, SSIDs, radios and the WAN. Every derived fact records whether it was read, inferred or told by the user, and the UI says "probably" for inferences.
-- `src/core/analyze.ts` holds the review rules. `src/core/layout.ts` lays out the topology (port order left to right, so links never cross). `src/core/setup.ts` generates setup scripts, and `src/core/firewall.ts` describes rules in plain language.
+- `src/core/analyze.ts` holds the review rules (diagnosis only; each finding notes the configuration it read) and `src/core/advice.ts` turns a finding into a request for advice. `src/core/layout.ts` lays out the topology (port order left to right, so links never cross). `src/core/setup.ts` generates setup scripts, and `src/core/firewall.ts` describes rules in plain language.
 - `src/core/rest.ts` reads the router over REST. `src/server/session.ts` signs in and keeps sessions in memory. `src/server/provider.ts` picks the source: the signed-in router, files, or the demo.
 - `src/server/notes.ts` keeps notes and the change log, `src/server/tokens.ts` agent tokens, `src/server/mcp.ts` the MCP tools.
 - `src/core/activity.ts` turns the connection table into who-talks-to-whom; `src/server/owners.ts` looks up network owners, reverse DNS and RDAP; `src/server/recorder.ts` and `src/server/history.ts` record and keep history.

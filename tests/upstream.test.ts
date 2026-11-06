@@ -111,14 +111,12 @@ describe("upstream side, from structure alone", () => {
 
     const q = network({ here: "stale", plugged: "failed" }).a.findings.find((f) => f.id === "wan-devices-outside")!;
     expect(q).toMatchObject({ severity: "info", title: "The router remembers 3 devices from the ISP router's network" });
-    expect(q.fix).toBeUndefined();
   });
 
   it("finds extra WAN-side addresses forwarded into the LAN without reading any comment", () => {
     const f = network().a.findings.find((x) => x.id === "lan-legacy-compat")!;
     expect(f.title).toBe("The router answers for 1 extra address on the upstream network");
     expect(f.evidence).toEqual(["192.168.1.70 → 10.0.0.70 (Unknown device 53:3C)"]);
-    expect(f.fix!.cli).toContain('/ip firewall nat remove [find action=dst-nat dst-address="192.168.1.70"]');
-    expect(f.fix!.cli).toContain('/ip address remove [find interface="wan-br" address="192.168.1.70/32"]');
+    expect(f.reads).toEqual(expect.arrayContaining(["router /ip/address", "router /ip/firewall/nat"]));
   });
 });

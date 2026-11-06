@@ -210,9 +210,19 @@ describe("web API sessions", () => {
     const client = new Client({ name: "test", version: "1" });
     await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp"), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(["get_change_log", "get_device", "get_device_activity", "get_network_overview", "get_review", "list_devices", "update_device_notes", "update_network_notes"]);
+    expect(tools).toEqual(["get_change_log", "get_device", "get_device_activity", "get_fix_request", "get_network_overview", "get_review", "list_devices", "update_device_notes", "update_network_notes"]);
 
     const text = (r: unknown) => JSON.parse((r as { content: { text: string }[] }).content[0]!.text);
+
+    // Fixes come from the agent: it gets the finding with the configuration involved, as a tool or a prompt.
+    const review = text(await client.callTool({ name: "get_review", arguments: {} }));
+    const id = review.findings.find((f: { reads?: string[] }) => f.reads?.length).id;
+    const req = (await client.callTool({ name: "get_fix_request", arguments: { finding: id } })) as { content: { text: string }[] };
+    expect(req.content[0]!.text).toMatch(/^# Advice wanted: /);
+    expect(req.content[0]!.text).toContain("```routeros");
+    const prompt = await client.getPrompt({ name: "fix_finding", arguments: { finding: id } });
+    expect((prompt.messages[0]!.content as { text: string }).text).toBe(req.content[0]!.text);
+    expect((await client.callTool({ name: "get_fix_request", arguments: { finding: "nope" } })).isError).toBe(true);
     const ov = text(await client.callTool({ name: "get_network_overview", arguments: {} }));
     expect(ov).toMatchObject({ data: { mode: "live" }, router: { name: "maple-gw", version: "7.20.4" } });
 

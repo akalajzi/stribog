@@ -112,7 +112,7 @@ describe("analyze: demo network", () => {
 
   it("only flags SSH as unrestricted (www and winbox are limited to the LAN)", () => {
     expect(find(a, "svc-unrestricted")!.evidence).toEqual(["/ip service ssh: enabled, address=(any)"]);
-    expect(find(a, "svc-insecure")!.fix?.cli).toBe("/ip service disable telnet");
+    expect(find(a, "svc-insecure")!.reads).toContain("router /ip/service");
   });
 
   it("sorts by severity, counts consistently and scores", () => {
@@ -159,7 +159,6 @@ add address=10.0.0.5 comment="Pi-hole box" mac-address=00:00:5E:00:53:05 server=
     expect(f.severity).toBe("warning");
     expect(f.title).toBe("All name lookups depend on Pi-hole box");
     expect(f.devices).toEqual(["mac:00:00:5E:00:53:05"]);
-    expect(f.fix?.cli).toContain("dns-server=10.0.0.5,10.0.0.1");
   });
 
   it("dns-single-router passes and dns-none warns", () => {

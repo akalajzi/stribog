@@ -9,7 +9,8 @@ import { KINDS } from "../core/classify.ts";
 import { connectionsOf, type Device, type NetworkModel } from "../core/model.ts";
 import { normMac } from "../core/net.ts";
 import { NotesError, type NotesStore } from "./notes.ts";
-import type { NetworkPayload } from "./provider.ts";
+import { snapshotOf, type NetworkPayload } from "./provider.ts";
+import { adviceRequest } from "../core/advice.ts";
 import type { DeviceActivity } from "./device-activity.ts";
 
 export interface McpContext {
@@ -21,7 +22,7 @@ export interface McpContext {
 const INSTRUCTIONS = `Stribog shows a MikroTik home network as read from its router, plus notes that people and agents add.
 Facts marked "inferred" are Stribog's guesses (from names or the MAC vendor); "read" comes from the router; "user" comes from notes.
 Use notes to record what the router cannot know: a device's real name and kind, labels, a short description, the services it runs, and free-form notes. Every change is logged.
-Stribog does not change the router. Review findings include RouterOS scripts for a person to read and paste.`;
+Stribog does not change the router. Its review only diagnoses; to help fix a finding, read get_fix_request for it (the finding, the configuration involved and what a good answer contains) and advise the owner, who applies any change themselves.`;
 
 export async function handleMcp(req: IncomingMessage, res: ServerResponse, body: unknown, ctx: McpContext) {
   if (req.method !== "POST") {
@@ -189,7 +190,7 @@ function buildServer(ctx: McpContext): McpServer {
     "get_review",
     {
       title: "Review findings",
-      description: "Stribog's review of the setup: what is fragile and what to change, worst first, with evidence and a RouterOS fix script where the fix is on the router. Scripts are for a person to read and paste.",
+      description: "Stribog's review of the setup: what is fragile or wrong, worst first, with evidence. Diagnosis only, no fixes: use get_fix_request with a finding's id for everything needed to advise on fixing it.",
       inputSchema: { includePassed: z.boolean().optional().describe("Also list what is already good.") },
       annotations: read,
     },
@@ -202,6 +203,38 @@ function buildServer(ctx: McpContext): McpServer {
         findings: analysis.findings.filter((f) => includePassed || f.severity !== "pass"),
       });
     }),
+  );
+
+  // Advice on a finding: the agent gets the context, Stribog never writes the fix itself.
+  const request = async (id: string) => {
+    const p = await network();
+    const f = p.analysis.findings.find((x) => x.id === id);
+    const snap = snapshotOf(p);
+    if (!f) throw new NotesError(`No finding “${id}”. Use get_review to see the current ones.`);
+    if (!snap) throw new NotesError("Stribog has no configuration to show for this finding right now; try again in a moment.");
+    return adviceRequest({ finding: f, model: p.model, snap, notes: snap.notes ?? ctx.notes.get() });
+  };
+
+  server.registerTool(
+    "get_fix_request",
+    {
+      title: "Fix request for a finding",
+      description:
+        "Everything needed to advise on one review finding: the finding and its evidence, the network, the devices involved, the owner's notes, the RouterOS configuration the check read (secrets hidden), and what a good answer contains (is it real here, options, exact commands, how to verify and undo, lockout risk). Read it, then advise the owner; Stribog applies nothing.",
+      inputSchema: { finding: z.string().describe("The finding's id, from get_review.") },
+      annotations: read,
+    },
+    guard(async ({ finding }: { finding: string }) => ({ content: [{ type: "text" as const, text: await request(finding) }] })),
+  );
+
+  server.registerPrompt(
+    "fix_finding",
+    {
+      title: "Fix a review finding",
+      description: "Advice on fixing one of Stribog's review findings, with the network's configuration as context.",
+      argsSchema: { finding: z.string().describe("The finding's id, as shown in Stribog's review.") },
+    },
+    async ({ finding }: { finding: string }) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text: await request(finding) } }] }),
   );
 
   server.registerTool(
