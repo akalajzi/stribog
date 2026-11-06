@@ -1,8 +1,7 @@
 import type { Device, NetworkPayload } from "../api.ts";
-import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { bandColor, Glyph } from "./DeviceArt.tsx";
 import { SEV_VAR } from "./FindingCard.tsx";
-import { DeviceAbout, DeviceConnections, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
+import { DeviceAbout, DeviceConnections, DeviceKindPicker, DeviceNotesText, DeviceServices, DeviceTitle } from "./NotesPanel.tsx";
 import { UPSTREAM_GROUP } from "../../core/layout.ts";
 import { fmtBps } from "../../core/net.ts";
 import { connectionViews, linkCounters } from "../../core/model.ts";
@@ -65,7 +64,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
         title={<DeviceTitle key={d.id} d={d} onSaved={onNotesSaved} />}
         sub={
           <>
-            {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
+            <DeviceKindPicker key={`kind-${d.id}`} d={d} onSaved={onNotesSaved} />
             {d.kindCertainty === "inferred" && d.kind !== "unknown" ? <span className="cert">probably</span> : d.kindCertainty === "user" ? <span className="cert">noted</span> : null}
             {" · "}
             <span style={{ color: d.status === "online" ? "var(--ok)" : d.status === "offline" ? "var(--tx-3)" : "var(--tx-2)" }}>{d.status}</span>

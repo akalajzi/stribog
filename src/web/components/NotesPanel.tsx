@@ -18,11 +18,10 @@ async function save(d: Device, patch: Record<string, unknown>, onSaved: Saved): 
   return err;
 }
 
-/** The device's name in the inspector header, with a Rename button that also sets the kind. */
+/** The device's name in the inspector header, with a Rename button. */
 export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState("");
   const [error, setError] = useState<string>();
   const canEdit = !!d.mac;
 
@@ -35,7 +34,6 @@ export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
             className="btn ghost sm rename"
             onClick={() => {
               setName(d.nameSource === "user" ? d.name : "");
-              setKind(d.kindCertainty === "user" ? d.kind : "");
               setError(undefined);
               setEditing(true);
             }}
@@ -52,17 +50,13 @@ export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
       className="rename-form"
       onSubmit={async (e) => {
         e.preventDefault();
-        const err = await save(d, { name: name.trim() || null, kind: kind || null }, onSaved);
+        const err = await save(d, { name: name.trim() || null }, onSaved);
         setError(err);
         if (!err) setEditing(false);
       }}
       onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
     >
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder={d.nameSource === "user" ? "Name" : `${d.name} (from the router)`} maxLength={80} autoFocus aria-label="Name" />
-      <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind">
-        <option value="">{d.kindCertainty === "user" ? "Let Stribog guess the kind" : `${KIND_LABEL[d.kind as DeviceKind] ?? d.kind} (guessed)`}</option>
-        {KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-      </select>
       {error && <p className="notes-error">{error}</p>}
       <div className="notes-actions">
         <button type="button" className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
@@ -70,6 +64,38 @@ export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
       </div>
       <p className="faint notes-hint">Leave the name empty to use what the router reports.</p>
     </form>
+  );
+}
+
+/**
+ * The device's kind, changed in place: a menu that looks like the label, saved on choice.
+ * "Let Stribog guess" clears what a person chose.
+ */
+export function DeviceKindPicker({ d, onSaved }: { d: Device; onSaved: Saved }) {
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const label = KIND_LABEL[d.kind as DeviceKind] ?? d.kind;
+  if (!d.mac) return <>{label}</>;
+  const chosen = d.kindCertainty === "user";
+  return (
+    <>
+      <select
+        className="kind-select"
+        value={chosen ? d.kind : ""}
+        disabled={busy}
+        aria-label="Device kind"
+        title="Change the kind"
+        onChange={async (e) => {
+          setBusy(true);
+          setError(await save(d, { kind: e.target.value || null }, onSaved));
+          setBusy(false);
+        }}
+      >
+        <option value="">{chosen ? "Let Stribog guess" : label}</option>
+        {KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+      </select>
+      {error && <span className="notes-error"> {error}</span>}
+    </>
   );
 }
 
