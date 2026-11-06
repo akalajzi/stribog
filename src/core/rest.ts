@@ -72,6 +72,10 @@ export interface RestOptions {
   fetchImpl?: typeof fetch;
 }
 
+type MonitorShape = "id-true" | "numbers-id-true" | "id-empty" | "numbers-name-empty";
+/** Which monitor body each router accepted, by URL, so later reads go straight to it. */
+const monitorShape = new Map<string, MonitorShape>();
+
 export class AuthError extends Error {}
 export class NotRouterOsError extends Error {}
 
@@ -186,20 +190,39 @@ export class RouterOsRest {
   }
 
   /**
-   * `monitor ... once` for the given items of a menu. RouterOS 7.21 wants their `.id`s over REST
-   * (it answers "missing =.id=" to `numbers`); older versions took names, so those are the fallback.
-   * Each result row is tagged with the item's name.
+   * `monitor ... once` for the given items of a menu. RouterOS versions disagree on the body:
+   * the docs use `numbers` with `once: ""`, 7.21 answers that with "missing =.id=", and forum
+   * reports have `.id` with `once: true` working. Try each shape until one returns rows, and
+   * remember the winner per router. Each result row is tagged with the item's name.
    */
   async monitor(menuPath: string, items: RosRecord[]) {
     const list = items.filter((x) => x.name);
     if (!list.length) return [];
     const path = `${menuPath}/monitor`;
-    const ids = list.map((x) => x[".id"]).filter(Boolean);
-    let rows: RosRecord[] = [];
-    if (ids.length === list.length) rows = await this.call("POST", path, { ".id": ids.join(","), once: "" });
-    if (!rows.length) rows = await this.call("POST", path, { numbers: list.map((x) => x.name).join(","), once: "" });
-    if (rows.length) delete this.errors[`POST ${path}`];
-    return rows.map((r, i) => ({ ...r, name: r.name ?? list[i]!.name! }));
+    const ids = list.every((x) => x[".id"]) ? list.map((x) => x[".id"]).join(",") : undefined;
+    const names = list.map((x) => x.name).join(",");
+    const shapes: Record<MonitorShape, Record<string, string> | undefined> = {
+      "id-true": ids ? { ".id": ids, once: "true" } : undefined,
+      "numbers-id-true": ids ? { numbers: ids, once: "true" } : undefined,
+      "id-empty": ids ? { ".id": ids, once: "" } : undefined,
+      "numbers-name-empty": { numbers: names, once: "" },
+    };
+    const known = monitorShape.get(this.opt.url);
+    const order = (Object.keys(shapes) as MonitorShape[]).sort((a, b) => Number(b === known) - Number(a === known));
+    const tried: string[] = [];
+    for (const shape of order) {
+      const body = shapes[shape];
+      if (!body) continue;
+      const rows = await this.call("POST", path, body);
+      if (rows.length) {
+        monitorShape.set(this.opt.url, shape);
+        delete this.errors[`POST ${path}`];
+        return rows.map((r, i) => ({ ...r, name: r.name ?? list[i]!.name! }));
+      }
+      tried.push(`${shape}: ${this.errors[`POST ${path}`] ?? "no rows"}`);
+    }
+    this.errors[`POST ${path}`] = tried.join(" | ");
+    return [];
   }
 
   async snapshot(): Promise<DeviceSnapshot> {

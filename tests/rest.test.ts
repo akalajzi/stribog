@@ -79,9 +79,9 @@ describe("RouterOsRest", () => {
     const { calls, fetchImpl } = fakeRouter(ROUTES);
     const snap = await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl }).snapshot();
     const post = (p: string) => calls.find((c) => c.method === "POST" && c.path === p)?.body;
-    expect(post("/interface/ethernet/monitor")).toEqual({ ".id": "*1,*2,*9", once: "" });
-    expect(post("/interface/ethernet/poe/monitor")).toEqual({ ".id": "*1,*2", once: "" });
-    expect(post("/interface/wifi/monitor")).toEqual({ ".id": "*A", once: "" });
+    expect(post("/interface/ethernet/monitor")).toEqual({ ".id": "*1,*2,*9", once: "true" });
+    expect(post("/interface/ethernet/poe/monitor")).toEqual({ ".id": "*1,*2", once: "true" });
+    expect(post("/interface/wifi/monitor")).toEqual({ ".id": "*A", once: "true" });
     expect(Object.keys(snap.readErrors ?? {}).filter((k) => k.startsWith("POST"))).toEqual([]);
     expect(snap.state!["/interface/ethernet/monitor"]).toEqual([
       { name: "ether1", status: "link-ok", rate: "1Gbps" },
@@ -123,7 +123,7 @@ describe("RouterOsRest", () => {
     expect(snap.readErrors!["GET /interface/pppoe-client"]).toBeUndefined();
   });
 
-  it("falls back to names when a router refuses ids", async () => {
+  it("falls back to `numbers` when a router refuses `.id`, and remembers it", async () => {
     const { calls, fetchImpl } = fakeRouter(ROUTES);
     const picky = (async (input: string | URL | Request, init?: RequestInit) => {
       const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, string>) : {};
@@ -133,9 +133,13 @@ describe("RouterOsRest", () => {
       }
       return fetchImpl(input, init);
     }) as typeof fetch;
-    const snap = await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl: picky }).snapshot();
+    const snap = await new RouterOsRest({ url: "http://picky", user: "u", password: "p", fetchImpl: picky }).snapshot();
     const byName = calls.find((c) => c.method === "POST" && c.path === "/interface/ethernet/monitor")?.body;
-    expect(byName).toEqual({ numbers: "ether1,ether2,sfp-sfpplus1", once: "" });
+    expect(byName).toEqual({ numbers: "*1,*2,*9", once: "true" });
+    // The next read uses that shape straight away.
+    calls.length = 0;
+    await new RouterOsRest({ url: "http://picky", user: "u", password: "p", fetchImpl: picky }).snapshot();
+    expect(calls.filter((c) => c.path === "(by id)")).toHaveLength(0);
     expect(snap.state!["/interface/ethernet/monitor"]![0]).toMatchObject({ name: "ether1", rate: "1Gbps" });
     expect(snap.readErrors?.["POST /interface/ethernet/monitor"]).toBeUndefined();
   });
