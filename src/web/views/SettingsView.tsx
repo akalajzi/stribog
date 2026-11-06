@@ -4,12 +4,14 @@ import "./settings.css";
 
 export function SettingsView({ data, session }: { data: NetworkPayload; session: SessionInfo }) {
   return (
-    <div className="page settings">
-      <h1>Settings</h1>
-      <Appearance />
-      <Integrations />
-      <Agents demo={session.kind === "demo"} />
-      <History data={data} />
+    <div className="scroll">
+      <div className="page settings">
+        <h1>Settings</h1>
+        <Appearance />
+        <Integrations />
+        <Agents demo={session.kind === "demo"} />
+        <History data={data} />
+      </div>
     </div>
   );
 }

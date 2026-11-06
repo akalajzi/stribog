@@ -38,7 +38,7 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
     };
   }, [id, hours]);
 
-  if (!d) return <div className="page"><p className="muted">This device is no longer in the network.</p></div>;
+  if (!d) return <div className="scroll"><div className="page"><p className="muted">This device is no longer in the network.</p></div></div>;
   const h = act?.history;
   const step = h && h.samples.length > 1 ? medianStep(h.samples) : 60_000;
   const moved = h?.samples.length ? totals(h.samples, step) : undefined;
@@ -47,68 +47,71 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
   const parent = d.parent ? data.model.devices.find((x) => x.id === d.parent) : undefined;
 
   return (
-    <div className="page dv">
-      <button className="linkish dv-back" onClick={onBack}>← Map</button>
-      <header className="dv-head">
-        <div className="dv-ic"><Glyph kind={d.kind} size={28} /></div>
-        <div>
-          <h1>{d.name}</h1>
-          <p className="muted">
-            {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
-            {d.kindCertainty === "inferred" && d.kind !== "unknown" ? " (probably)" : ""} · <span className={d.status === "online" ? "ok" : undefined}>{d.status}</span>
-            {d.ip ? <> · <span className="mono">{d.ip}</span></> : null}
-            {d.mac ? <> · <span className="mono">{d.mac}</span></> : null}
-            {d.vendor ? <> · {d.vendor}</> : null}
-            {parent ? <> · via {parent.name}{d.via?.kind === "wifi" ? ` (${d.via.band} GHz, ${d.via.signal ?? "?"} dBm)` : d.via?.port ? ` (${d.via.port})` : ""}</> : null}
-          </p>
+    // Keyed by device, so another device opens at the top.
+    <div className="scroll" key={d.id}>
+      <div className="page dv">
+        <button className="linkish dv-back" onClick={onBack}>← Map</button>
+        <header className="dv-head">
+          <div className="dv-ic"><Glyph kind={d.kind} size={28} /></div>
+          <div>
+            <h1>{d.name}</h1>
+            <p className="muted">
+              {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
+              {d.kindCertainty === "inferred" && d.kind !== "unknown" ? " (probably)" : ""} · <span className={d.status === "online" ? "ok" : undefined}>{d.status}</span>
+              {d.ip ? <> · <span className="mono">{d.ip}</span></> : null}
+              {d.mac ? <> · <span className="mono">{d.mac}</span></> : null}
+              {d.vendor ? <> · {d.vendor}</> : null}
+              {parent ? <> · via {parent.name}{d.via?.kind === "wifi" ? ` (${d.via.band} GHz, ${d.via.signal ?? "?"} dBm)` : d.via?.port ? ` (${d.via.port})` : ""}</> : null}
+            </p>
+          </div>
+        </header>
+
+        <div className="seg dv-range" role="radiogroup" aria-label="Time range">
+          {RANGES.map((r) => (
+            <button key={r.hours} role="radio" aria-checked={hours === r.hours} className={hours === r.hours ? "on" : undefined} onClick={() => setHours(r.hours)}>{r.label}</button>
+          ))}
         </div>
-      </header>
 
-      <div className="seg dv-range" role="radiogroup" aria-label="Time range">
-        {RANGES.map((r) => (
-          <button key={r.hours} role="radio" aria-checked={hours === r.hours} className={hours === r.hours ? "on" : undefined} onClick={() => setHours(r.hours)}>{r.label}</button>
-        ))}
-      </div>
-
-      <div className="dv-tiles">
-        <Tile label="Traffic now" value={trafficNow(d, data.model) ?? "—"} />
-        <Tile label={`Moved, last ${hours === 24 ? "24 hours" : "7 days"}`} value={moved ? `↓ ${fmtBytes(moved.down)} · ↑ ${fmtBytes(moved.up)}` : "—"} note={moved ? "from what Stribog recorded" : undefined} />
-        <Tile label="Online" value={onlineShare === undefined ? "—" : `${Math.round(onlineShare * 100)}%`} note={onlineShare === undefined ? undefined : "of the recorded time"} />
-        <Tile label="Talking to now" value={`${now.length}`} note={now.length ? `${now.filter((f) => f.scope === "internet").length} on the internet` : undefined} />
-      </div>
-
-      <section className="card dv-sec">
-        <div className="dv-sec-h">
-          <h2>Traffic</h2>
-          <Legend />
+        <div className="dv-tiles">
+          <Tile label="Traffic now" value={trafficNow(d, data.model) ?? "—"} />
+          <Tile label={`Moved, last ${hours === 24 ? "24 hours" : "7 days"}`} value={moved ? `↓ ${fmtBytes(moved.down)} · ↑ ${fmtBytes(moved.up)}` : "—"} note={moved ? "from what Stribog recorded" : undefined} />
+          <Tile label="Online" value={onlineShare === undefined ? "—" : `${Math.round(onlineShare * 100)}%`} note={onlineShare === undefined ? undefined : "of the recorded time"} />
+          <Tile label="Talking to now" value={`${now.length}`} note={now.length ? `${now.filter((f) => f.scope === "internet").length} on the internet` : undefined} />
         </div>
-        {error ? <p className="dv-error">{error}</p> : !h ? <p className="faint">Loading…</p> : h.samples.length < 2 ? <Empty h={h} /> : <TrafficChart h={h} step={step} />}
-        {d.id !== data.model.routerId && connectionsOf(d).some((l) => !linkCounters(data.model, l)) && (
-          <p className="faint">
-            The router has no counter of this device's own link{d.via?.kind === "port" && d.parent !== data.model.routerId ? " (it is wired to another device, not to the router)" : ""}, so traffic is what its connections moved through the router each minute. Traffic to devices on the same network is not counted.
+
+        <section className="card dv-sec">
+          <div className="dv-sec-h">
+            <h2>Traffic</h2>
+            <Legend />
+          </div>
+          {error ? <p className="dv-error">{error}</p> : !h ? <p className="faint">Loading…</p> : h.samples.length < 2 ? <Empty h={h} /> : <TrafficChart h={h} step={step} />}
+          {d.id !== data.model.routerId && connectionsOf(d).some((l) => !linkCounters(data.model, l)) && (
+            <p className="faint">
+              The router has no counter of this device's own link{d.via?.kind === "port" && d.parent !== data.model.routerId ? " (it is wired to another device, not to the router)" : ""}, so traffic is what its connections moved through the router each minute. Traffic to devices on the same network is not counted.
+            </p>
+          )}
+          {h && <Recording h={h} />}
+        </section>
+
+        {act && <Owners act={act} hours={hours} />}
+        {act?.dns && <LookedUp dns={act.dns} hours={hours} />}
+
+        <section className="card dv-sec">
+          <div className="dv-sec-h"><h2>Talking to now</h2></div>
+          {act?.now.note && !now.length ? <p className="faint">{act.now.note}</p> : now.length ? <FlowTable rows={now} onSelect={onSelect} /> : <p className="faint">No connections through the router right now.</p>}
+          {act?.now.note && now.length ? <p className="faint dv-foot">{act.now.note}</p> : null}
+          {act?.now.noNames && <p className="faint dv-foot">{act.now.noNames}</p>}
+          <p className="faint dv-foot">
+            From the router's connection tracking: only traffic the router routes (to the internet or between networks) shows here, not devices talking to each other on the same LAN.
+            {now.some((f) => f.fasttracked) ? " Some connections are fast-tracked, so the router counts only part of their bytes." : ""} Port names are what a port is usually for.
           </p>
-        )}
-        {h && <Recording h={h} />}
-      </section>
+        </section>
 
-      {act && <Owners act={act} hours={hours} />}
-      {act?.dns && <LookedUp dns={act.dns} hours={hours} />}
-
-      <section className="card dv-sec">
-        <div className="dv-sec-h"><h2>Talking to now</h2></div>
-        {act?.now.note && !now.length ? <p className="faint">{act.now.note}</p> : now.length ? <FlowTable rows={now} onSelect={onSelect} /> : <p className="faint">No connections through the router right now.</p>}
-        {act?.now.note && now.length ? <p className="faint dv-foot">{act.now.note}</p> : null}
-        {act?.now.noNames && <p className="faint dv-foot">{act.now.noNames}</p>}
-        <p className="faint dv-foot">
-          From the router's connection tracking: only traffic the router routes (to the internet or between networks) shows here, not devices talking to each other on the same LAN.
-          {now.some((f) => f.fasttracked) ? " Some connections are fast-tracked, so the router counts only part of their bytes." : ""} Port names are what a port is usually for.
-        </p>
-      </section>
-
-      <section className="card dv-sec">
-        <div className="dv-sec-h"><h2>Talked to, last {hours === 24 ? "24 hours" : "7 days"}</h2></div>
-        {h?.talks.length ? <FlowTable rows={h.talks} onSelect={onSelect} history /> : <p className="faint">Nothing recorded for this device in this period.</p>}
-      </section>
+        <section className="card dv-sec">
+          <div className="dv-sec-h"><h2>Talked to, last {hours === 24 ? "24 hours" : "7 days"}</h2></div>
+          {h?.talks.length ? <FlowTable rows={h.talks} onSelect={onSelect} history /> : <p className="faint">Nothing recorded for this device in this period.</p>}
+        </section>
+      </div>
     </div>
   );
 }
