@@ -113,7 +113,21 @@ export function routerFetch(insecure = false): typeof fetch {
     })) as typeof fetch;
 }
 
+/** RouterOS answers errors as {"error":400,"message":"Bad Request","detail":"..."}. */
+async function errorDetail(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  try {
+    const j = JSON.parse(text) as { message?: string; detail?: string };
+    return [j.message, j.detail].filter(Boolean).join(": ") || text.slice(0, 200);
+  } catch {
+    return text.slice(0, 200);
+  }
+}
+
 export class RouterOsRest {
+  /** Why a menu came back empty, by "GET /path"; filled while reading. */
+  readonly errors: Record<string, string> = {};
+
   constructor(private opt: RestOptions) {}
 
   get url() {
@@ -136,8 +150,12 @@ export class RouterOsRest {
         body: body ? JSON.stringify(body) : undefined,
       });
       if (res.status === 401 || res.status === 403) throw new AuthError(`${method} ${path}: HTTP ${res.status} (check the user and its policies)`);
-      if (res.status === 404 || res.status === 400) return []; // menu absent on this model / package
-      if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}`);
+      if (res.status === 404 || res.status === 400) {
+        // Menu absent on this model or package. A 400 on a command we built ourselves is worth knowing about.
+        if (res.status === 400 || method === "POST") this.errors[`${method} ${path}`] = `HTTP ${res.status}: ${await errorDetail(res)}`;
+        return [];
+      }
+      if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}: ${await errorDetail(res)}`);
       const data = (await res.json().catch(() => {
         throw new NotRouterOsError(`${method} ${path}: the answer is not RouterOS JSON`);
       })) as unknown;
@@ -178,20 +196,24 @@ export class RouterOsRest {
     const resource = await this.get("/system/resource");
     const menus: Record<string, RosRecord[]> = {};
     const state: Record<string, RosRecord[]> = {};
+    const failed = (key: string) => (err: unknown) => {
+      this.errors[key] ??= err instanceof Error ? err.message : String(err);
+      return [] as RosRecord[];
+    };
     await Promise.all([
-      ...CONFIG_PATHS.map(async (p) => (menus[p] = await this.get(p).catch(() => []))),
-      ...STATE_PATHS.filter((p) => p !== "/system/resource").map(async (p) => (state[p] = await this.get(p).catch(() => []))),
-      this.get("/ip/dhcp-client").then((r) => (state["/ip/dhcp-client"] = r)).catch(() => {}),
-      this.get("/ip/dhcp-server/lease").then((r) => (state["/ip/dhcp-server/lease"] = r)).catch(() => {}),
+      ...CONFIG_PATHS.map(async (p) => (menus[p] = await this.get(p).catch(failed(`GET ${p}`)))),
+      ...STATE_PATHS.filter((p) => p !== "/system/resource").map(async (p) => (state[p] = await this.get(p).catch(failed(`GET ${p}`)))),
+      this.get("/ip/dhcp-client").then((r) => (state["/ip/dhcp-client"] = r)).catch(failed("GET /ip/dhcp-client")),
+      this.get("/ip/dhcp-server/lease").then((r) => (state["/ip/dhcp-server/lease"] = r)).catch(failed("GET /ip/dhcp-server/lease")),
     ]);
     // REST lists dynamic leases too; the config view should only hold static ones.
     menus["/ip/dhcp-server/lease"] = (menus["/ip/dhcp-server/lease"] ?? []).filter((l) => l.dynamic !== "true");
     const ether = (menus["/interface/ethernet"] ?? []).map((e) => e.name ?? "").filter(Boolean);
     const wifi = (menus["/interface/wifi"] ?? []).filter((w) => !w["master-interface"]).map((w) => w.name ?? "").filter(Boolean);
     const [mon, poe, wmon] = await Promise.all([
-      this.monitor("/interface/ethernet", ether).catch(() => []),
-      this.monitor("/interface/ethernet/poe", ether.filter((e) => e.startsWith("ether"))).catch(() => []),
-      this.monitor("/interface/wifi", wifi).catch(() => []),
+      this.monitor("/interface/ethernet", ether).catch(failed("POST /interface/ethernet/monitor")),
+      this.monitor("/interface/ethernet/poe", ether.filter((e) => e.startsWith("ether"))).catch(failed("POST /interface/ethernet/poe/monitor")),
+      this.monitor("/interface/wifi", wifi).catch(failed("POST /interface/wifi/monitor")),
     ]);
     state["/interface/ethernet/monitor"] = mon;
     state["/interface/ethernet/poe/monitor"] = poe;
@@ -204,6 +226,7 @@ export class RouterOsRest {
       config: { meta: { version: res?.version?.split(" ")[0], model: res?.["board-name"] }, menus },
       state,
       sources: [{ kind: "rest", label: this.opt.url, at }],
+      ...(Object.keys(this.errors).length ? { readErrors: { ...this.errors } } : {}),
     };
   }
 }

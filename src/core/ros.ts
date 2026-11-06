@@ -36,6 +36,8 @@ export interface DeviceSnapshot {
   /** Runtime state menus (registration table, leases, bridge hosts...). Only from a live router or a fixture. */
   state?: Record<string, RosRecord[]>;
   sources: SourceInfo[];
+  /** Menus a live read could not get, and why ("HTTP 400: no such command"). Absent menus on this model are not listed. */
+  readErrors?: Record<string, string>;
 }
 
 export interface Snapshot {

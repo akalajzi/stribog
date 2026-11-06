@@ -113,6 +113,16 @@ describe("RouterOsRest", () => {
     expect(snap.config.menus["/interface/pppoe-client"]).toEqual([]);
     expect(snap.config.menus["/ip/firewall/filter"]).toEqual([]);
     expect(snap.state!["/interface/wifi/capsman/remote-cap"]).toEqual([]);
+    // Failures are kept with the reason; menus this model simply lacks (404 on GET) are not.
+    expect(snap.readErrors!["GET /ip/firewall/filter"]).toMatch(/HTTP 500/);
+    expect(snap.readErrors!["GET /interface/pppoe-client"]).toBeUndefined();
+  });
+
+  it("records why a monitor command was refused", async () => {
+    const routes = fakeRouter(Object.fromEntries(Object.entries(ROUTES).filter(([k]) => k !== "POST /interface/ethernet/monitor")));
+    const snap = await new RouterOsRest({ url: "http://r", user: "u", password: "p", fetchImpl: routes.fetchImpl }).snapshot();
+    expect(snap.state!["/interface/ethernet/monitor"]).toEqual([]);
+    expect(snap.readErrors!["POST /interface/ethernet/monitor"]).toMatch(/HTTP 404/);
   });
 
   it("get() returns [] for 404 and 400, and throws on auth errors", async () => {

@@ -187,6 +187,35 @@ describe("demo model: networks and Wi-Fi", () => {
     expect(r["cap-wifi2"]!.plan).toEqual({ frequencies: [5180, 5200, 5220, 5240], width: "20/40/80mhz", skipDfs: true });
   });
 
+  it("ties radios to their access point from the REST `cap` field, without CAP exports", () => {
+    const AP = "00:00:5E:00:53:C0";
+    const mm = buildModel({
+      collectedAt: "x",
+      devices: [
+        {
+          role: "router",
+          config: {
+            meta: {},
+            menus: {
+              "/interface/wifi/configuration": [{ name: "home-5g", ssid: "Maple" }],
+              "/interface/wifi": [
+                { name: "cap-wifi1", master: "true", cap: `cap-den@${AP}%*e`, configuration: "home-5g", "channel.band": "5ghz-ax" },
+                { name: "cap-wifi1-virtual1", master: "false", "master-interface": "cap-wifi1", configuration: "home-5g" },
+              ],
+            },
+          },
+          state: {
+            "/interface/wifi/capsman/remote-cap": [{ address: `${AP}%bridge`, "base-mac": AP, identity: "cap-den", state: "Ok" }],
+            "/interface/wifi/registration-table": [{ interface: "cap-wifi1-virtual1", "mac-address": "00:00:5E:00:53:71", ssid: "Maple", band: "5ghz-ax", signal: "-58" }],
+          },
+          sources: [],
+        },
+      ],
+    });
+    expect(mm.radios.find((r) => r.id === "cap-wifi1")).toMatchObject({ apId: `mac:${AP}`, clients: 1 });
+    expect(mm.devices.find((d) => d.mac === "00:00:5E:00:53:71")).toMatchObject({ parent: `mac:${AP}`, via: { kind: "wifi", signal: -58 } });
+  });
+
   it("falls back to the channel printed in a CAP's own export when there is no live state", () => {
     const { config, base } = readConfig(DEMO);
     const offline = snapshotFromFiles({ ...config, sources: config.sources!.map((s) => ({ ...s, state: undefined })) }, base);

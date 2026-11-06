@@ -585,7 +585,8 @@ export function buildModel(snap: Snapshot): NetworkModel {
 
   const masters = wifiIfaces.filter((w) => !w["master-interface"]);
   for (const w of masters) {
-    const capMac = normMac(w._notes?.match(/CAP ([0-9A-F:]{17})/i)?.[1]);
+    // REST names the CAP as `identity@base-mac%iface`; an export prints it in a comment instead.
+    const capMac = normMac(w.cap?.match(/@([0-9A-F:]{17})/i)?.[1] ?? w._notes?.match(/CAP ([0-9A-F:]{17})/i)?.[1]);
     const apId = capMac ? `mac:${capMac}` : routerId ?? "router";
     const s = ssidFor(w.configuration);
     const slaves = wifiIfaces.filter((x) => x["master-interface"] === w.name);
