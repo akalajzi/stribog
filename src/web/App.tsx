@@ -138,7 +138,7 @@ function TopBar({ data, session }: { data: NetworkPayload; session: SessionInfo 
 }
 
 /** The inspector's width; it is drawn over the map, so opening it never resizes the map. */
-const SIDE_W = 380;
+const SIDE_W = 440;
 
 function MapView({ data, selected, highlight, go, onNotesSaved }: { data: NetworkPayload; selected?: string; highlight?: string[]; go: (p: string, q?: Record<string, string>) => void; onNotesSaved: () => void }) {
   const [sel, setSel] = useState(selected);

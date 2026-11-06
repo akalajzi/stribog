@@ -32,6 +32,8 @@ export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
         {canEdit && (
           <button
             className="btn ghost sm rename"
+            title="Rename"
+            aria-label="Rename"
             onClick={() => {
               setName(d.nameSource === "user" ? d.name : "");
               setError(undefined);
@@ -39,7 +41,6 @@ export function DeviceTitle({ d, onSaved }: { d: Device; onSaved: Saved }) {
             }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>
-            Rename
           </button>
         )}
       </div>
