@@ -283,7 +283,8 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
                 {isSel && <SelectRing r={n.kind === "router" ? 0 : n.kind === "ap" ? 48 : 46} wide={n.kind === "router"} />}
                 <rect className="hit" x={n.kind === "router" ? -GATEWAY_W / 2 - 150 : -70} y={-42} width={n.kind === "router" ? GATEWAY_W + 160 : 140} height={n.label === "below" ? 130 : 86} />
                 {art}
-                <Labels n={n} name={d.name} lines={lines} sev={sev} />
+                {d.paused && <PausedMark n={n} />}
+                <Labels n={n} name={d.name} lines={lines} sev={sev} paused={!!d.paused} />
                 {d.services?.length ? <ServicePills n={n} services={d.services} /> : null}
               </g>
             );
@@ -482,6 +483,7 @@ function nodeLines(d: Device, data: NetworkPayload): string[] {
       return [`${d.ip ?? ""}`, `${d.model ?? "AP"} · ${n} Wi-Fi client${n === 1 ? "" : "s"}`];
     }
     default: {
+      if (d.paused) return [d.ip ?? "", "internet paused"];
       if (d.via?.kind === "wifi") return [d.ip ?? "", [d.via.signal !== undefined ? `${d.via.signal} dBm` : "", d.via.band ? `${d.via.band} GHz` : "", d.via.ssid ?? ""].filter(Boolean).join(" · ")];
       const dns = lan?.dhcp?.dns.includes(d.ip ?? "-") ? "DNS for LAN" : "";
       // A machine's other connections, where they are up: it is drawn once, where its main one is.
@@ -548,8 +550,22 @@ function SevDot({ sev, x, y }: { sev?: Severity; x: number; y: number }) {
   return <circle cx={x} cy={y} r={3.5} fill={c} stroke="var(--ink-0)" strokeWidth={2} />;
 }
 
-function Labels({ n, name: full, lines, sev }: { n: LNode; name: string; lines: string[]; sev?: Severity }) {
+/** Two bars by the device: Stribog paused its internet. */
+function PausedMark({ n }: { n: LNode }) {
+  const x = n.label === "right" ? 24 : 22;
+  return (
+    <g transform={`translate(${x} -22)`}>
+      <title>Internet paused by Stribog: it keeps the local network.</title>
+      <circle r={8.5} fill="var(--ink-0)" stroke="var(--warn)" strokeWidth={1.5} />
+      <rect x={-3.5} y={-4} width={2.4} height={8} rx={0.8} fill="var(--warn)" />
+      <rect x={1.1} y={-4} width={2.4} height={8} rx={0.8} fill="var(--warn)" />
+    </g>
+  );
+}
+
+function Labels({ n, name: full, lines, sev, paused }: { n: LNode; name: string; lines: string[]; sev?: Severity; paused?: boolean }) {
   const [l1, l2] = lines;
+  const l2Fill = paused ? "var(--warn)" : "var(--tx-2)";
   // Keep neighbours apart; the full name is in the inspector and the tooltip.
   const name = n.label === "below" && full.length > 24 ? `${full.slice(0, 22).trimEnd()}…` : full;
   if (n.label === "left") {
@@ -569,7 +585,7 @@ function Labels({ n, name: full, lines, sev }: { n: LNode; name: string; lines: 
       <g>
         <text x={x} y={-4} fill="var(--tx-1)" fontSize={13} fontWeight={600} className="lab-name">{name}</text>
         <text x={x} y={12} fill="var(--tx-3)" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
-        {l2 && <text x={x} y={27} fill="var(--tx-2)" fontSize={10.5}>{l2}</text>}
+        {l2 && <text x={x} y={27} fill={l2Fill} fontSize={10.5}>{l2}</text>}
         <SevDot sev={sev} x={x - 8} y={-8} />
       </g>
     );
@@ -588,7 +604,7 @@ function Labels({ n, name: full, lines, sev }: { n: LNode; name: string; lines: 
     <g textAnchor="middle">
       <text y={56} fill="var(--tx-1)" fontSize={13} fontWeight={600} className="lab-name">{name}</text>
       <text y={72} fill="var(--tx-3)" fontSize={10.5} fontFamily="JetBrains Mono, monospace">{l1}</text>
-      {l2 && <text y={87} fill="var(--tx-2)" fontSize={10.5}>{l2}</text>}
+      {l2 && <text y={87} fill={l2Fill} fontSize={10.5}>{l2}</text>}
       <SevDot sev={sev} x={name.length * 3.7 + 10} y={52} />
     </g>
   );

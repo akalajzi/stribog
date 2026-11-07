@@ -68,6 +68,7 @@ export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved
             {d.kindCertainty === "inferred" && d.kind !== "unknown" ? <span className="cert">probably</span> : d.kindCertainty === "user" ? <span className="cert">noted</span> : null}
             {" · "}
             <span style={{ color: d.status === "online" ? "var(--ok)" : d.status === "offline" ? "var(--tx-3)" : "var(--tx-2)" }}>{d.status}</span>
+            {d.paused ? <> · <span style={{ color: "var(--warn)", whiteSpace: "nowrap" }}>internet paused</span></> : null}
           </>
         }
         onClose={onClose}
