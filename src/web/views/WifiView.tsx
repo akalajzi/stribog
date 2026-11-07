@@ -142,7 +142,7 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
             )}
 
             <div className="sec-title">Signal <em className="faint">{model.hasState ? "how strongly each device hears its access point" : "needs live data from the router"}</em></div>
-            <SignalStrip clients={clients} onSelect={onSelect} />
+            <SignalStrip clients={clients} findings={open} onSelect={onSelect} />
 
             {(aps.length > 0 || plannedAps.length > 0) && (
               <>
@@ -609,7 +609,7 @@ const isGap = (a: number, b: number) => (a <= 64 && b >= 100) || (a <= 144 && b 
 const S_MIN = -92;
 const S_MAX = -28;
 
-function SignalStrip({ clients, onSelect }: { clients: Device[]; onSelect: (id: string) => void }) {
+function SignalStrip({ clients, findings, onSelect }: { clients: Device[]; findings: Finding[]; onSelect: (id: string) => void }) {
   const [ref, W] = useWidth<HTMLDivElement>();
   const withSignal = clients.filter((d) => d.via?.signal !== undefined);
   const bands = BANDS.filter((b) => withSignal.some((d) => d.via?.band === b));
@@ -619,7 +619,11 @@ function SignalStrip({ clients, onSelect }: { clients: Device[]; onSelect: (id: 
   if (!withSignal.length)
     return <div className="card muted">{clients.length ? "Connected devices have not reported their signal strength." : "No devices are connected over Wi-Fi right now."}</div>;
 
-  const notes = signalNotes(withSignal);
+  // What the review says about these devices: one link each, not the same text twice.
+  const notes = withSignal.flatMap((d) => {
+    const f = findings.find((x) => x.devices?.includes(d.id));
+    return f ? [{ d, f }] : [];
+  });
   const ticks = [-90, -80, -70, -60, -50, -40];
 
   return (
@@ -682,17 +686,15 @@ function SignalStrip({ clients, onSelect }: { clients: Device[]; onSelect: (id: 
         Signal is measured in dBm: a negative number where closer to zero is stronger. Every 3 dB is double or half the power, so −70 is a quarter of −64. Click a device to see it on the map.
       </p>
       {notes.length > 0 && (
-        <div className="wf-sig-notes">
-          {notes.map((n) => (
-            <button key={n.d.id} className="wf-note" onClick={() => onSelect(n.d.id)}>
-              <span className="ic" style={{ color: bandColor(n.d.via?.band) }}><Glyph kind={n.d.kind} size={16} /></span>
-              <span>
-                <b>{n.title}</b>
-                <span className="muted">{n.body}</span>
-              </span>
-            </button>
+        <p className="wf-sig-more">
+          In the review:{" "}
+          {notes.map(({ d, f }, i) => (
+            <span key={d.id}>
+              {i > 0 && " · "}
+              <a href={`#/wifi?t=review&f=${encodeURIComponent(f.id)}`} title={f.title}>{d.name}</a>
+            </span>
           ))}
-        </div>
+        </p>
       )}
     </div>
   );
@@ -708,28 +710,6 @@ function Row({ band, count, children }: { band: Band; count: number; children: R
       {children}
     </>
   );
-}
-
-/** Explanations for the connections worth a sentence: expected 2.4 GHz, avoidable 2.4 GHz, weak. */
-function signalNotes(list: Device[]): { d: Device; title: string; body: string }[] {
-  const out: { d: Device; title: string; body: string }[] = [];
-  for (const d of list) {
-    const s = d.via!.signal!;
-    const word = signalWord(s);
-    if (d.via?.band === "2.4" && d.only24)
-      out.push({
-        d,
-        title: `${d.name} is on 2.4 GHz on purpose`,
-        body: `It only has a 2.4 GHz radio, so this is exactly where it belongs. At ${minus(s)} dBm (${word}) ${
-          s >= -65 ? "it has plenty for its job." : "it works, but an access point closer to it would make it more reliable."
-        }`,
-      });
-    else if (d.via?.band === "2.4")
-      out.push({ d, title: `${d.name} is on 2.4 GHz`, body: `It can probably use 5 GHz, which is faster. Devices usually fall back to 2.4 GHz when 5 GHz is too weak where they are.` });
-    else if (s < -70)
-      out.push({ d, title: `${d.name} is borderline at ${minus(s)} dBm`, body: `Below about −70 dBm speeds drop and connections stall. Moving it, or an access point, closer helps${d.kind === "server" || d.kind === "desktop" || d.kind === "nas" ? "; a cable is better still" : ""}.` });
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------
