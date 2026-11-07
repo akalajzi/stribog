@@ -193,7 +193,7 @@ export function generateSetup(input: SetupOptions): SetupResult {
     "#   /system reset-configuration no-defaults=yes   (then connect with WinBox over MAC)",
     `# Includes: ${included.join(", ")}.`,
     "# Secrets are NOT in this script. Set the admin password, Wi-Fi passphrases" + (o.wan.type === "pppoe" ? " and the PPPoE password" : "") + " yourself.",
-    "# Stribog never applies changes; paste this into the router terminal only when you are happy with it.",
+    "# Stribog does not apply this script; paste this into the router terminal only when you are happy with it.",
   );
 
   // ---- identity ----------------------------------------------------------------------------

@@ -578,7 +578,7 @@ export function generateChange(ctx: ChangeContext, o: ChangeOptions): ChangeResu
     `# Stribog: changes to ${ctx.site}, for RouterOS v7 (wifi package)`,
     ...changes.map((c) => `#   - ${c}`),
     "# Review every line, then paste it into the router's terminal (WinBox: New Terminal, or SSH).",
-    "# Stribog never applies changes. Secrets are not in this script.",
+    "# Stribog does not apply this script. Secrets are not in this script.",
     "# The undo script takes back exactly these changes.",
   ];
   section(head, "First: a copy of the configuration as it is now");
