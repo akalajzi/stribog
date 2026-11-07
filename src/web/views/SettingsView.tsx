@@ -275,6 +275,7 @@ function History({ data }: { data: NetworkPayload }) {
   }, [data.meta.refreshedAt]);
   const nameOf = (target: string) => {
     if (target === "network") return "The network";
+    if (target.startsWith("wifi:")) return `Wi-Fi “${target.slice(5)}”`;
     if (target.startsWith("finding:")) return `Review: ${data.analysis.findings.find((f) => f.id === target.slice(8))?.title ?? target.slice(8)}`;
     const mac = target.replace(/^device:/, "");
     return data.model.devices.find((d) => d.mac === mac)?.name ?? mac;
@@ -303,6 +304,10 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyl
 function describe(e: AuditEntry): string {
   const b = (e.before ?? {}) as Record<string, unknown>;
   const a = (e.after ?? {}) as Record<string, unknown>;
+  if (e.target.startsWith("wifi:")) {
+    const c = e.after as { change?: string; outcome?: string } | null;
+    return `${c?.change ?? "changed"} ${c?.outcome === "kept" ? "Kept." : "Undone: the old settings are back."}`;
+  }
   if (e.target.startsWith("finding:")) {
     const why = (e.after as { reason?: string } | null)?.reason;
     return e.after ? `accepted${why ? `: “${why}”` : ""}` : "reopened";

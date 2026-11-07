@@ -7,7 +7,7 @@ import { analyze, type Analysis } from "../core/analyze.ts";
 import { layoutTopology, type Layout } from "../core/layout.ts";
 import { expand, readConfig, snapshotFromFiles, type StribogConfig } from "../core/load.ts";
 import { buildModel, connectionsOf, linkCounters, type NetworkModel } from "../core/model.ts";
-import { AuthError, RouterOsRest, type ReadPlan } from "../core/rest.ts";
+import { AuthError, CONFIG_PATHS, RouterOsRest, type ReadPlan } from "../core/rest.ts";
 import type { RosRecord, Snapshot } from "../core/ros.ts";
 import type { LiveRates } from "../core/live.ts";
 import { dataDir, NotesStore } from "./notes.ts";
@@ -165,6 +165,12 @@ function withNotes(c: Cached, notes: unknown): NetworkPayload {
 /** Menus changed on the demo's router (pausing a device), kept in memory like the demo's notes. */
 const DEMO_MENUS: Record<string, RosRecord[]> = {};
 
+/** Change menus of the demo's router (in memory, like the demo's notes). */
+export function setDemoMenus(tables: Record<string, RosRecord[]>) {
+  Object.assign(DEMO_MENUS, tables);
+  demoCache = undefined;
+}
+
 /** A menu of the demo's router as it stands, changes included. */
 export function demoMenu(path: string): RosRecord[] | undefined {
   demoCache ??= fromFiles(DEMO_CONFIG, "demo");
@@ -176,12 +182,8 @@ export function demoMenu(path: string): RosRecord[] | undefined {
  * shows at once instead of with the next configuration read.
  */
 export function routerChanged(session: Session, tables: Record<string, RosRecord[]>) {
-  const known = (p: string) => p === "/ip/firewall/filter";
-  if (session.kind === "demo") {
-    for (const [p, rows] of Object.entries(tables)) if (known(p)) DEMO_MENUS[p] = rows;
-    demoCache = undefined;
-    return;
-  }
+  const known = (p: string) => CONFIG_PATHS.includes(p);
+  if (session.kind === "demo") return setDemoMenus(Object.fromEntries(Object.entries(tables).filter(([p]) => known(p))));
   const c = session.cache as Cached | undefined;
   const router = c?.snap.devices.find((d) => d.role === "router");
   if (!c || !router) return;

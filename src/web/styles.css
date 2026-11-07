@@ -350,3 +350,19 @@ pre.cli .c { color: var(--tx-3); }
 .tabs button:hover { color: var(--tx-1); }
 .tabs button.on { color: var(--tx-1); box-shadow: inset 0 -2px 0 var(--tx-1); }
 .tab-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ink-3); color: var(--tx-2); font-size: 11px; display: inline-grid; place-items: center; }
+
+/* A change waiting to be kept, on every page */
+.pending-bar { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 12px; max-width: min(820px, calc(100% - 40px)); padding: 12px 14px 12px 18px; border-radius: 12px; background: var(--ink-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent), 0 10px 30px rgb(0 0 0 / 35%); }
+.pending-bar > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; line-height: 1.45; }
+.pending-bar.bad { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent), 0 10px 30px rgb(0 0 0 / 35%); }
+.pending-bar[role="status"] { color: var(--tx-2); }
+
+/* A change to the router: what will change, then what the router reported back */
+.pz-confirm, .pz-done { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pz-confirm p { margin: 0; line-height: 1.5; }
+.pz-confirm .cli { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 72px; }
+.pz-why, .pz-steps { margin: 0; padding-left: 18px; line-height: 1.6; }
+.pz-steps { list-style: none; padding-left: 0; }
+.pz-steps span { color: var(--ok); display: inline-block; width: 16px; }
+.pz-steps .bad span, .pz-steps .bad { color: var(--bad); }
+.pz-actions { display: flex; gap: 8px; }

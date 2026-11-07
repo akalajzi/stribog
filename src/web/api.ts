@@ -7,8 +7,10 @@ import type { OwnersNow } from "../server/live-owners.ts";
 import type { DeviceActivity } from "../server/device-activity.ts";
 import type { ChangeContext } from "../core/change.ts";
 import type { ChangeResult, PausePlan, Step } from "../core/pause.ts";
+import type { PendingInfo } from "../server/changes.ts";
+import type { WifiEdit } from "../core/wifi-setup.ts";
 
-export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo, PausePlan, Step };
+export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo, PausePlan, Step, PendingInfo, WifiEdit };
 export type { Analysis, Finding, Severity, Category } from "../core/analyze.ts";
 export type { Device, NetworkModel, Port, Network, Ssid, Radio } from "../core/model.ts";
 export type { Layout, LNode, LLink } from "../core/layout.ts";
@@ -59,6 +61,33 @@ export async function changePause(id: string, what: "pause" | "resume"): Promise
   dispatchEvent(new Event("stribog:notes-changed"));
   return { ok: res.ok && !!body.ok, steps: body.steps ?? [], tables: {}, error: res.ok ? undefined : (body.error ?? `HTTP ${res.status}`) };
 }
+export interface WifiPreview {
+  summary: string[];
+  lines: string[];
+  notes: string[];
+  undoSeconds: number;
+}
+/** A change the router refused or that failed its check still says what was done. */
+export class ChangeError extends Error {
+  constructor(
+    message: string,
+    readonly steps: Step[] = [],
+  ) {
+    super(message);
+  }
+}
+async function change<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const out = (await res.json().catch(() => ({}))) as T & { error?: string; steps?: Step[] };
+  dispatchEvent(new Event("stribog:notes-changed"));
+  dispatchEvent(new Event("stribog:change-pending"));
+  if (!res.ok) throw new ChangeError(out.error ?? `HTTP ${res.status}`, out.steps);
+  return out;
+}
+export const previewWifi = (edit: WifiEdit) => api<WifiPreview>("/api/wifi/preview", { method: "POST", body: JSON.stringify(edit) });
+export const applyWifi = (edit: WifiEdit) => change<{ steps: Step[]; pending: PendingInfo }>("/api/wifi/apply", edit);
+export const fetchPending = () => api<PendingInfo[]>("/api/changes/pending");
+export const settleChange = (token: string, how: "keep" | "undo") => change<{ steps: Step[] }>(`/api/changes/${token}/${how}`, {});
 export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
 
 export type Theme = "dark" | "light" | "system";

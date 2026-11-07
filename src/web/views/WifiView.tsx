@@ -6,6 +6,7 @@ import { isDfs } from "../../core/net.ts";
 import { connectionViews } from "../../core/model.ts";
 import { FindingCard, SEV_VAR } from "../components/FindingCard.tsx";
 import { Glyph, bandColor } from "../components/DeviceArt.tsx";
+import { WifiNetworkForm } from "../components/WifiNetworkForm.tsx";
 import {
   AXIS,
   BAND_LABEL,
@@ -185,7 +186,15 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
 
         {tab === "setup" && (
           <>
-            <p className="lede">How the Wi-Fi is set up, and the settings worth changing.</p>
+            <p className="lede">Names, passwords and security of the Wi-Fi networks, and how the airwaves are shared. Every change waits for you to keep it: if it cuts you off, the router puts the old settings back by itself.</p>
+            {model.ssids.length > 0 && (
+              <>
+                <div className="sec-title">Networks <em className="faint">changed on the router, for every access point it manages</em></div>
+                <div className="wf-forms">
+                  {model.ssids.map((x, i) => <WifiNetworkForm key={i} s={x} canChange={data.meta.mode !== "files"} />)}
+                </div>
+              </>
+            )}
             {bands.length > 0 ? (
               <>
                 <div className="sec-title">Channels <em className="faint">who is using which part of the airwaves</em></div>

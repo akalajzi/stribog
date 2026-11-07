@@ -13,6 +13,8 @@ import { deviceActivity } from "./device-activity.ts";
 import { ownersNow } from "./live-owners.ts";
 import { CannotChange, pause, pausePreview, resume, resumePreview } from "./pause.ts";
 import { ChangeFailed, PauseRefused } from "../core/pause.ts";
+import { keep, pendingChanges, undo, wifiApply, wifiPreview } from "./changes.ts";
+import { WifiRefused, type Security } from "../core/wifi-setup.ts";
 import { AuthError } from "../core/rest.ts";
 import { ensureRecorder } from "./recorder.ts";
 import { rdap } from "./owners.ts";
@@ -199,6 +201,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         return send(res, 200, req.method === "GET" ? await resumePreview(session, id) : done(await resume(session, id))), true;
       } catch (err) {
         if (err instanceof PauseRefused || err instanceof CannotChange) return send(res, 409, { error: err.message }), true;
+        if (err instanceof ChangeFailed) return send(res, 502, { error: err.message, steps: err.steps }), true;
+        if (err instanceof AuthError) return send(res, 403, { error: `The router did not let this user change it (${err.message}).` }), true;
+        return send(res, 502, { error: `Could not change the router: ${err instanceof Error ? err.message : String(err)}` }), true;
+      }
+    }
+
+    // Changes with a timed undo: Wi-Fi settings, then keep or undo while the router waits.
+    if (route === "GET /api/changes/pending") return send(res, 200, agent ? [] : pendingChanges(session)), true;
+    const chg = /^\/api\/changes\/([0-9a-f]+)\/(keep|undo)$/.exec(url.pathname);
+    if ((route === "POST /api/wifi/preview" || route === "POST /api/wifi/apply" || (chg && req.method === "POST"))) {
+      if (agent) return send(res, 403, { error: "Only a person signed in to Stribog can change the router." }), true;
+      try {
+        if (chg) return send(res, 200, { steps: await (chg[2] === "keep" ? keep(session, chg[1]!) : undo(session, chg[1]!)) }), true;
+        const b = await readJson(req);
+        const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+        const edit = { ssid: String(b.ssid ?? ""), name: str(b.name), password: str(b.password), security: (["wpa2", "wpa2-wpa3", "wpa3"] as const).find((x) => x === b.security) as Security | undefined };
+        return send(res, 200, route === "POST /api/wifi/preview" ? await wifiPreview(session, edit) : await wifiApply(session, edit)), true;
+      } catch (err) {
+        if (err instanceof WifiRefused || err instanceof CannotChange) return send(res, 409, { error: err.message }), true;
         if (err instanceof ChangeFailed) return send(res, 502, { error: err.message, steps: err.steps }), true;
         if (err instanceof AuthError) return send(res, 403, { error: `The router did not let this user change it (${err.message}).` }), true;
         return send(res, 502, { error: `Could not change the router: ${err instanceof Error ? err.message : String(err)}` }), true;

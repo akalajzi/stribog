@@ -8,6 +8,7 @@ import { Topology } from "./components/Topology.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { Home } from "./views/Home.tsx";
 import { WifiView } from "./views/WifiView.tsx";
+import { PendingBar } from "./components/PendingBar.tsx";
 import { ClientsView } from "./views/ClientsView.tsx";
 import { NetworkView } from "./views/NetworkView.tsx";
 import { PlanView } from "./views/PlanView.tsx";
@@ -94,6 +95,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
       <TopBar data={data} session={session} />
 
       <main className="main">
+        <PendingBar />
         {path === "/map" ? (
           <MapView data={fresh!} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} onNotesSaved={refetch} />
         ) : path === "/wifi" ? (
