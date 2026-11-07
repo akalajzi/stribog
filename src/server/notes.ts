@@ -114,6 +114,14 @@ export class NotesStore {
     return notes;
   }
 
+  /** Log a change made elsewhere (to the router) with the notes' changes, without touching the notes. */
+  logChange(target: string, before: unknown, after: unknown) {
+    if (this.persist && this.auditPath) {
+      mkdirSync(dirname(this.auditPath), { recursive: true, mode: 0o700 });
+      appendFileSync(this.auditPath, JSON.stringify({ at: new Date().toISOString(), target, before, after }) + "\n", { mode: 0o600 });
+    }
+  }
+
   audit(limit = 200): AuditEntry[] {
     if (!this.auditPath || !existsSync(this.auditPath)) return [];
     return readFileSync(this.auditPath, "utf8")

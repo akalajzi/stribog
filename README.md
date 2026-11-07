@@ -13,9 +13,10 @@ Stribog signs in to a RouterOS router with the same user and password as WinBox 
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
 - **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.
 - **Change**: small changes to the setup the router has now: add a guest or IoT network, rename the Wi-Fi, change its security or 5 GHz channels. Stribog shows what it read about the setup (inferences marked as such) and writes only the commands for what you choose, plus a script that undoes them. The change first saves the configuration to a file on the router, new Wi-Fi starts disabled until you set its passphrase, and nothing is applied: you review and paste it.
+- **Pause internet**, on a device's page: when something looks off, cut a device off the internet while you look into it. It keeps the local network (DNS, the devices at home, you reaching it), and Resume undoes it. This is the one change Stribog makes to the router itself, always the same way: it shows the exact firewall rules first, adds them only when you confirm, reads them back to check they are in place before the router's fasttrack rule (and takes them out again if not), then ends the device's open connections. The rules carry a "Stribog pause" comment with the device's MAC address, so they are easy to find by hand too. Home lists paused devices, so none stays paused by mistake.
 - **New setup** (in Settings, under Start over): a generator for a clean, opinionated home or small-office setup, as a script to review, for a router reset with no configuration. On a router that is already set up it asks first.
 
-Stribog never changes anything on the router. Whatever you change, you apply yourself.
+Apart from pausing a device, Stribog never changes anything on the router: other changes are scripts you review and apply yourself.
 
 ![Review](docs/screenshots/review.jpg)
 ![Topology](docs/screenshots/map.jpg)

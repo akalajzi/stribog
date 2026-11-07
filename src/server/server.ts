@@ -11,6 +11,9 @@ import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
 import { deviceActivity } from "./device-activity.ts";
 import { ownersNow } from "./live-owners.ts";
+import { CannotChange, pause, pausePreview, resume, resumePreview } from "./pause.ts";
+import { ChangeFailed, PauseRefused } from "../core/pause.ts";
+import { AuthError } from "../core/rest.ts";
 import { ensureRecorder } from "./recorder.ts";
 import { rdap } from "./owners.ts";
 import { addAdGuard, AdGuardError, adguards, connectAdGuard, dnsHandedOut, removeAdGuard } from "./adguard.ts";
@@ -180,6 +183,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       } catch (err) {
         if (err instanceof NotesError) return send(res, 400, { error: err.message }), true;
         throw err;
+      }
+    }
+
+    // Pausing a device's internet: GET shows the exact change, POST makes it and checks it.
+    const pz = /^\/api\/devices\/([^/]+)\/(pause|resume)$/.exec(url.pathname);
+    if (pz && (req.method === "GET" || req.method === "POST")) {
+      if (agent) return send(res, 403, { error: "Only a person signed in to Stribog can change the router." }), true;
+      const id = decodeURIComponent(pz[1]!);
+      const viewer = req.socket.remoteAddress?.replace(/^::ffff:/, "");
+      try {
+        // The result without the tables read back: those are for Stribog's own picture.
+        const done = ({ ok, steps }: { ok: boolean; steps: unknown }) => ({ ok, steps });
+        if (pz[2] === "pause") return send(res, 200, req.method === "GET" ? await pausePreview(session, id, viewer) : done(await pause(session, id, viewer))), true;
+        return send(res, 200, req.method === "GET" ? await resumePreview(session, id) : done(await resume(session, id))), true;
+      } catch (err) {
+        if (err instanceof PauseRefused || err instanceof CannotChange) return send(res, 409, { error: err.message }), true;
+        if (err instanceof ChangeFailed) return send(res, 502, { error: err.message, steps: err.steps }), true;
+        if (err instanceof AuthError) return send(res, 403, { error: `The router did not let this user change it (${err.message}).` }), true;
+        return send(res, 502, { error: `Could not change the router: ${err instanceof Error ? err.message : String(err)}` }), true;
       }
     }
 

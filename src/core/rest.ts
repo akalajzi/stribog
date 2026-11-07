@@ -88,6 +88,7 @@ const monitorShape = new Map<string, MonitorShape>();
 
 export class AuthError extends Error {}
 export class NotRouterOsError extends Error {}
+export class NotFoundError extends Error {}
 
 // RouterOS's web service allows 20 sessions by default and a snapshot asks for ~45 menus,
 // so requests queue on a few kept-alive connections instead of all going out at once.
@@ -130,6 +131,19 @@ export function routerFetch(insecure = false): typeof fetch {
     })) as typeof fetch;
 }
 
+async function rowsOf(res: Response, what: string): Promise<RosRecord[]> {
+  const text = await res.text();
+  if (!text.trim()) return [];
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new NotRouterOsError(`${what}: the answer is not RouterOS JSON`);
+  }
+  const rows = Array.isArray(data) ? data : [data];
+  return rows.map((r) => scrub(Object.fromEntries(Object.entries(r as object).map(([k, v]) => [k, String(v)])) as RosRecord));
+}
+
 /** RouterOS answers errors as {"error":400,"message":"Bad Request","detail":"..."}. */
 async function errorDetail(res: Response): Promise<string> {
   const text = await res.text().catch(() => "");
@@ -151,7 +165,7 @@ export class RouterOsRest {
     return this.opt.url;
   }
 
-  private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<RosRecord[]> {
+  private async request<T>(method: string, path: string, body: unknown, handle: (res: Response) => Promise<T>): Promise<T> {
     const f = this.opt.fetchImpl ?? routerFetch(this.opt.insecure);
     const url = this.opt.url.replace(/\/$/, "") + "/rest" + path;
     const ctrl = new AbortController();
@@ -166,6 +180,14 @@ export class RouterOsRest {
         },
         body: body ? JSON.stringify(body) : undefined,
       });
+      return await handle(res);
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  private call(method: "GET" | "POST", path: string, body?: unknown): Promise<RosRecord[]> {
+    return this.request(method, path, body, async (res) => {
       if (res.status === 401 || res.status === 403) throw new AuthError(`${method} ${path}: HTTP ${res.status} (check the user and its policies)`);
       if (res.status === 404 || res.status === 400) {
         // Menu absent on this model or package. A 400 on a command we built ourselves is worth knowing about.
@@ -173,14 +195,31 @@ export class RouterOsRest {
         return [];
       }
       if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}: ${await errorDetail(res)}`);
-      const data = (await res.json().catch(() => {
-        throw new NotRouterOsError(`${method} ${path}: the answer is not RouterOS JSON`);
-      })) as unknown;
-      const rows = Array.isArray(data) ? data : [data];
-      return rows.map((r) => scrub(Object.fromEntries(Object.entries(r as object).map(([k, v]) => [k, String(v)])) as RosRecord));
-    } finally {
-      clearTimeout(t);
-    }
+      return rowsOf(res, `${method} ${path}`);
+    });
+  }
+
+  /**
+   * A change to the router: PUT adds, PATCH sets, DELETE removes, POST runs a command. Anything
+   * but success throws with the router's reason; 404 throws NotFoundError.
+   */
+  write(method: "PUT" | "PATCH" | "DELETE" | "POST", path: string, body?: unknown): Promise<RosRecord[]> {
+    return this.request(method, path, body, async (res) => {
+      if (res.status === 401) throw new AuthError(`${method} ${path}: HTTP 401 (check the user and its policies)`);
+      if (res.status === 404) throw new NotFoundError(`${method} ${path}: no such item`);
+      if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}: ${await errorDetail(res)}`);
+      return rowsOf(res, `${method} ${path}`);
+    });
+  }
+
+  /** A menu's items, or undefined when the router has no such menu. Errors other than that throw. */
+  async list(path: string): Promise<RosRecord[] | undefined> {
+    return this.request("GET", path, undefined, async (res) => {
+      if (res.status === 401 || res.status === 403) throw new AuthError(`GET ${path}: HTTP ${res.status}`);
+      if (res.status === 404 || res.status === 400) return undefined;
+      if (!res.ok) throw new Error(`GET ${path}: HTTP ${res.status}: ${await errorDetail(res)}`);
+      return rowsOf(res, `GET ${path}`);
+    });
   }
 
   get(path: string) {

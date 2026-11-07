@@ -18,6 +18,7 @@ import {
   rateMbps,
   type Band,
 } from "./net.ts";
+import { pausesIn } from "./pause.ts";
 import {
   enabled,
   isTrue,
@@ -96,6 +97,8 @@ export interface Device {
   links?: DeviceLink[];
   /** How Stribog knows the connections are one machine: the same DHCP name (inferred), or a note. */
   linkedBy?: "hostname" | "user";
+  /** Its internet is paused by Stribog's firewall rules on the router; `since` as the rule says. */
+  paused?: { since?: string };
 }
 
 /**
@@ -269,6 +272,7 @@ export interface FwRule {
   "dst-address"?: string;
   "src-address-list"?: string;
   "dst-address-list"?: string;
+  "src-mac-address"?: string;
   "in-interface"?: string;
   "out-interface"?: string;
   "in-interface-list"?: string;
@@ -282,7 +286,7 @@ export interface FwRule {
 }
 
 const FW_FIELDS = [
-  "protocol", "src-port", "dst-port", "src-address", "dst-address", "src-address-list", "dst-address-list",
+  "protocol", "src-port", "dst-port", "src-address", "dst-address", "src-address-list", "dst-address-list", "src-mac-address",
   "in-interface", "out-interface", "in-interface-list", "out-interface-list", "connection-state",
   "connection-nat-state", "ipsec-policy", "to-addresses", "to-ports", "jump-target",
 ] as const;
@@ -920,6 +924,13 @@ export function buildModel(snap: Snapshot, opts: { vendors?: VendorRegistry } = 
   for (const pd of ov.planned ?? []) {
     const p = portByName(pd.port);
     if (p) p.planned = pd.id;
+  }
+
+  // Devices whose internet Stribog paused: its rules carry the MAC in their comment.
+  const pauses = pausesIn(menu(cfg, "/ip/firewall/filter"));
+  for (const d of devices.values()) {
+    const p = connectionsOf(d).map((l) => pauses.get(normMac(l.mac))).find(Boolean);
+    if (p) d.paused = p;
   }
 
   const sources = snap.devices.flatMap((d) => d.sources);

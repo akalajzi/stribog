@@ -4,6 +4,8 @@ import { fmtBps } from "../../core/net.ts";
 import { connectionsOf, linkCounters } from "../../core/model.ts";
 import { fetchActivity, type DeviceActivity, type NetworkPayload } from "../api.ts";
 import { Glyph } from "../components/DeviceArt.tsx";
+import { PauseControl } from "../components/PauseControl.tsx";
+import { cannotPause } from "../../core/pause.ts";
 import "./device.css";
 
 type Flow = DeviceActivity["now"]["flows"][number];
@@ -54,7 +56,7 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
         <header className="dv-head">
           <div className="dv-ic"><Glyph kind={d.kind} size={28} /></div>
           <div>
-            <h1>{d.name}</h1>
+            <h1>{d.name}{d.paused ? <span className="pill warn dv-paused">internet paused</span> : null}</h1>
             <p className="muted">
               {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
               {d.kindCertainty === "inferred" && d.kind !== "unknown" ? " (probably)" : ""} · <span className={d.status === "online" ? "ok" : undefined}>{d.status}</span>
@@ -65,6 +67,8 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
             </p>
           </div>
         </header>
+
+        {(d.paused || !cannotPause(data.model, d)) && <PauseControl d={d} canChange={data.meta.mode !== "files"} />}
 
         <div className="seg dv-range" role="radiogroup" aria-label="Time range">
           {RANGES.map((r) => (

@@ -8,7 +8,7 @@ import { layoutTopology, type Layout } from "../core/layout.ts";
 import { expand, readConfig, snapshotFromFiles, type StribogConfig } from "../core/load.ts";
 import { buildModel, connectionsOf, linkCounters, type NetworkModel } from "../core/model.ts";
 import { AuthError, RouterOsRest, type ReadPlan } from "../core/rest.ts";
-import type { Snapshot } from "../core/ros.ts";
+import type { RosRecord, Snapshot } from "../core/ros.ts";
 import type { LiveRates } from "../core/live.ts";
 import { dataDir, NotesStore } from "./notes.ts";
 import { ratesNow } from "./rates.ts";
@@ -162,9 +162,38 @@ function withNotes(c: Cached, notes: unknown): NetworkPayload {
   return c.payload;
 }
 
+/** Menus changed on the demo's router (pausing a device), kept in memory like the demo's notes. */
+const DEMO_MENUS: Record<string, RosRecord[]> = {};
+
+/** A menu of the demo's router as it stands, changes included. */
+export function demoMenu(path: string): RosRecord[] | undefined {
+  demoCache ??= fromFiles(DEMO_CONFIG, "demo");
+  return demoCache.snap.devices.find((d) => d.role === "router")?.config.menus[path];
+}
+
+/**
+ * After a change to the router: the tables as read back replace Stribog's copy, so the change
+ * shows at once instead of with the next configuration read.
+ */
+export function routerChanged(session: Session, tables: Record<string, RosRecord[]>) {
+  const known = (p: string) => p === "/ip/firewall/filter";
+  if (session.kind === "demo") {
+    for (const [p, rows] of Object.entries(tables)) if (known(p)) DEMO_MENUS[p] = rows;
+    demoCache = undefined;
+    return;
+  }
+  const c = session.cache as Cached | undefined;
+  const router = c?.snap.devices.find((d) => d.role === "router");
+  if (!c || !router) return;
+  for (const [p, rows] of Object.entries(tables)) if (known(p)) router.config.menus[p] = rows;
+  c.notes = Symbol();
+}
+
 function fromFiles(path: string, mode: "files" | "demo"): Cached {
   const { config, base } = readConfig(path);
   const snap = snapshotFromFiles({ ...config, router: undefined, notes: undefined }, base);
+  const router = snap.devices.find((d) => d.role === "router");
+  if (mode === "demo" && router) Object.assign(router.config.menus, DEMO_MENUS);
   const meta = { mode, sample: !!snap.sampleState, configPath: path };
   return { at: Date.now(), snap, meta, payload: undefined as unknown as NetworkPayload, notes: Symbol() };
 }

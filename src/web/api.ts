@@ -6,8 +6,9 @@ import type { IntegrationsInfo, SessionInfo } from "../server/server.ts";
 import type { OwnersNow } from "../server/live-owners.ts";
 import type { DeviceActivity } from "../server/device-activity.ts";
 import type { ChangeContext } from "../core/change.ts";
+import type { ChangeResult, PausePlan, Step } from "../core/pause.ts";
 
-export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo };
+export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo, PausePlan, Step };
 export type { Analysis, Finding, Severity, Category } from "../core/analyze.ts";
 export type { Device, NetworkModel, Port, Network, Ssid, Radio } from "../core/model.ts";
 export type { Layout, LNode, LLink } from "../core/layout.ts";
@@ -49,6 +50,15 @@ export const fetchFixRequest = (id: string) => api<{ text: string }>(`/api/revie
 export const acceptFinding = (id: string, reason?: string) => api<{ ok: true }>(`/api/review/${encodeURIComponent(id)}/accept`, { method: "PUT", body: JSON.stringify({ reason }) });
 export const reopenFinding = (id: string) => api<{ ok: true }>(`/api/review/${encodeURIComponent(id)}/accept`, { method: "DELETE" });
 export const fetchChangeContext = () => api<ChangeContext>("/api/change");
+export const fetchPausePlan = (id: string) => api<PausePlan>(`/api/devices/${encodeURIComponent(id)}/pause`);
+export const fetchResumePlan = (id: string) => api<{ name: string; macs: string[]; commands: string[] }>(`/api/devices/${encodeURIComponent(id)}/resume`);
+/** Pause or resume a device's internet. A failed change still says what was done, step by step. */
+export async function changePause(id: string, what: "pause" | "resume"): Promise<ChangeResult & { error?: string }> {
+  const res = await fetch(`/api/devices/${encodeURIComponent(id)}/${what}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const body = (await res.json().catch(() => ({}))) as Partial<ChangeResult> & { error?: string };
+  dispatchEvent(new Event("stribog:notes-changed"));
+  return { ok: res.ok && !!body.ok, steps: body.steps ?? [], tables: {}, error: res.ok ? undefined : (body.error ?? `HTTP ${res.status}`) };
+}
 export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
 
 export type Theme = "dark" | "light" | "system";

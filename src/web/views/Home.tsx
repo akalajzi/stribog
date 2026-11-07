@@ -48,11 +48,14 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
   if (meta.error) alerts.push({ key: "read", severity: meta.stale ? "warning" : "critical", title: meta.stale ? "The router is not answering" : "Could not read the router", detail: meta.error, href: "#/" });
   if (live && !m.wan.address) alerts.push({ key: "wan", severity: "critical", title: "The router has no internet address", detail: `Nothing on ${m.wan.iface ?? "the WAN port"}.`, href: "#/network" });
   for (const ap of aps.filter((d) => live && d.status !== "online")) alerts.push({ key: ap.id, severity: "critical", title: `${ap.name} is offline`, detail: "Wi-Fi from this access point is down.", href: `#/map?d=${encodeURIComponent(ap.id)}` });
+  // A pause is deliberate, but easy to forget: listed, without changing the status.
+  for (const d of m.devices.filter((x) => x.paused))
+    alerts.push({ key: `paused-${d.id}`, severity: "info", title: `${d.name}: internet paused`, detail: "It keeps the local network. Resume it on its page.", href: `#/device?d=${encodeURIComponent(d.id)}` });
   for (const f of a.findings.filter((x) => !x.accepted && (x.severity === "critical" || x.severity === "warning")))
     alerts.push({ key: f.id, severity: f.severity, title: f.title, detail: f.summary, href: `#/?f=${encodeURIComponent(f.id)}` });
 
   const internetOk = !live || !!m.wan.address;
-  const status = alerts.some((x) => x.severity === "critical") ? "attention" : alerts.length ? "loose-ends" : "healthy";
+  const status = alerts.some((x) => x.severity === "critical") ? "attention" : alerts.some((x) => x.severity !== "info") ? "loose-ends" : "healthy";
   const statusColor = status === "attention" ? "var(--bad)" : status === "loose-ends" ? "var(--warn)" : "var(--ok)";
   const toFix = a.counts.critical + a.counts.warning;
   const rest = [
