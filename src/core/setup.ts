@@ -90,7 +90,7 @@ export function rosQuote(v: string): string {
 const IDENT = /[^A-Za-z0-9_.-]/g;
 const ident = (v: string, fallback: string) => v.replace(IDENT, "-").replace(/^-+|-+$/g, "") || fallback;
 
-interface Net {
+export interface Net {
   cidr: string;
   gw: string;
   prefix: number;
@@ -98,14 +98,14 @@ interface Net {
   last: number;
 }
 
-function net(subnet: string): Net | undefined {
+export function net(subnet: string): Net | undefined {
   const c = parseCidr(subnet.trim());
   if (!c || c.prefix > 30 || c.prefix < 16) return undefined;
   return { cidr: `${intToIp(c.network)}/${c.prefix}`, gw: intToIp(c.network + 1), prefix: c.prefix, first: c.network + 1, last: c.network + c.size - 2 };
 }
 
 /** A pool range inside the subnet: "a-b". Falls back to the upper half when the input does not fit. */
-function poolIn(n: Net, pool: string | undefined, notes: string[], label: string): string {
+export function poolIn(n: Net, pool: string | undefined, notes: string[], label: string): string {
   const [a, b] = (pool ?? "").split("-").map((x) => ipToInt(x.trim()));
   if (a !== undefined && b !== undefined && a <= b && a > n.first && b <= n.last) return `${intToIp(a)}-${intToIp(b)}`;
   const size = n.last - n.first + 1;

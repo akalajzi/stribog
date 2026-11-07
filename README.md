@@ -12,6 +12,7 @@ Stribog signs in to a RouterOS router with the same user and password as WinBox 
 - **Wi-Fi**: networks, a channel map per band (including where a planned access point would have to go), and every client on a signal scale.
 - **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
 - **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.
+- **Change**: small changes to the setup the router has now: add a guest or IoT network, rename the Wi-Fi, change its security or 5 GHz channels. Stribog shows what it read about the setup (inferences marked as such) and writes only the commands for what you choose, plus a script that undoes them. The change first saves the configuration to a file on the router, new Wi-Fi starts disabled until you set its passphrase, and nothing is applied: you review and paste it.
 - **New setup** (in Settings, under Start over): a generator for a clean, opinionated home or small-office setup, as a script to review, for a router reset with no configuration. On a router that is already set up it asks first.
 
 Stribog never changes anything on the router. Whatever you change, you apply yourself.
@@ -151,7 +152,7 @@ Stribog has no accounts of its own: signing in means signing in to the router. T
 
 - `src/core/ros.ts` parses `/export` scripts (line continuations, quoting, `\XX` escapes, `set [ find … ]`) into the same shape the REST API returns, and hides secrets.
 - `src/core/model.ts` builds one model of devices, ports, networks, SSIDs, radios and the WAN. Every derived fact records whether it was read, inferred or told by the user, and the UI says "probably" for inferences.
-- `src/core/analyze.ts` holds the review rules (diagnosis only; each finding notes the configuration it read) and `src/core/advice.ts` turns a finding into a request for advice. `src/core/layout.ts` lays out the topology (port order left to right, so links never cross). `src/core/setup.ts` generates setup scripts, and `src/core/firewall.ts` describes rules in plain language.
+- `src/core/analyze.ts` holds the review rules (diagnosis only; each finding notes the configuration it read) and `src/core/advice.ts` turns a finding into a request for advice. `src/core/layout.ts` lays out the topology (port order left to right, so links never cross). `src/core/setup.ts` generates setup scripts, `src/core/change.ts` writes changes (and their undo) for a router that is already set up, and `src/core/firewall.ts` describes rules in plain language.
 - `src/core/rest.ts` reads the router over REST. `src/server/session.ts` signs in and keeps sessions in memory. `src/server/provider.ts` picks the source: the signed-in router, files, or the demo.
 - `src/server/notes.ts` keeps notes and the change log, `src/server/tokens.ts` agent tokens, `src/server/mcp.ts` the MCP tools.
 - `src/core/activity.ts` turns the connection table into who-talks-to-whom; `src/server/owners.ts` looks up network owners, reverse DNS and RDAP; `src/server/recorder.ts` and `src/server/history.ts` record and keep history.

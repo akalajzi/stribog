@@ -93,3 +93,9 @@
 .pv-script > div, .pv-script pre.cli { min-width: 0; max-width: 100%; }
 .pv-sec-b > .seg, .pv-sec > .seg { justify-self: start; }
 .pv-never .mono { white-space: nowrap; }
+
+/* ---------- change page ---------- */
+.ch-read { margin: 0; padding-left: 18px; display: grid; gap: 5px; color: var(--tx-2); font-size: 12.5px; line-height: 1.45; }
+.ch-empty { display: grid; gap: 6px; padding: 18px; }
+.ch-empty b { font-weight: 600; }
+.ch-empty ul { margin: 6px 0 0; padding-left: 18px; color: var(--tx-2); display: grid; gap: 4px; }

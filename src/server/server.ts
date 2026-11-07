@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { getNetwork, getNetworkForAgent, liveRates, notesFor, setup, SignedOutError, snapshotOf } from "./provider.ts";
 import { adviceRequest } from "../core/advice.ts";
+import { changeContext } from "../core/change.ts";
 import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
@@ -154,6 +155,14 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const snap = p && snapshotOf(p);
       if (!p || !f || !snap) return send(res, 404, { error: "No such finding right now." }), true;
       return send(res, 200, { text: adviceRequest({ finding: f, model: p.model, snap, notes: snap.notes }) }), true;
+    }
+
+    // What a change to the setup needs from the router's configuration; the page writes the script from it.
+    if (route === "GET /api/change") {
+      const p = agent ? await getNetworkForAgent() : await getNetwork(session);
+      const snap = p && snapshotOf(p);
+      if (!p || !snap) return send(res, 404, { error: "Stribog has not read the router yet." }), true;
+      return send(res, 200, changeContext(snap, p.model)), true;
     }
 
     // Accepting a finding: a note like any other, logged, with the same rights for people and agents.

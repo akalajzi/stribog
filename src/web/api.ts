@@ -5,6 +5,7 @@ import type { NetworkPayload } from "../server/provider.ts";
 import type { IntegrationsInfo, SessionInfo } from "../server/server.ts";
 import type { OwnersNow } from "../server/live-owners.ts";
 import type { DeviceActivity } from "../server/device-activity.ts";
+import type { ChangeContext } from "../core/change.ts";
 
 export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo };
 export type { Analysis, Finding, Severity, Category } from "../core/analyze.ts";
@@ -47,6 +48,7 @@ export const disconnectAdGuard = (url: string) => api<{ ok: true }>(`/api/integr
 export const fetchFixRequest = (id: string) => api<{ text: string }>(`/api/review/${encodeURIComponent(id)}/request`).then((r) => r.text);
 export const acceptFinding = (id: string, reason?: string) => api<{ ok: true }>(`/api/review/${encodeURIComponent(id)}/accept`, { method: "PUT", body: JSON.stringify({ reason }) });
 export const reopenFinding = (id: string) => api<{ ok: true }>(`/api/review/${encodeURIComponent(id)}/accept`, { method: "DELETE" });
+export const fetchChangeContext = () => api<ChangeContext>("/api/change");
 export const fetchAudit = (limit = 100) => api<AuditEntry[]>(`/api/notes/audit?limit=${limit}`);
 
 export type Theme = "dark" | "light" | "system";
