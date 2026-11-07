@@ -107,7 +107,7 @@ function AskAgent({ id }: { id: string }) {
         </span>
       </div>
       {state !== "idle" && state !== "busy" && state !== "copied" && <p className="st-error">{state}</p>}
-      <p className="faint">Check what the agent suggests before you change anything. Stribog never applies changes.</p>
+      <p className="faint">Check what the agent suggests before you change anything. Stribog does not make these changes for you.</p>
     </div>
   );
 }

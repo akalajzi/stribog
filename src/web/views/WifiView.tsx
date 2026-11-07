@@ -46,7 +46,18 @@ function useWidth<T extends HTMLElement>(): [RefObject<T | null>, number] {
   return [ref, w];
 }
 
-export function WifiView({ data, onSelect }: { data: NetworkPayload; onSelect: (id: string) => void }) {
+export type WifiTab = "overview" | "setup" | "review";
+const TABS: { id: WifiTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "setup", label: "Setup" },
+  { id: "review", label: "Review" },
+];
+
+export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkPayload; tab: WifiTab; focus?: string; onTab: (t: WifiTab) => void; onSelect: (id: string) => void }) {
+  // A finding linked from elsewhere opens, in view.
+  useLayoutEffect(() => {
+    if (tab === "review" && focus) document.getElementById(`f-${focus}`)?.scrollIntoView({ block: "center" });
+  }, [tab, focus]);
   const { model, analysis } = data;
   const aps = model.devices.filter((d) => d.kind === "ap" || model.radios.some((r) => r.apId === d.id));
   const plannedAps = model.planned.filter((p) => p.kind === "ap");
@@ -65,135 +76,157 @@ export function WifiView({ data, onSelect }: { data: NetworkPayload; onSelect: (
     <div className="scroll">
       <div className="page">
         <h1>Wi-Fi</h1>
-        <p className="lede">
-          {model.ssids.length || model.radios.length ? (
-            <>
-              {plural(model.ssids.length, "network name")} on {plural(aps.length, "access point")}
-              {plannedAps.length ? ` (${plannedAps.length} more planned)` : ""}, with {plural(clients.length, "device")} connected. Below is how the airwaves are shared, how
-              strong each connection is, and what could be better.
-            </>
-          ) : (
-            "No Wi-Fi radios were found in the configuration."
-          )}
-        </p>
-
-        {model.ssids.length > 0 && (
-          <>
-            <div className="sec-title">Network names <em className="faint">what devices see when they search for Wi-Fi</em></div>
-            <div className="wf-ssids">
-              {model.ssids.map((s) => {
-                const net = model.networks.find((n) => n.id === s.network);
-                const wpa3 = s.auth.some((a) => a.startsWith("wpa3"));
-                const wpa2 = s.auth.some((a) => a.startsWith("wpa2"));
-                return (
-                  <div key={s.name} className="card wf-ssid">
-                    <div className="wf-ssid-head">
-                      <WifiMark />
-                      <b>{s.name}</b>
-                      {s.hidden && <span className="cert" title="The name is not broadcast; devices must be told it.">hidden</span>}
-                      <span className="wf-grow" />
-                      {s.bands.map((b) => <span key={b} className={`chip band-${b}`}>{BAND_LABEL[b]}</span>)}
-                    </div>
-                    <div className="kv">
-                      <span>Security</span>
-                      <span className="tx">
-                        {securityLabel(s.auth)}
-                        <span className="faint wf-hint">{wpa3 && wpa2 ? "newer devices use WPA3, older ones WPA2" : wpa3 ? "WPA3 only; very old devices cannot join" : wpa2 ? "solid with a long passphrase" : ""}</span>
-                      </span>
-                      <span>Fast roaming</span>
-                      <span className="tx">
-                        {s.ft ? "On" : "Off"}
-                        <span className="faint wf-hint">{s.ft ? "802.11r: quick hand-over between APs" : aps.length + plannedAps.length > 1 ? "802.11r: worth turning on with several APs" : "802.11r: only matters with several APs"}</span>
-                      </span>
-                      <span>Network</span>
-                      <span className="tx">{net ? <>{net.label}{net.cidr && <span className="mono faint" style={{ marginLeft: 8 }}>{net.cidr}</span>}</> : "—"}</span>
-                      <span>Broadcast by</span>
-                      <span className="tx">{s.aps.length ? s.aps.map(apName).join(", ") : <span className="faint">no access point yet</span>}</span>
-                      <span>Devices</span>
-                      <span className="tx mono">{s.clients}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {bands.length > 0 && (
-          <>
-            <div className="sec-title">Channels <em className="faint">who is using which part of the airwaves</em></div>
-            <div style={{ display: "grid", gap: 12 }}>
-              {bands.map((b) => (
-                <Spectrum
-                  key={b}
-                  band={b}
-                  radios={model.radios.filter((r) => r.band === b)}
-                  placements={placements.filter((p) => p.band === b)}
-                  apName={apName}
-                  fixFinding={b === "5" ? wifiFindings.find((f) => f.id === "wifi-5-one-block") : undefined}
-                />
-              ))}
-            </div>
-          </>
-        )}
-
-        <div className="sec-title">Signal <em className="faint">{model.hasState ? "how strongly each device hears its access point" : "needs live data from the router"}</em></div>
-        <SignalStrip clients={clients} onSelect={onSelect} />
-
-        {(aps.length > 0 || plannedAps.length > 0) && (
-          <>
-            <div className="sec-title">Access points</div>
-            <div className="wf-aps">
-              {aps.map((ap) => <ApCard key={ap.id} ap={ap} radios={model.radios.filter((r) => r.apId === ap.id)} onSelect={onSelect} />)}
-              {plannedAps.map((p) => {
-                const pl = placements.filter((x) => x.plannedId === p.id);
-                return (
-                  <div key={p.id} className="card wf-ap planned">
-                    <div className="wf-ap-head">
-                      <span className="wf-ap-ic ghost"><Glyph kind="ap" size={20} /></span>
-                      <div>
-                        <b>{p.name}</b>
-                        <div className="faint" style={{ fontSize: 12 }}>Planned{p.port ? <> · <span className="mono">{p.port}</span></> : ""}</div>
-                      </div>
-                      <span className="wf-grow" />
-                      <span className="tag wf-planned-tag">Planned</span>
-                    </div>
-                    {p.note && <div className="muted" style={{ fontSize: 12.5 }}>{p.note}</div>}
-                    {pl.length > 0 && (
-                      <div className="wf-radios">
-                        {pl.map((x) => (
-                          <div key={x.band} className="wf-radio">
-                            <span className={`chip band-${x.band}`}>{BAND_LABEL[x.band]}</span>
-                            <span className="mono tx">ch {blockSpan(x.block)} · {x.block.width} MHz</span>
-                            <span className={`chip${x.overlaps.length ? " wf-chip-warn" : ""}`}>{x.overlaps.length ? `shares with ${x.overlaps.map((o) => apName(o.radio.apId)).join(", ")}` : "own channel"}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="faint" style={{ fontSize: 12 }}>Channels it would get with today's channel plan.</div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        <div className="sec-title">Wi-Fi review <em className="faint">{open.length ? `${open.length} to look at` : "nothing to fix"}</em></div>
-        <div style={{ display: "grid", gap: 8 }}>
-          {open.map((f) => <FindingCard key={f.id} f={f} onShow={f.devices?.length ? onShow : undefined} deviceName={devName} />)}
-          {!open.length && <div className="card muted">Nothing on the Wi-Fi side needs attention.</div>}
+        <div className="tabs" role="tablist" aria-label="Wi-Fi">
+          {TABS.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "on" : undefined} onClick={() => onTab(t.id)}>
+              {t.label}
+              {t.id === "review" && open.length > 0 && <span className="tab-count">{open.length}</span>}
+            </button>
+          ))}
         </div>
-        {good.length > 0 && (
-          <details className="wf-good">
-            <summary>
-              <span className="dot" />
-              What's good <span className="mono faint">{good.length}</span>
-              <span className="wf-chev">›</span>
-            </summary>
-            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-              {good.map((f) => <FindingCard key={f.id} f={f} deviceName={devName} />)}
+
+        {tab === "overview" && (
+          <>
+            <p className="lede">
+              {model.ssids.length || model.radios.length ? (
+                <>
+                  {plural(model.ssids.length, "network name")} on {plural(aps.length, "access point")}
+                  {plannedAps.length ? ` (${plannedAps.length} more planned)` : ""}, with {plural(clients.length, "device")} connected.
+                </>
+              ) : (
+                "No Wi-Fi radios were found in the configuration."
+              )}
+            </p>
+
+            {model.ssids.length > 0 && (
+              <>
+                <div className="sec-title">Network names <em className="faint">what devices see when they search for Wi-Fi</em></div>
+                <div className="wf-ssids">
+                  {model.ssids.map((s) => {
+                    const net = model.networks.find((n) => n.id === s.network);
+                    const wpa3 = s.auth.some((a) => a.startsWith("wpa3"));
+                    const wpa2 = s.auth.some((a) => a.startsWith("wpa2"));
+                    return (
+                      <div key={s.name} className="card wf-ssid">
+                        <div className="wf-ssid-head">
+                          <WifiMark />
+                          <b>{s.name}</b>
+                          {s.hidden && <span className="cert" title="The name is not broadcast; devices must be told it.">hidden</span>}
+                          <span className="wf-grow" />
+                          {s.bands.map((b) => <span key={b} className={`chip band-${b}`}>{BAND_LABEL[b]}</span>)}
+                        </div>
+                        <div className="kv">
+                          <span>Security</span>
+                          <span className="tx">
+                            {securityLabel(s.auth)}
+                            <span className="faint wf-hint">{wpa3 && wpa2 ? "newer devices use WPA3, older ones WPA2" : wpa3 ? "WPA3 only; very old devices cannot join" : wpa2 ? "solid with a long passphrase" : ""}</span>
+                          </span>
+                          <span>Fast roaming</span>
+                          <span className="tx">
+                            {s.ft ? "On" : "Off"}
+                            <span className="faint wf-hint">{s.ft ? "802.11r: quick hand-over between APs" : aps.length + plannedAps.length > 1 ? "802.11r: worth turning on with several APs" : "802.11r: only matters with several APs"}</span>
+                          </span>
+                          <span>Network</span>
+                          <span className="tx">{net ? <>{net.label}{net.cidr && <span className="mono faint" style={{ marginLeft: 8 }}>{net.cidr}</span>}</> : "—"}</span>
+                          <span>Broadcast by</span>
+                          <span className="tx">{s.aps.length ? s.aps.map(apName).join(", ") : <span className="faint">no access point yet</span>}</span>
+                          <span>Devices</span>
+                          <span className="tx mono">{s.clients}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div className="sec-title">Signal <em className="faint">{model.hasState ? "how strongly each device hears its access point" : "needs live data from the router"}</em></div>
+            <SignalStrip clients={clients} onSelect={onSelect} />
+
+            {(aps.length > 0 || plannedAps.length > 0) && (
+              <>
+                <div className="sec-title">Access points</div>
+                <div className="wf-aps">
+                  {aps.map((ap) => <ApCard key={ap.id} ap={ap} radios={model.radios.filter((r) => r.apId === ap.id)} onSelect={onSelect} />)}
+                  {plannedAps.map((p) => {
+                    const pl = placements.filter((x) => x.plannedId === p.id);
+                    return (
+                      <div key={p.id} className="card wf-ap planned">
+                        <div className="wf-ap-head">
+                          <span className="wf-ap-ic ghost"><Glyph kind="ap" size={20} /></span>
+                          <div>
+                            <b>{p.name}</b>
+                            <div className="faint" style={{ fontSize: 12 }}>Planned{p.port ? <> · <span className="mono">{p.port}</span></> : ""}</div>
+                          </div>
+                          <span className="wf-grow" />
+                          <span className="tag wf-planned-tag">Planned</span>
+                        </div>
+                        {p.note && <div className="muted" style={{ fontSize: 12.5 }}>{p.note}</div>}
+                        {pl.length > 0 && (
+                          <div className="wf-radios">
+                            {pl.map((x) => (
+                              <div key={x.band} className="wf-radio">
+                                <span className={`chip band-${x.band}`}>{BAND_LABEL[x.band]}</span>
+                                <span className="mono tx">ch {blockSpan(x.block)} · {x.block.width} MHz</span>
+                                <span className={`chip${x.overlaps.length ? " wf-chip-warn" : ""}`}>{x.overlaps.length ? `shares with ${x.overlaps.map((o) => apName(o.radio.apId)).join(", ")}` : "own channel"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="faint" style={{ fontSize: 12 }}>Channels it would get with today's channel plan.</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {tab === "setup" && (
+          <>
+            <p className="lede">How the Wi-Fi is set up, and the settings worth changing.</p>
+            {bands.length > 0 ? (
+              <>
+                <div className="sec-title">Channels <em className="faint">who is using which part of the airwaves</em></div>
+                <div style={{ display: "grid", gap: 12 }}>
+                  {bands.map((b) => (
+                    <Spectrum
+                      key={b}
+                      band={b}
+                      radios={model.radios.filter((r) => r.band === b)}
+                      placements={placements.filter((p) => p.band === b)}
+                      apName={apName}
+                      fixFinding={b === "5" ? wifiFindings.find((f) => f.id === "wifi-5-one-block") : undefined}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="card muted">No Wi-Fi radios were found in the configuration.</div>
+            )}
+          </>
+        )}
+
+        {tab === "review" && (
+          <>
+            <p className="lede">{open.length ? `${plural(open.length, "thing")} on the Wi-Fi side worth a look. Each says why it matters; accept the ones that are fine for you.` : "Nothing on the Wi-Fi side needs attention."}</p>
+            <div style={{ display: "grid", gap: 8 }}>
+              {open.map((f) => <FindingCard key={f.id} f={f} open={f.id === focus} onShow={f.devices?.length ? onShow : undefined} deviceName={devName} />)}
             </div>
-          </details>
+            {good.length > 0 && (
+              <details className="wf-good">
+                <summary>
+                  <span className="dot" />
+                  What's good <span className="mono faint">{good.length}</span>
+                  <span className="wf-chev">›</span>
+                </summary>
+                <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                  {good.map((f) => <FindingCard key={f.id} f={f} deviceName={devName} />)}
+                </div>
+              </details>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -529,15 +562,7 @@ function PlacementNote({ p, apName, fixFinding }: { p: Placement; apName: (id: s
         {fixFinding && (
           <>
             {" "}
-            <a
-              href={`#f-${fixFinding.id}`}
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(`f-${fixFinding.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-            >
-              Two ways to fix it ›
-            </a>
+            <a href={`#/wifi?t=review&f=${encodeURIComponent(fixFinding.id)}`}>More in the review ›</a>
           </>
         )}
       </span>

@@ -97,7 +97,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
         {path === "/map" ? (
           <MapView data={fresh!} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} onNotesSaved={refetch} />
         ) : path === "/wifi" ? (
-          <WifiView data={data} onSelect={(id) => go("/map", { d: id })} />
+          <WifiView data={data} focus={params.get("f") ?? undefined} tab={(["setup", "review"] as const).find((t) => t === params.get("t")) ?? "overview"} onTab={(t) => go("/wifi", t === "overview" ? {} : { t })} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/clients" ? (
           <ClientsView data={data} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/network" ? (
