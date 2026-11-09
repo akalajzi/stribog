@@ -54,6 +54,8 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
 export async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = new URL(req.url ?? "/", "http://x");
   const route = `${req.method} ${url.pathname}`;
+  // For a container's health check and a deploy's "is the new version up": no session, no router.
+  if (route === "GET /healthz") return send(res, 200, { ok: true, revision: process.env.STRIBOG_REVISION ?? "dev" }), true;
   if (!url.pathname.startsWith("/api/") && url.pathname !== "/mcp") return false;
   ensureRecorder();
   try {

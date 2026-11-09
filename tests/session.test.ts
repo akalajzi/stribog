@@ -240,6 +240,17 @@ describe("web API sessions", () => {
     await client.close();
   });
 
+  it("answers a health check without a session", async () => {
+    const res = await fetch(base + "/healthz");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, revision: "dev" });
+  });
+
+  it("marks the session cookie Secure only behind an https proxy", async () => {
+    expect((await post("/api/demo", {})).headers.get("set-cookie")).not.toMatch(/Secure/);
+    expect((await post("/api/demo", {}, { "x-forwarded-proto": "https" })).headers.get("set-cookie")).toMatch(/; Secure/);
+  });
+
   it("offers the demo network without a router", async () => {
     const res = await post("/api/demo", {});
     const jar = { cookie: res.headers.get("set-cookie")!.split(";")[0]! };

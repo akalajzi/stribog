@@ -1,0 +1,29 @@
+# Stribog in Docker: `docker compose up -d --build`, then open http://127.0.0.1:4517.
+#
+# Before the first start, put a stribog.config.json with your router's address in $STRIBOG_HOME/config
+# (default ./data/docker/config), for example {"router": {"url": "192.168.88.1"}}.
+# Notes, history and agent tokens go to $STRIBOG_HOME/data, which must be writable by uid 1000.
+#
+# The Stribog server speaks plain http. To open it from another machine, put https in front of it
+# (Caddy, tailscale serve) rather than widening STRIBOG_BIND: your router password goes through it.
+name: stribog
+services:
+  app:
+    image: stribog:${STRIBOG_REVISION:-local}
+    build:
+      context: .
+      args:
+        REVISION: ${STRIBOG_REVISION:-local}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${STRIBOG_BIND:-127.0.0.1:4517}:4517"
+    volumes:
+      - ${STRIBOG_HOME:-./data/docker}/data:/data
+      - ${STRIBOG_HOME:-./data/docker}/config:/config:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g

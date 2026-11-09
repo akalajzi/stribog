@@ -61,7 +61,9 @@ export function isAlive(s: Session): boolean {
 }
 
 export function setSessionCookie(res: ServerResponse, s: Session | undefined) {
-  res.setHeader("set-cookie", s ? `${COOKIE}=${s.id}; Path=/; HttpOnly; SameSite=Strict` : `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+  // Behind an https proxy (Caddy, tailscale serve) the browser should only send the cookie over https.
+  const flags = `Path=/; HttpOnly; SameSite=Strict${res.req?.headers["x-forwarded-proto"] === "https" ? "; Secure" : ""}`;
+  res.setHeader("set-cookie", s ? `${COOKIE}=${s.id}; ${flags}` : `${COOKIE}=; ${flags}; Max-Age=0`);
 }
 
 function cookie(req: IncomingMessage, name: string): string | undefined {

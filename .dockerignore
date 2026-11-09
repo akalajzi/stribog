@@ -1,0 +1,10 @@
+.git
+.forgejo
+.playwright-mcp
+node_modules
+dist
+data
+docs
+stribog.config.json
+*.local.json
+.DS_Store

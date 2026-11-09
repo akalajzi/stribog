@@ -147,6 +147,16 @@ The password comes from `--password-file` or `STRIBOG_PASSWORD`. `--insecure` ac
 pnpm build && pnpm start      # serves dist/ and /api on 127.0.0.1:4517 (HOST/PORT to change)
 ```
 
+Or in Docker, on an always-on machine at home:
+
+```sh
+mkdir -p data/docker/config data/docker/data
+echo '{ "router": { "url": "192.168.88.1" } }' > data/docker/config/stribog.config.json
+docker compose up -d --build  # http://127.0.0.1:4517
+```
+
+A container cannot see your network's gateway, so the config names the router. `STRIBOG_HOME` moves the `config` and `data` folders elsewhere, and `STRIBOG_BIND` changes where it listens. `/healthz` answers without signing in. `.forgejo/workflows/deploy.yml` tests every push and, when the repository has deploy settings, asks the host to deploy the tested commit over SSH (see the comments at its top).
+
 Stribog has no accounts of its own: signing in means signing in to the router. The Stribog server itself speaks plain http, so if you open it from another machine the password travels from your browser to Stribog unencrypted. Keep it on localhost, or put it behind https on the LAN or a VPN.
 
 ## How it works
