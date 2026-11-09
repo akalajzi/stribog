@@ -14,6 +14,8 @@ import { dataDir, NotesStore } from "./notes.ts";
 import { ratesNow } from "./rates.ts";
 import { HistoryStore } from "./history.ts";
 import { vendorDb } from "./vendors.ts";
+import { markNew } from "../core/newdevices.ts";
+import { demoSeen, readSeen, seenFile } from "./seen.ts";
 import { canRead, defaultRouterAddress, type RouterLogin, type Session } from "./session.ts";
 
 export interface NetworkPayload {
@@ -321,6 +323,8 @@ function build(snap: Snapshot, meta: Omit<NetworkPayload["meta"], "refreshedAt">
   // Makers from the IEEE registry for real networks; the demo's addresses are documentation ones.
   const model = buildModel(snap, { vendors: meta.mode === "demo" ? undefined : vendorDb(setup().dataDir)?.lookup });
   if (meta.mode === "live") withMeasuredRates(model);
+  // New devices: from what the recorder saw (the demo ships its own record).
+  if (meta.mode !== "files") markNew(model, meta.mode === "demo" ? demoSeen() : readSeen(seenFile(setup().dataDir)), snap.notes?.devices);
   const payload: NetworkPayload = { model, analysis: analyze(model, snap, meta.mode === "demo" ? {} : recorded()), layout: layoutTopology(model), meta: { ...meta, refreshedAt: new Date().toISOString() } };
   SNAPS.set(model, snap);
   return payload;

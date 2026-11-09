@@ -8,6 +8,7 @@ import { fullLinks } from "../core/capacity.ts";
 import { RouterOsRest } from "../core/rest.ts";
 import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
+import { seenFile, writeSeen } from "./seen.ts";
 import { ratesNow, setRates } from "./rates.ts";
 import { recentNames, withNames } from "./adguard.ts";
 import { getNetworkForAgent, liveSession, routerChanged, setup, snapshotOf, type NetworkPayload } from "./provider.ts";
@@ -88,6 +89,9 @@ export async function tick(now = Date.now()) {
     if (flows.length) byMac.set(l.mac, flows);
   }
   store.addTalks(now, byMac);
+  // When each device was first seen online, for "new device".
+  const lan = payload.model.devices.filter((d) => d.zone === "lan").flatMap(connectionsOf);
+  writeSeen(seenFile(setup().dataDir), now, lan.filter((l) => l.status === "online").map((l) => l.mac), lan.map((l) => l.mac));
   // Per-connection rates over the interval; the first tick has no interval (everything a
   // connection ever moved would count as now).
   const dt = st.lastTick ? (now - st.lastTick) / 1000 : 0;

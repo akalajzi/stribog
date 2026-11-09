@@ -6,10 +6,11 @@ import { COLORS, Glyph, bandColor } from "../components/DeviceArt.tsx";
 import { SignalBars } from "../components/Inspector.tsx";
 import "./clients.css";
 
-type Filter = "all" | "online" | "wifi" | "wired" | "offline" | "attention";
+type Filter = "all" | "new" | "online" | "wifi" | "wired" | "offline" | "attention";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "new", label: "New" },
   { id: "online", label: "Online" },
   { id: "wifi", label: "Wi-Fi" },
   { id: "wired", label: "Wired" },
@@ -36,9 +37,9 @@ const isInfra = (d: Device) => d.managed || d.kind === "ap" || d.kind === "switc
 /** Devices Stribog would like the user to introduce: guessed names or guessed kinds. */
 const needsIntro = (d: Device) => !d.managed && (d.nameSource === "mac" || d.nameSource === "vendor" || d.kind === "unknown" || d.kindCertainty === "inferred");
 
-export function ClientsView({ data, onSelect }: { data: NetworkPayload; onSelect: (id: string) => void }) {
+export function ClientsView({ data, onSelect, initialFilter }: { data: NetworkPayload; onSelect: (id: string) => void; initialFilter?: string }) {
   const { model, analysis } = data;
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(FILTERS.some((f) => f.id === initialFilter) ? (initialFilter as Filter) : "all");
   const [q, setQ] = useState("");
 
   const skip = new Set(["internet", "upstream", model.routerId ?? "router"]);
@@ -59,6 +60,7 @@ export function ClientsView({ data, onSelect }: { data: NetworkPayload; onSelect
   const attention = (d: Device) => !!reservationDrift(d) || (findingsOf.get(d.id) ?? []).some((f) => ATTENTION.includes(f.severity));
   const matches: Record<Filter, (d: Device) => boolean> = {
     all: () => true,
+    new: (d) => !!d.isNew,
     online: (d) => d.status === "online",
     wifi: (d) => d.via?.kind === "wifi",
     wired: (d) => d.via?.kind === "port",
@@ -221,7 +223,10 @@ function ClientRow({
         <div className="cl-dev">
           <span className="cl-ic" style={{ color: accent }}><Glyph kind={d.kind} size={17} /></span>
           <span>
-            <b>{d.name}</b>
+            <b>
+              {d.name}
+              {d.isNew && <span className="cl-new" title={d.firstSeen ? `First seen ${fmtSeen(d.firstSeen)}, and nobody has noted what it is yet.` : undefined}>new</span>}
+            </b>
             <span className="cl-sub">
               {KIND_LABEL[d.kind as DeviceKind] ?? d.kind}
               {d.kindCertainty === "inferred" && <span className="cert" title="Stribog guessed this from the name, hostname or maker.">probably</span>}
@@ -386,3 +391,5 @@ function MeetPanel({ devices, onSelect }: { devices: Device[]; onSelect: (id: st
     </>
   );
 }
+
+export const fmtSeen = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });

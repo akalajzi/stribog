@@ -63,6 +63,22 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
   // A pause is deliberate, but easy to forget: listed, without changing the status.
   for (const d of m.devices.filter((x) => x.paused))
     alerts.push({ key: `paused-${d.id}`, severity: "info", title: `${d.name}: internet paused`, detail: "It keeps the local network. Resume it on its page.", href: `#/device?d=${encodeURIComponent(d.id)}` });
+  // Devices nobody has introduced yet; a few by name, more as one line.
+  const fresh = m.devices.filter((d) => d.isNew).sort((x, y) => (y.firstSeen ?? "").localeCompare(x.firstSeen ?? ""));
+  const seenAt = (iso?: string) => (iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+  if (fresh.length > 2)
+    alerts.push({ key: "new-devices", severity: "info", title: `${fresh.length} new devices`, detail: `${fresh.map((d) => d.name).join(", ")}. Nobody has noted what they are yet.`, href: "#/clients?filter=new" });
+  else
+    for (const d of fresh) {
+      const net = m.networks.find((n) => n.id === d.network);
+      alerts.push({
+        key: `new-${d.id}`,
+        severity: "info",
+        title: `New device: ${d.name}`,
+        detail: [`First seen ${seenAt(d.firstSeen)}`, net?.label, d.privateMac ? "private address, so maybe a known device with a new one" : d.vendor && `network chip by ${d.vendor}`].filter(Boolean).join(" · "),
+        href: `#/device?d=${encodeURIComponent(d.id)}`,
+      });
+    }
   // A newer RouterOS, as of the router's last check with MikroTik (Stribog asks it daily).
   const up = m.updates;
   if (up?.available)

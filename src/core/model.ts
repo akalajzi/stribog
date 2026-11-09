@@ -90,6 +90,10 @@ export interface Device {
   notes?: string;
   only24?: boolean;
   lastSeen?: string;
+  /** When Stribog first saw it online (any of its connections), as it recorded. */
+  firstSeen?: string;
+  /** First seen after Stribog learned the network, and nobody has noted what it is yet. */
+  isNew?: boolean;
   facts: string[];
   /**
    * A machine with more than one network connection (cable and Wi-Fi, two cables), primary

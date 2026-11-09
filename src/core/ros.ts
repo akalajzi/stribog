@@ -89,6 +89,8 @@ export interface DeviceNotes {
   sameAs?: string;
   /** Not the same machine as others that give the router the same DHCP name. */
   separate?: boolean;
+  /** Someone knows what this device is, so it is not shown as new. Any other note counts too. */
+  known?: boolean;
   /** When these notes last changed (ISO time). */
   updatedAt?: string;
 }

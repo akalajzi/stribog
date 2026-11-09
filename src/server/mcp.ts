@@ -60,6 +60,7 @@ const deviceNotesShape = {
   only24: z.boolean().nullable().optional().describe("Hardware that can only use 2.4 GHz, so being on 2.4 GHz is expected."),
   sameAs: z.string().nullable().optional().describe("MAC of another connection of the same machine (e.g. its Wi-Fi when this is its cable): the two show as one device."),
   separate: z.boolean().nullable().optional().describe("Not the same machine as others with the same DHCP name, which Stribog otherwise shows as one device."),
+  known: z.boolean().nullable().optional().describe("Someone knows what this device is, so it is no longer shown as new. Any other note also counts as knowing it."),
 };
 
 function buildServer(ctx: McpContext): McpServer {
@@ -91,15 +92,16 @@ function buildServer(ctx: McpContext): McpServer {
     {
       title: "List devices",
       description: "Every device the router knows about, with where it is connected and its notes. Filter by status or by text in the name, IP, MAC, hostname, labels or description.",
-      inputSchema: { status: z.enum(["online", "offline", "any"]).optional().describe("Default: any."), query: z.string().optional() },
+      inputSchema: { status: z.enum(["online", "offline", "any"]).optional().describe("Default: any."), query: z.string().optional(), new: z.boolean().optional().describe("Only devices marked new: first seen after Stribog's first week and nobody has noted what they are. Setting any note (or known: true) on one makes it known.") },
       annotations: read,
     },
-    guard(async ({ status, query }: { status?: string; query?: string }) => {
+    guard(async ({ status, query, new: onlyNew }: { status?: string; query?: string; new?: boolean }) => {
       const { model } = await network();
       const q = query?.toLowerCase().trim();
       const list = model.devices
         .filter((d) => d.mac || d.id === model.routerId)
         .filter((d) => !status || status === "any" || d.status === status)
+        .filter((d) => !onlyNew || d.isNew)
         .filter((d) => !q || [d.name, d.ip, d.mac, d.hostname, d.description, ...(d.labels ?? []), ...connectionsOf(d).flatMap((l) => [l.ip, l.mac])].some((x) => x?.toLowerCase().includes(q)));
       return json(list.map((d) => brief(d, model)));
     }),
@@ -327,6 +329,8 @@ function brief(d: Device, m: NetworkModel) {
     kind: d.kind,
     kindFrom: d.kindCertainty,
     status: d.status,
+    ...(d.firstSeen ? { firstSeen: d.firstSeen } : {}),
+    ...(d.isNew ? { new: true } : {}),
     ip: d.ip,
     hostname: d.hostname,
     network: d.network,

@@ -159,7 +159,7 @@ const text = (v: unknown, field: string, max: number): string | null | undefined
 };
 
 function validateDevice(p: Record<string, unknown>): Partial<Record<keyof DeviceNotes, unknown>> {
-  const allowed = new Set(["name", "kind", "labels", "description", "services", "notes", "only24", "sameAs", "separate"]);
+  const allowed = new Set(["name", "kind", "labels", "description", "services", "notes", "only24", "sameAs", "separate", "known"]);
   for (const k of Object.keys(p)) if (!allowed.has(k)) throw new NotesError(`Unknown field “${k}”. Use: ${[...allowed].join(", ")}.`);
   const out: Partial<Record<keyof DeviceNotes, unknown>> = {};
   if ("name" in p) out.name = text(p.name, "name", LIMITS.name);
@@ -177,6 +177,10 @@ function validateDevice(p: Record<string, unknown>): Partial<Record<keyof Device
   if ("separate" in p) {
     if (p.separate !== null && typeof p.separate !== "boolean") throw new NotesError("separate must be true or false.");
     out.separate = p.separate || null;
+  }
+  if ("known" in p) {
+    if (p.known !== null && typeof p.known !== "boolean") throw new NotesError("known must be true or false.");
+    out.known = p.known || null;
   }
   if ("sameAs" in p) {
     const v = text(p.sameAs, "sameAs", 40);

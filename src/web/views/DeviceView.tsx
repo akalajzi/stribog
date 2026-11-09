@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEven
 import { KIND_LABEL, type DeviceKind } from "../../core/classify.ts";
 import { fmtBps } from "../../core/net.ts";
 import { connectionsOf, linkCounters } from "../../core/model.ts";
-import { fetchActivity, type DeviceActivity, type NetworkPayload } from "../api.ts";
+import { fetchActivity, saveDeviceNotes, type Device, type DeviceActivity, type NetworkPayload } from "../api.ts";
+import { fmtSeen } from "./ClientsView.tsx";
 import { Glyph } from "../components/DeviceArt.tsx";
 import { PauseControl } from "../components/PauseControl.tsx";
 import { cannotPause } from "../../core/pause.ts";
@@ -20,7 +21,7 @@ const RANGES = [
 ];
 
 /** A device's activity: traffic over time, who it talks to now, and who it talked to. */
-export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayload; id: string; onBack: () => void; onSelect: (id: string) => void }) {
+export function DeviceView({ data, id, onBack, onSelect, onNotesSaved }: { data: NetworkPayload; id: string; onBack: () => void; onSelect: (id: string) => void; onNotesSaved: () => void }) {
   const d = data.model.devices.find((x) => x.id === id);
   const [hours, setHours] = useState(24);
   const [act, setAct] = useState<DeviceActivity>();
@@ -68,6 +69,8 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
             </p>
           </div>
         </header>
+
+        {d.isNew && <NewDevice d={d} onSaved={onNotesSaved} canSave={data.meta.mode !== "files"} />}
 
         {(d.paused || !cannotPause(data.model, d)) && <PauseControl d={d} canChange={data.meta.mode !== "files"} />}
 
@@ -118,6 +121,32 @@ export function DeviceView({ data, id, onBack, onSelect }: { data: NetworkPayloa
         </section>
       </div>
     </div>
+  );
+}
+
+/** A device nobody has introduced yet: when it came, and a way to say it belongs here. */
+function NewDevice({ d, onSaved, canSave }: { d: Device; onSaved: () => void; canSave: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const known = async () => {
+    setBusy(true);
+    const err = await saveDeviceNotes(d.mac!, { known: true });
+    setBusy(false);
+    if (err) setError(err);
+    else onSaved();
+  };
+  return (
+    <section className="card dv-new">
+      <div>
+        <b>New on the network</b>
+        <span className="faint">
+          {d.firstSeen ? `First seen ${fmtSeen(d.firstSeen)}. ` : ""}Nobody has noted what it is yet.
+          {d.privateMac ? " It uses a private (random) address, so it may be a device you know that changed its address." : ""} Who it talks to, below, often tells what it is.
+        </span>
+        {error && <span className="dv-error">{error}</span>}
+      </div>
+      {canSave && d.mac && <button className="btn" disabled={busy} onClick={known}>{busy ? "Saving…" : "I know this device"}</button>}
+    </section>
   );
 }
 

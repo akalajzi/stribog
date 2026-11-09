@@ -101,7 +101,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
         ) : path === "/wifi" ? (
           <WifiView data={data} focus={params.get("f") ?? undefined} tab={(["setup", "review"] as const).find((t) => t === params.get("t")) ?? "overview"} onTab={(t) => go("/wifi", t === "overview" ? {} : { t })} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/clients" ? (
-          <ClientsView data={data} onSelect={(id) => go("/map", { d: id })} />
+          <ClientsView data={data} onSelect={(id) => go("/map", { d: id })} initialFilter={params.get("filter") ?? undefined} />
         ) : path === "/network" ? (
           <NetworkView data={data} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/change" ? (
@@ -109,7 +109,7 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
         ) : path === "/plan" ? (
           <PlanView data={data} />
         ) : path === "/device" && params.get("d") ? (
-          <DeviceView data={data} id={params.get("d")!} onBack={() => go("/map", { d: params.get("d")! })} onSelect={(id) => go("/device", { d: id })} />
+          <DeviceView data={data} id={params.get("d")!} onBack={() => go("/map", { d: params.get("d")! })} onSelect={(id) => go("/device", { d: id })} onNotesSaved={refetch} />
         ) : path === "/settings" ? (
           <SettingsView data={data} session={session} />
         ) : (
