@@ -34,7 +34,7 @@ Screenshots show the built-in fictional demo network (`fixtures/demo`).
 
 ## Quick start
 
-Requires Node 22+ and pnpm.
+Requires Node 26+ (the current LTS; `nvm use` picks it up from `.nvmrc`) and pnpm.
 
 ```sh
 pnpm install
