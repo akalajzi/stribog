@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { InternetHealth } from "../components/InternetHealth.tsx";
 import { isOpen } from "../../core/analyze.ts";
 import type { Device, NetworkPayload, Network, Port } from "../api.ts";
 import { FindingCard, SEV_VAR } from "../components/FindingCard.tsx";
@@ -46,6 +47,7 @@ export function NetworkView({ data, onSelect }: { data: NetworkPayload; onSelect
         </p>
 
         <InternetPath data={data} />
+        {data.meta.mode !== "files" && <InternetHealth />}
 
         <div className="sec-title">Networks <em className="faint">{model.networks.length}</em></div>
         <div className="nv-nets">

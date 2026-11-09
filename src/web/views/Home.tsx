@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import type { Finding, NetworkPayload, Severity } from "../api.ts";
+import { useInternet, type Finding, type NetworkPayload, type Severity } from "../api.ts";
+import { WHERE_TEXT } from "../../core/internet.ts";
+import { fmtMinutes } from "../components/InternetHealth.tsx";
 import { STATUS_LABEL } from "../../core/analyze.ts";
 import { fmtBps } from "../../core/net.ts";
 import { SEV_VAR } from "../components/FindingCard.tsx";
@@ -42,11 +44,18 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
   const aps = m.devices.filter((d) => d.kind === "ap" && d.managed);
   const apsUp = aps.filter((d) => d.status === "online");
   const live = m.hasState && !m.sampleState;
+  // The router's own check of the internet, once a minute (not for exports, which have no state).
+  const { data: net } = useInternet(168);
+  const netNow = meta.mode === "files" ? undefined : net?.now;
 
   // Alerts: what is wrong right now, then what the review says is worth fixing.
   const alerts: Alert[] = [];
   if (meta.error) alerts.push({ key: "read", severity: meta.stale ? "warning" : "critical", title: meta.stale ? "The router is not answering" : "Could not read the router", detail: meta.error, href: "#/" });
-  if (live && !m.wan.address) alerts.push({ key: "wan", severity: "critical", title: "The router has no internet address", detail: `Nothing on ${m.wan.iface ?? "the WAN port"}.`, href: "#/network" });
+  if (netNow?.s === "down")
+    alerts.push({ key: "net-down", severity: "critical", title: "The internet is down", detail: netNow.w ? WHERE_TEXT[netNow.w].long : undefined, href: "#/network" });
+  else if (netNow?.s === "unsteady")
+    alerts.push({ key: "net-unsteady", severity: "warning", title: "The internet is losing packets", detail: "It answers, but some packets get lost: calls and games may stutter.", href: "#/network" });
+  if (live && !m.wan.address && netNow?.s !== "down") alerts.push({ key: "wan", severity: "critical", title: "The router has no internet address", detail: `Nothing on ${m.wan.iface ?? "the WAN port"}.`, href: "#/network" });
   for (const ap of aps.filter((d) => live && d.status !== "online")) alerts.push({ key: ap.id, severity: "critical", title: `${ap.name} is offline`, detail: "Wi-Fi from this access point is down.", href: `#/map?d=${encodeURIComponent(ap.id)}` });
   // A pause is deliberate, but easy to forget: listed, without changing the status.
   for (const d of m.devices.filter((x) => x.paused))
@@ -54,7 +63,14 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
   for (const f of a.findings.filter((x) => !x.accepted && (x.severity === "critical" || x.severity === "warning")))
     alerts.push({ key: f.id, severity: f.severity, title: f.title, detail: f.summary, href: `#/?f=${encodeURIComponent(f.id)}` });
 
-  const internetOk = !live || !!m.wan.address;
+  const internetOk = netNow ? netNow.s !== "down" : !live || !!m.wan.address;
+  // The last outage over the week, or how long it has been fine, so the tile answers "was it down?" too.
+  const lastOutage = net?.episodes.find((e) => e.state === "down" && !e.ongoing);
+  const outageLine = !net || meta.mode === "files" || !net.minutes.recorded
+    ? undefined
+    : lastOutage
+      ? `last outage ${new Date(lastOutage.from).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}, ${fmtMinutes(Math.max(1, Math.round((lastOutage.to - lastOutage.from) / 60_000)))}`
+      : `no outages in ${fmtMinutes(net.minutes.recorded)} checked`;
   const status = alerts.some((x) => x.severity === "critical") ? "attention" : alerts.some((x) => x.severity !== "info") ? "loose-ends" : "healthy";
   const statusColor = status === "attention" ? "var(--bad)" : status === "loose-ends" ? "var(--warn)" : "var(--ok)";
   const toFix = a.counts.critical + a.counts.warning;
@@ -82,13 +98,14 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
             <small>Internet</small>
             <b>
               <span className="dot" style={{ background: internetOk ? "var(--ok)" : "var(--bad)", boxShadow: "none" }} />
-              {!live ? "—" : internetOk ? "Up" : "Down"}
+              {!live && !netNow ? "—" : internetOk ? (netNow?.s === "unsteady" ? "Losing packets" : "Up") : "Down"}
             </b>
             {wanPort?.rxBps !== undefined && <span className="mono">↓ {fmtBps(wanPort.rxBps)} · ↑ {fmtBps(wanPort.txBps ?? 0)}</span>}
             <span className="faint">
               {m.wan.address ?? "no address"}
               {m.wan.doubleNat === true ? " · double NAT" : m.wan.addressKind === "public" ? " · public" : ""}
             </span>
+            {outageLine && <span className="faint">{outageLine}</span>}
           </a>
           <a className="card home-tile" href="#/clients">
             <small>Devices</small>

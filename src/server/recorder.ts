@@ -1,5 +1,6 @@
-// Records device history once a minute while a router session is alive (someone signed in
-// within the last 12 hours). It reads through that session's credentials, which stay in memory.
+// Records device history and the internet check once a minute while Stribog holds a router
+// login: from the first sign-in until someone signs out, the router refuses the password, or
+// Stribog restarts. It reads through that login, which stays in memory.
 
 import { flowsFor, namesByAddress, type Flow } from "../core/activity.ts";
 import { connectionsOf, linkCounters } from "../core/model.ts";
@@ -9,7 +10,8 @@ import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
 import { ratesNow, setRates } from "./rates.ts";
 import { recentNames, withNames } from "./adguard.ts";
-import { getNetworkForAgent, liveSession, setup, type NetworkPayload } from "./provider.ts";
+import { getNetworkForAgent, liveSession, setup, snapshotOf, type NetworkPayload } from "./provider.ts";
+import { PINGS, PUBLIC_TARGETS, pingResult, sampleOf, type NetSample } from "../core/internet.ts";
 import { join } from "node:path";
 
 const EVERY_MS = 60_000;
@@ -20,6 +22,8 @@ interface State {
   prev: Map<string, { orig: number; repl: number }>;
   lastPrune: number;
   lastTick?: number;
+  /** Per gateway address: did it answer pings while the internet worked (some provider boxes never do). */
+  gatewayAnswers: Map<string, boolean>;
 }
 
 // On globalThis so Vite's module reloads in development keep one recorder, not one per reload.
@@ -35,7 +39,7 @@ export function ensureRecorder() {
   if (G.__stribogRecorder) return;
   const timer = setInterval(() => void G.__stribogTick?.().catch(() => {}), EVERY_MS);
   timer.unref?.();
-  G.__stribogRecorder = { timer, prev: new Map(), lastPrune: 0 };
+  G.__stribogRecorder = { timer, prev: new Map(), lastPrune: 0, gatewayAnswers: new Map() };
 }
 
 export function recorderActive(): boolean {
@@ -47,13 +51,22 @@ export async function tick(now = Date.now()) {
   const st = G.__stribogRecorder;
   const session = liveSession();
   if (!st || !session?.router) return;
-  const payload = await getNetworkForAgent();
-  if (!payload || payload.meta.stale) return;
   const store = historyFor(setup().dataDir);
+  const payload = await getNetworkForAgent().catch(() => undefined);
+  // A router that does not answer is worth a line too: it is often why the internet is gone.
+  if (!payload || payload.meta.stale) {
+    if (liveSession()) store.appendInternet({ t: now, s: "unread", w: "router" });
+    return;
+  }
 
   const r = session.router;
-  const rest = new RouterOsRest({ url: r.url, user: r.user, password: r.password, insecure: r.encrypted });
-  const [conns, dns] = await Promise.all([rest.connections(), rest.dnsCache().catch(() => [] as RosRecord[])]);
+  const rest = new RouterOsRest({ url: r.url, user: r.user, password: r.password, insecure: r.encrypted, timeoutMs: 15_000 });
+  const [conns, dns, net] = await Promise.all([
+    rest.connections(),
+    rest.dnsCache().catch(() => [] as RosRecord[]),
+    checkInternet(rest, payload, st.gatewayAnswers, now).catch(() => undefined),
+  ]);
+  if (net) store.appendInternet(net);
   const moved = deltas(conns, st.prev);
   const names = namesByAddress(dns);
   // Names each device was given by AdGuard Home, when connected: the router never sees those lookups.
@@ -85,6 +98,32 @@ export async function tick(now = Date.now()) {
     store.prune(now);
     st.lastPrune = now;
   }
+}
+
+/**
+ * One minute of the internet check: the router pings its provider's gateway and the public
+ * addresses, and the answers (with the WAN's link and address) say whether the internet is up
+ * and where it stops. Undefined when the router would not ping at all (a user without `test`).
+ */
+export async function checkInternet(rest: RouterOsRest, p: NetworkPayload, gatewayAnswers: Map<string, boolean>, t: number): Promise<NetSample | undefined> {
+  const { wan } = p.model;
+  const gw = wan.gateway;
+  const [g, ...targets] = await Promise.all([
+    gw ? rest.ping(gw, PINGS).then(pingResult) : Promise.resolve(undefined),
+    ...PUBLIC_TARGETS.map((a) => rest.ping(a, PINGS).then(pingResult)),
+  ]);
+  if (!targets.some((x) => x.sent)) return undefined;
+  const iface = wan.iface ? snapshotOf(p)?.devices[0]?.state?.["/interface"]?.find((i) => i.name === wan.iface) : undefined;
+  const sample = sampleOf(t, {
+    linkUp: iface ? iface.running === "true" : undefined,
+    address: wan.type === "dhcp" ? (wan.address ?? null) : undefined,
+    gateway: g,
+    gatewayAnswers: gw ? gatewayAnswers.get(gw) : undefined,
+    targets,
+  });
+  // Learn, while the internet works, whether this gateway answers pings at all.
+  if (gw && g?.sent && sample.s === "up") gatewayAnswers.set(gw, g.received > 0);
+  return sample;
 }
 
 /**

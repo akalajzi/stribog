@@ -145,3 +145,13 @@
   .nv-amap { grid-template-columns: 1fr; }
   .nv-hop { width: 140px; }
 }
+
+/* Internet over time */
+.ih .seg { margin-left: auto; }
+.ih-legend { margin-left: 0; flex-wrap: wrap; row-gap: 6px; }
+.ih-sq { width: 10px !important; height: 10px !important; border-radius: 2px !important; }
+.ih-episodes { display: grid; gap: 2px; }
+.ih-ep { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--hair); font-size: 13px; line-height: 1.5; }
+.ih-ep .dot { align-self: center; }
+.ih-when { color: var(--tx-2); font-size: 12px; white-space: nowrap; }
+@media (max-width: 640px) { .ih-ep { grid-template-columns: auto 1fr; } .ih-ep > span:last-child { grid-column: 2; } }

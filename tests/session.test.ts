@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { candidateUrls, LoginError, signIn } from "../src/server/session.ts";
+import { canRead, candidateUrls, createSession, endSession, isAlive, LoginError, signIn } from "../src/server/session.ts";
 import { handleApi } from "../src/server/server.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -210,7 +210,7 @@ describe("web API sessions", () => {
     const client = new Client({ name: "test", version: "1" });
     await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp"), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(["accept_finding", "get_change_log", "get_device", "get_device_activity", "get_fix_request", "get_network_overview", "get_review", "list_devices", "reopen_finding", "update_device_notes", "update_network_notes"]);
+    expect(tools).toEqual(["accept_finding", "get_change_log", "get_device", "get_device_activity", "get_fix_request", "get_internet_health", "get_network_overview", "get_review", "list_devices", "reopen_finding", "update_device_notes", "update_network_notes"]);
 
     const text = (r: unknown) => JSON.parse((r as { content: { text: string }[] }).content[0]!.text);
 
@@ -267,5 +267,23 @@ describe("web API sessions", () => {
     expect(act.owners.ready).toBe(true);
     expect(act.owners.now[0]).toMatchObject({ name: "Example Streaming Co.", asn: 64500 });
     expect((await fetch(base + "/api/devices/mac%3A00%3A00%3A5E%3A00%3A53%3AFF/activity", { headers: jar })).status).toBe(404);
+  });
+});
+
+describe("a login for recording", () => {
+  const login = { url: "https://192.0.2.1", user: "admin", password: "x", encrypted: true };
+  it("outlives an idle browser session", () => {
+    const s = createSession("router", login);
+    s.seenAt = Date.now() - 13 * 3600_000;
+    expect(isAlive(s)).toBe(false);
+    expect(canRead(s)).toBe(true);
+  });
+  it("ends when someone signs out", () => {
+    const s = createSession("router", login);
+    endSession(s.id);
+    expect(canRead(s)).toBe(false);
+  });
+  it("is never there for the demo", () => {
+    expect(canRead(createSession("demo"))).toBe(false);
   });
 });

@@ -9,8 +9,9 @@ import type { ChangeContext } from "../core/change.ts";
 import type { ChangeResult, PausePlan, Step } from "../core/pause.ts";
 import type { PendingInfo } from "../server/changes.ts";
 import type { WifiEdit } from "../core/wifi-setup.ts";
+import type { InternetHistory } from "../server/internet.ts";
 
-export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo, PausePlan, Step, PendingInfo, WifiEdit };
+export type { NetworkPayload, SessionInfo, DeviceActivity, IntegrationsInfo, PausePlan, Step, PendingInfo, WifiEdit, InternetHistory };
 export type { Analysis, Finding, Severity, Category } from "../core/analyze.ts";
 export type { Device, NetworkModel, Port, Network, Ssid, Radio } from "../core/model.ts";
 export type { Layout, LNode, LLink } from "../core/layout.ts";
@@ -45,6 +46,7 @@ export const listTokens = () => api<TokenInfo[]>("/api/tokens");
 export const createToken = (name: string) => api<{ token: string; info: TokenInfo }>("/api/tokens", { method: "POST", body: JSON.stringify({ name }) });
 export const revokeToken = (id: string) => api<{ ok: true }>(`/api/tokens/${id}`, { method: "DELETE" });
 export const fetchActivity = (id: string, hours: number) => api<DeviceActivity>(`/api/devices/${encodeURIComponent(id)}/activity?hours=${hours}`);
+export const fetchInternet = (hours: number) => api<InternetHistory>(`/api/internet?hours=${hours}`);
 export const fetchIntegrations = () => api<IntegrationsInfo>("/api/integrations");
 export const connectAdGuard = (body: { address: string; user?: string; password?: string; sameAs?: string }) => api<{ ok: true }>("/api/integrations/adguard", { method: "POST", body: JSON.stringify(body) });
 export const disconnectAdGuard = (url: string) => api<{ ok: true }>(`/api/integrations/adguard?url=${encodeURIComponent(url)}`, { method: "DELETE" });
@@ -275,3 +277,23 @@ export function useOwnersNow(on: boolean): OwnersNow | undefined {
   return now;
 }
 export type { OwnersNow };
+
+/** The internet check over the last `hours`, refreshed every minute (the recorder's pace). */
+export function useInternet(hours: number): { data?: InternetHistory; error?: string } {
+  const [state, setState] = useState<{ data?: InternetHistory; error?: string }>({});
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetchInternet(hours).then(
+        (data) => live && setState({ data }),
+        (err: unknown) => live && setState((s) => ({ ...s, error: err instanceof Error ? err.message : String(err) })),
+      );
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [hours]);
+  return state;
+}

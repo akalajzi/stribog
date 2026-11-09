@@ -1,13 +1,15 @@
 // What Stribog remembers about devices over time, in the data directory:
 //   history/samples-YYYY-MM-DD.jsonl  one line a minute: per device online, down, up, signal
 //   history/talks-YYYY-MM-DD.json     per device, per other end and port: bytes, first and last seen
-// Recorded while someone is signed in to the router (see recorder.ts). Kept for 30 days.
+//   history/internet-YYYY-MM-DD.jsonl one line a minute: is the internet up, where it stops, round trips
+// Recorded while Stribog holds a router login (see recorder.ts). Kept for 30 days.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Flow } from "../core/activity.ts";
 import type { FullLink } from "../core/capacity.ts";
 import type { FullHistory } from "../core/analyze.ts";
+import type { NetSample } from "../core/internet.ts";
 
 export const KEEP_DAYS = 30;
 
@@ -24,7 +26,7 @@ const day = (t: number) => new Date(t).toISOString().slice(0, 10);
 export class HistoryStore {
   constructor(readonly dir: string) {}
 
-  private file(kind: "samples" | "talks" | "full", d: string) {
+  private file(kind: "samples" | "talks" | "full" | "internet", d: string) {
     return join(this.dir, `${kind}-${d}.${kind === "talks" ? "json" : "jsonl"}`);
   }
 
@@ -55,6 +57,27 @@ export class HistoryStore {
       }
     }
     return [...by.values()].sort((a, b) => b.minutes - a.minutes);
+  }
+
+  /** One minute of the internet check. */
+  appendInternet(x: NetSample) {
+    mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    appendFileSync(this.file("internet", day(x.t)), JSON.stringify(x) + "\n", { mode: 0o600 });
+  }
+
+  /** The internet check's minutes in [from, to], oldest first. */
+  internet(from: number, to: number): NetSample[] {
+    const out: NetSample[] = [];
+    for (const d of this.days(from, to)) {
+      const f = this.file("internet", d);
+      if (!existsSync(f)) continue;
+      for (const line of readFileSync(f, "utf8").split("\n")) {
+        if (!line) continue;
+        const x = JSON.parse(line) as NetSample;
+        if (x.t >= from && x.t <= to) out.push(x);
+      }
+    }
+    return out.sort((a, b) => a.t - b.t);
   }
 
   appendSamples(t: number, byMac: Record<string, [0 | 1, number | null, number | null, number | null]>) {
@@ -135,11 +158,11 @@ export class HistoryStore {
   }
 
   /** When recording began, as far as the files go. */
-  since(): string | undefined {
+  since(kind: "samples" | "internet" = "samples"): string | undefined {
     if (!existsSync(this.dir)) return undefined;
-    const days = readdirSync(this.dir).map((f) => /^samples-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f)?.[1]).filter(Boolean).sort();
+    const days = readdirSync(this.dir).map((f) => new RegExp(`^${kind}-(\\d{4}-\\d{2}-\\d{2})\\.jsonl$`).exec(f)?.[1]).filter(Boolean).sort();
     if (!days.length) return undefined;
-    const first = readFileSync(this.file("samples", days[0]!), "utf8").split("\n")[0];
+    const first = readFileSync(this.file(kind, days[0]!), "utf8").split("\n")[0];
     return first ? new Date((JSON.parse(first) as { t: number }).t).toISOString() : undefined;
   }
 

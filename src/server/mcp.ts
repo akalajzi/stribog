@@ -13,11 +13,14 @@ import { snapshotOf, type NetworkPayload } from "./provider.ts";
 import { adviceRequest } from "../core/advice.ts";
 import { isOpen, statusLine } from "../core/analyze.ts";
 import type { DeviceActivity } from "./device-activity.ts";
+import type { InternetHistory } from "./internet.ts";
+import { WHERE_TEXT } from "../core/internet.ts";
 
 export interface McpContext {
   network: () => Promise<NetworkPayload | undefined>;
   notes: NotesStore;
   activity: (id: string, hours: number) => Promise<DeviceActivity | undefined>;
+  internet: (hours: number) => Promise<InternetHistory | undefined>;
 }
 
 const INSTRUCTIONS = `Stribog shows a MikroTik home network as read from its router, plus notes that people and agents add.
@@ -154,6 +157,33 @@ function buildServer(ctx: McpContext): McpServer {
           talks: a.history.talks.slice(0, 40),
         },
         lookedUp: a.dns && { ...a.dns, from: new Date(a.dns.from).toISOString(), to: new Date(a.dns.to).toISOString(), domains: a.dns.domains.slice(0, 40).map((d) => ({ ...d, names: d.names.slice(0, 5) })) },
+      });
+    }),
+  );
+
+  server.registerTool(
+    "get_internet_health",
+    {
+      title: "Internet health",
+      description:
+        "Whether the internet connection works and how it did over the last hours: once a minute the router pings its provider's gateway and two public addresses (1.1.1.1, 8.8.8.8). Gives the state now, outages and stretches of lost packets with where the fault probably was (the link to the provider's box, no address, the provider's box, the provider's network, or the router not answering), and round-trip times to the internet and to the gateway. 'Probably' in a place means it is inferred from which addresses answered.",
+      inputSchema: { hours: z.number().int().min(1).max(720).optional().describe("How far back, default 168 (a week).") },
+      annotations: read,
+    },
+    guard(async ({ hours }: { hours?: number }) => {
+      const h = await ctx.internet(hours ?? 168);
+      if (!h) return fail("Stribog has not read the router yet.");
+      const iso = (t: number) => new Date(t).toISOString();
+      return json({
+        from: iso(h.from),
+        to: iso(h.to),
+        recording: h.recording,
+        since: h.since,
+        gateway: h.gateway,
+        now: h.now && { at: iso(h.now.t), state: h.now.s, where: h.now.w && WHERE_TEXT[h.now.w].long },
+        minutes: h.minutes,
+        roundTripMs: { internet: h.latency, gateway: h.gatewayLatency },
+        episodes: h.episodes.slice(0, 50).map((e) => ({ state: e.state, from: iso(e.from), to: iso(e.to), minutes: Math.round((e.to - e.from) / 60_000), ongoing: e.ongoing, where: e.where && WHERE_TEXT[e.where].long })),
       });
     }),
   );

@@ -1,5 +1,7 @@
 // Who is signed in. Stribog has no users of its own: it signs in to the router with the router's
 // user and password and keeps them in memory for the session only. Nothing here touches the disk.
+// A browser session ends after 12 idle hours, but the recorder keeps using its login (in memory)
+// until someone signs out, the router refuses the password, or Stribog restarts.
 
 import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -25,6 +27,8 @@ export interface Session {
   seenAt: number;
   /** Per-session cache of the last network read, owned by the provider. */
   cache?: { at: number; payload: unknown };
+  /** Signed out, or the router refused the password: its login is not used again. */
+  ended?: boolean;
 }
 
 export const COOKIE = "stribog_session";
@@ -39,7 +43,10 @@ export function createSession(kind: Session["kind"], router?: RouterLogin): Sess
   return s;
 }
 
+/** Sign out: the browser session ends and its login is no longer used for recording. */
 export function endSession(id: string | undefined) {
+  const s = id ? store.get(id) : undefined;
+  if (s) s.ended = true;
   if (id) store.delete(id);
 }
 
@@ -58,6 +65,11 @@ export function sessionFrom(req: IncomingMessage): Session | undefined {
 /** Still signed in: present and not idle for too long. Does not count as activity. */
 export function isAlive(s: Session): boolean {
   return store.get(s.id) === s && Date.now() - s.seenAt <= IDLE_MS;
+}
+
+/** Its login can still be used to read the router: not signed out, password not refused. */
+export function canRead(s: Session): boolean {
+  return !s.ended && !!s.router;
 }
 
 export function setSessionCookie(res: ServerResponse, s: Session | undefined) {

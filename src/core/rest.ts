@@ -312,6 +312,14 @@ export class RouterOsRest {
     return liveRatesFrom(traffic, reg, res[0]);
   }
 
+  /**
+   * A few pings from the router to one address: `/ping`, which sends packets and changes
+   * nothing. A user needs the `test` policy for it; without one the answer is empty.
+   */
+  ping(address: string, count = 3): Promise<RosRecord[]> {
+    return this.call("POST", "/ping", { address, count: String(count) });
+  }
+
   /** The router's DNS cache: names it resolved recently, to put names on addresses. */
   dnsCache(): Promise<RosRecord[]> {
     return this.get("/ip/dns/cache");

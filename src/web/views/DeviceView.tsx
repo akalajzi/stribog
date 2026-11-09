@@ -6,6 +6,7 @@ import { fetchActivity, type DeviceActivity, type NetworkPayload } from "../api.
 import { Glyph } from "../components/DeviceArt.tsx";
 import { PauseControl } from "../components/PauseControl.tsx";
 import { cannotPause } from "../../core/pause.ts";
+import { niceScale, tickLabel, timeTicksFor } from "../chart.ts";
 import "./device.css";
 
 type Flow = DeviceActivity["now"]["flows"][number];
@@ -146,7 +147,7 @@ function Empty({ h }: { h: DeviceActivity["history"] }) {
 function Recording({ h }: { h: DeviceActivity["history"] }) {
   return (
     <p className="faint dv-foot">
-      {h.recording ? "Recording now. " : ""}Stribog records once a minute while someone is signed in to the router, for up to 12 hours after the last visit, and keeps 30 days.
+      {h.recording ? "Recording now. " : ""}Stribog records once a minute from when someone signs in to the router until they sign out or Stribog restarts, and keeps 30 days.
       {h.since ? ` Recorded since ${new Date(h.since).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.` : ""}
     </p>
   );
@@ -543,27 +544,6 @@ export function fmtBytes(b: number): string {
   if (b >= 1e3) return `${Math.round(b / 1e3)} kB`;
   return `${Math.round(b)} B`;
 }
-
-/** About four round steps (1, 2, 2.5 or 5 × 10ⁿ) from zero to just above the largest value. */
-function niceScale(v: number): { max: number; ticks: number[] } {
-  const raw = v / 4;
-  const p = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((x) => x >= raw)!;
-  const max = Math.ceil(v / step) * step;
-  return { max, ticks: Array.from({ length: Math.round(max / step) + 1 }, (_, k) => k * step) };
-}
-
-function timeTicksFor(from: number, to: number): number[] {
-  const span = to - from;
-  const every = span <= 26 * 3600_000 ? 3 * 3600_000 : 24 * 3600_000;
-  const first = Math.ceil(from / every) * every;
-  const out: number[] = [];
-  for (let t = first; t <= to; t += every) out.push(t);
-  return out;
-}
-
-const tickLabel = (t: number, span: number) =>
-  span <= 26 * 3600_000 ? new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : new Date(t).toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
 
 function seen(t: Talk): string {
   const f = new Date(t.first);

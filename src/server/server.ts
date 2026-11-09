@@ -10,6 +10,7 @@ import { NotesError } from "./notes.ts";
 import { TokenStore } from "./tokens.ts";
 import { handleMcp } from "./mcp.ts";
 import { deviceActivity } from "./device-activity.ts";
+import { internetHistory } from "./internet.ts";
 import { ownersNow } from "./live-owners.ts";
 import { CannotChange, pause, pausePreview, resume, resumePreview } from "./pause.ts";
 import { ChangeFailed, PauseRefused } from "../core/pause.ts";
@@ -114,6 +115,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         network: () => (agent ? getNetworkForAgent() : getNetwork(session)),
         notes: notesFor(session?.kind === "demo"),
         activity: (id, hours) => deviceActivity({ session, agent: !!agent, id, hours }),
+        internet: (hours) => internetHistory({ session, agent: !!agent, hours }),
       });
       return true;
     }
@@ -226,6 +228,13 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         if (err instanceof AuthError) return send(res, 403, { error: `The router did not let this user change it (${err.message}).` }), true;
         return send(res, 502, { error: `Could not change the router: ${err instanceof Error ? err.message : String(err)}` }), true;
       }
+    }
+
+    // The internet check over a period: outages, where they were, round trips.
+    if (route === "GET /api/internet") {
+      const hours = Math.min(24 * 30, Math.max(1, Number(url.searchParams.get("hours")) || 24));
+      const h = await internetHistory({ session, agent: !!agent, hours });
+      return h ? send(res, 200, h) : send(res, 503, { error: "Stribog has not read the router yet." }), true;
     }
 
     const act = /^\/api\/devices\/([^/]+)\/activity$/.exec(url.pathname);

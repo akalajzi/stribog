@@ -14,7 +14,7 @@ import { dataDir, NotesStore } from "./notes.ts";
 import { ratesNow } from "./rates.ts";
 import { HistoryStore } from "./history.ts";
 import { vendorDb } from "./vendors.ts";
-import { defaultRouterAddress, isAlive, type RouterLogin, type Session } from "./session.ts";
+import { canRead, defaultRouterAddress, type RouterLogin, type Session } from "./session.ts";
 
 export interface NetworkPayload {
   model: NetworkModel;
@@ -123,10 +123,13 @@ export async function getNetwork(session?: Session, force = false): Promise<Netw
   return withNotes(filesCache, notes);
 }
 
-/** The most recent signed-in router session, while it lasts: agents and the recorder read through it. */
+/**
+ * The most recent signed-in router session: agents and the recorder read through its login,
+ * also after the browser session went idle, until someone signs out or the password is refused.
+ */
 export function liveSession(): Session | undefined {
   const l = LIVE.__stribogLastLive;
-  return l && isAlive(l) && l.router ? l : undefined;
+  return l && canRead(l) ? l : undefined;
 }
 
 /** The router state in the files in use (a saved snapshot can carry its connection table). */
@@ -147,11 +150,12 @@ export function demoState(): Record<string, import("../core/ros.ts").RosRecord[]
 export async function getNetworkForAgent(): Promise<NetworkPayload | undefined> {
   const s = setup();
   if (!s.login) return getNetwork();
-  if (LIVE.__stribogLastLive && isAlive(LIVE.__stribogLastLive) && LIVE.__stribogLastLive.router) return liveNetwork(LIVE.__stribogLastLive, LIVE.__stribogLastLive.router, s, false, false);
+  const live = liveSession();
+  if (live?.router) return liveNetwork(live, live.router, s, false, false);
   const prev = LIVE.__stribogLastLive?.cache as Cached | undefined;
   if (!prev) return undefined;
   const p = withNotes(prev, notesFor(false).get());
-  return { ...p, meta: { ...p.meta, stale: true, error: "Nobody is signed in to Stribog right now, so this is the last picture it read." } };
+  return { ...p, meta: { ...p.meta, stale: true, error: "Nobody has signed in to Stribog since it last signed out or restarted, so this is the last picture it read." } };
 }
 
 function withNotes(c: Cached, notes: unknown): NetworkPayload {
@@ -279,8 +283,12 @@ async function readLive(session: Session, login: RouterLogin, s: Setup, prev: Ca
     if (touch) LIVE.__stribogLastLive = session;
     return withNotes(c, notesFor(false).get());
   } catch (err) {
-    // A changed password ends the session; anything else keeps the last picture, marked stale.
-    if (err instanceof AuthError) throw new SignedOutError("The router no longer accepts the password you signed in with.");
+    // A changed password ends the session (and the recording through it); anything else keeps
+    // the last picture, marked stale.
+    if (err instanceof AuthError) {
+      session.ended = true;
+      throw new SignedOutError("The router no longer accepts the password you signed in with.");
+    }
     const error = `Could not read the router: ${err instanceof Error ? err.message : String(err)}`;
     if (prev) {
       const p = withNotes(prev, notesFor(false).get());
