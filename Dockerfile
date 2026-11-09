@@ -20,11 +20,12 @@ ARG REVISION=dev
 LABEL org.opencontainers.image.title="Stribog" org.opencontainers.image.revision=$REVISION
 # A container cannot see the home network's gateway, so the router's address comes from the config.
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4517 STRIBOG_DATA=/data STRIBOG_CONFIG=/config/stribog.config.json STRIBOG_REVISION=$REVISION
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json ./
-COPY src ./src
-COPY fixtures/demo ./fixtures/demo
-COPY --from=build /app/dist ./dist
+# Owned by node so the image does not depend on the build host's umask (a checkout made with 077, say).
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node fixtures/demo ./fixtures/demo
+COPY --from=build --chown=node:node /app/dist ./dist
 RUN mkdir /data /config && chown node:node /data
 USER node
 EXPOSE 4517
