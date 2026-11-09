@@ -320,6 +320,15 @@ export class RouterOsRest {
     return this.call("POST", "/ping", { address, count: String(count) });
   }
 
+  /**
+   * Ask the router to check MikroTik's server for a newer RouterOS on its channel. Changes no
+   * settings and downloads nothing; afterwards `/system/package/update` has `latest-version`.
+   */
+  async checkForUpdates(): Promise<RosRecord | undefined> {
+    await this.call("POST", "/system/package/update/check-for-updates", {});
+    return (await this.get("/system/package/update"))[0];
+  }
+
   /** The router's DNS cache: names it resolved recently, to put names on addresses. */
   dnsCache(): Promise<RosRecord[]> {
     return this.get("/ip/dns/cache");

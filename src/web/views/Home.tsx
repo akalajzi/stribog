@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useInternet, type Finding, type NetworkPayload, type Severity } from "../api.ts";
 import { WHERE_TEXT } from "../../core/internet.ts";
+import { CHANGELOG_URL } from "../../core/updates.ts";
 import { fmtMinutes } from "../components/InternetHealth.tsx";
 import { STATUS_LABEL } from "../../core/analyze.ts";
 import { fmtBps } from "../../core/net.ts";
@@ -16,6 +17,8 @@ interface Alert {
   title: string;
   detail?: string;
   href: string;
+  /** Opens outside Stribog, in a new tab. */
+  external?: boolean;
 }
 
 /** RouterOS uptime ("1w2d3h4m5s") as its two largest parts: "1 w 2 d". */
@@ -60,6 +63,25 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
   // A pause is deliberate, but easy to forget: listed, without changing the status.
   for (const d of m.devices.filter((x) => x.paused))
     alerts.push({ key: `paused-${d.id}`, severity: "info", title: `${d.name}: internet paused`, detail: "It keeps the local network. Resume it on its page.", href: `#/device?d=${encodeURIComponent(d.id)}` });
+  // A newer RouterOS, as of the router's last check with MikroTik (Stribog asks it daily).
+  const up = m.updates;
+  if (up?.available)
+    alerts.push({
+      key: "routeros-update",
+      severity: "info",
+      title: `RouterOS ${up.latest} is out`,
+      detail: `Runs ${up.installed} (${up.channel}). Updating restarts the router, so read what changed first. Then: System → Packages in WinBox or WebFig.`,
+      href: CHANGELOG_URL,
+      external: true,
+    });
+  if (up?.firmware?.behind)
+    alerts.push({
+      key: "firmware",
+      severity: "info",
+      title: "The router's firmware is behind its RouterOS",
+      detail: `Firmware ${up.firmware.current}, RouterOS brings ${up.firmware.upgrade}. System → RouterBOARD → Upgrade, then restart the router.`,
+      href: `#/map?d=${encodeURIComponent(m.routerId ?? "")}`,
+    });
   for (const f of a.findings.filter((x) => !x.accepted && (x.severity === "critical" || x.severity === "warning")))
     alerts.push({ key: f.id, severity: f.severity, title: f.title, detail: f.summary, href: `#/?f=${encodeURIComponent(f.id)}` });
 
@@ -126,6 +148,7 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
               CPU{m.system?.memoryUsed !== undefined ? ` · memory ${m.system.memoryUsed}%` : ""}
             </span>
             <span className="faint">{[uptime(m.system?.uptime) && `up ${uptime(m.system?.uptime)}`, router?.version && `RouterOS ${router.version}`].filter(Boolean).join(" · ")}</span>
+            {up?.available && <span className="faint">RouterOS {up.latest} is out</span>}
           </a>
         </div>
 
@@ -133,7 +156,7 @@ export function Home({ data, focus, onShow }: { data: NetworkPayload; focus?: st
         {alerts.length ? (
           <div className="card home-alerts">
             {alerts.map((x) => (
-              <a key={x.key} href={x.href} className="home-alert">
+              <a key={x.key} href={x.href} className="home-alert" {...(x.external ? { target: "_blank", rel: "noreferrer" } : {})}>
                 <span className="dot" style={{ background: SEV_VAR[x.severity], boxShadow: "none" }} />
                 <span>
                   <b>{x.title}</b>

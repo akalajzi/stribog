@@ -19,6 +19,7 @@ import {
   type Band,
 } from "./net.ts";
 import { pausesIn } from "./pause.ts";
+import { updatesOf, type Updates } from "./updates.ts";
 import {
   enabled,
   isTrue,
@@ -249,6 +250,8 @@ export interface NetworkModel {
   firewall?: { filter: FwRule[]; nat: FwRule[] };
   /** The router's own load, from /system/resource (live reads only). */
   system?: { cpuLoad?: number; uptime?: string; memoryUsed?: number };
+  /** RouterOS and firmware versions of the router, and whether newer ones are out. */
+  updates?: Updates;
 }
 
 export interface Service {
@@ -951,6 +954,14 @@ export function buildModel(snap: Snapshot, opts: { vendors?: VendorRegistry } = 
     planned: ov.planned ?? [],
     services: servicesOf(cfg),
     system: systemOf(stateMenu("/system/resource")[0]),
+    // A live read has the versions in the menu itself; files can carry them as state.
+    updates: routerSnap
+      ? updatesOf(
+          stateMenu("/system/package/update")[0] ?? menu(cfg, "/system/package/update")[0],
+          stateMenu("/system/routerboard")[0],
+          devices.get("router")?.version,
+        )
+      : undefined,
     // Dynamic rules (the live fasttrack counter, UPnP) are not part of the configuration.
     firewall: cfg
       ? { filter: menu(cfg, "/ip/firewall/filter").filter((r) => !isTrue(r.dynamic)).map(fwRule), nat: menu(cfg, "/ip/firewall/nat").filter((r) => !isTrue(r.dynamic)).map(fwRule) }

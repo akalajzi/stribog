@@ -82,7 +82,7 @@ function buildServer(ctx: McpContext): McpServer {
 
   server.registerTool(
     "get_network_overview",
-    { title: "Network overview", description: "The network at a glance: router, internet connection, networks and DHCP, Wi-Fi names, access points, device counts, the review's status, and how fresh the data is.", annotations: read },
+    { title: "Network overview", description: "The network at a glance: router (with whether a newer RouterOS or firmware is out, as of the router's last daily check), internet connection, networks and DHCP, Wi-Fi names, access points, device counts, the review's status, and how fresh the data is.", annotations: read },
     guard(async () => json(overview(await network(), ctx.notes.get().notes))),
   );
 
@@ -358,7 +358,7 @@ function overview(p: NetworkPayload, networkNotes?: string) {
   return {
     site: m.site,
     data: { mode: meta.mode, readAt: meta.refreshedAt, stale: meta.stale ?? false, note: meta.error },
-    router: router && { name: router.name, model: router.model, version: router.version, ip: router.ip },
+    router: router && { name: router.name, model: router.model, version: router.version, ip: router.ip, updates: m.updates },
     internet: { type: m.wan.type, address: m.wan.address, gateway: m.wan.gateway, doubleNat: m.wan.doubleNat, upstream: m.devices.find((d) => d.id === "upstream")?.name },
     networks: m.networks.map((n) => ({ id: n.id, label: n.label, role: n.role, cidr: n.cidr, vlan: n.vlan, dhcp: n.dhcp && { pool: n.dhcp.pool, dns: n.dhcp.dns }, wifi: n.ssids })),
     wifi: m.ssids.map((s) => ({ ssid: s.name, bands: s.bands, network: s.network, clients: s.clients })),

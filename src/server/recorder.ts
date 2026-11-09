@@ -10,11 +10,13 @@ import type { RosRecord } from "../core/ros.ts";
 import { HistoryStore } from "./history.ts";
 import { ratesNow, setRates } from "./rates.ts";
 import { recentNames, withNames } from "./adguard.ts";
-import { getNetworkForAgent, liveSession, setup, snapshotOf, type NetworkPayload } from "./provider.ts";
+import { getNetworkForAgent, liveSession, routerChanged, setup, snapshotOf, type NetworkPayload } from "./provider.ts";
 import { PINGS, PUBLIC_TARGETS, pingResult, sampleOf, type NetSample } from "../core/internet.ts";
 import { join } from "node:path";
 
 const EVERY_MS = 60_000;
+/** How often the router is asked to check for a newer RouterOS. */
+const UPDATE_CHECK_MS = 24 * 3600_000;
 
 interface State {
   timer: ReturnType<typeof setInterval>;
@@ -24,6 +26,7 @@ interface State {
   lastTick?: number;
   /** Per gateway address: did it answer pings while the internet worked (some provider boxes never do). */
   gatewayAnswers: Map<string, boolean>;
+  lastUpdateCheck?: number;
 }
 
 // On globalThis so Vite's module reloads in development keep one recorder, not one per reload.
@@ -67,6 +70,12 @@ export async function tick(now = Date.now()) {
     checkInternet(rest, payload, st.gatewayAnswers, now).catch(() => undefined),
   ]);
   if (net) store.appendInternet(net);
+  // Once a day (and soon after Stribog starts), the router checks for a newer RouterOS.
+  if (!st.lastUpdateCheck || now - st.lastUpdateCheck > UPDATE_CHECK_MS) {
+    st.lastUpdateCheck = now;
+    const pkg = await rest.checkForUpdates().catch(() => undefined);
+    if (pkg) routerChanged(session, { "/system/package/update": [pkg] });
+  }
   const moved = deltas(conns, st.prev);
   const names = namesByAddress(dns);
   // Names each device was given by AdGuard Home, when connected: the router never sees those lookups.
