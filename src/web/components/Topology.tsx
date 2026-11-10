@@ -334,7 +334,7 @@ function SelectRing({ r, wide }: { r: number; wide?: boolean }) {
 }
 
 /** How busy a link is, 0 (idle, under 2 kb/s) to 1 (1 Gb/s and up), on a log scale. */
-const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
+export const level = (bps?: number) => (!bps || bps < 2000 ? 0 : Math.min(1, (Math.log10(bps) - 3.3) / 5.7));
 
 /** "↓ 48 Mb/s ↑ 2.1 Mb/s" once a link carries at least 1 Mb/s, else nothing. */
 /** The map's bounds with room for the owners box above the Internet node. */
@@ -444,7 +444,7 @@ function busy(l: { down?: number; up?: number }): string {
  * busy as a short one carrying the same traffic. Light dots travel away from the router (down),
  * dots in the link's colour come back (up).
  */
-function Flow({ pathId, len, down, up, color }: { pathId: string; len: number; down?: number; up?: number; color: string }) {
+export function Flow({ pathId, len, down, up, color, size = 1 }: { pathId: string; len: number; down?: number; up?: number; color: string; /** Dot size, for a drawing whose units are not pixels. */ size?: number }) {
   const dots = (bps: number | undefined, back: boolean) => {
     const t = level(bps);
     if (!t) return null;
@@ -453,7 +453,7 @@ function Flow({ pathId, len, down, up, color }: { pathId: string; len: number; d
     const dur = Math.max(0.6, len / speed);
     const n = Math.max(1, Math.min(24, Math.round(len / gap)));
     return Array.from({ length: n }, (_, k) => (
-      <circle key={`${back}${k}`} r={back ? 2 : 2.4} fill={back ? color : "var(--tx-1)"} opacity={0.9}>
+      <circle key={`${back}${k}`} r={(back ? 2 : 2.4) * size} fill={back ? color : "var(--tx-1)"} opacity={0.9}>
         <animateMotion dur={`${dur.toFixed(2)}s`} begin={`-${((k * dur) / n).toFixed(2)}s`} repeatCount="indefinite" {...(back ? { keyPoints: "1;0", keyTimes: "0;1", calcMode: "linear" } : {})}>
           <mpath href={`#${pathId}`} />
         </animateMotion>

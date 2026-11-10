@@ -1,0 +1,37 @@
+/* The world map: land is quiet; size, dots and their motion are the traffic. */
+.world { position: absolute; inset: 0; }
+:root[data-theme="light"] .world { --world-land: var(--ink-4); }
+.world-map { position: absolute; left: 0; top: 0; bottom: 0; overflow: hidden; cursor: grab; touch-action: none; }
+.world-map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.world .land { fill: var(--world-land, var(--ink-3)); stroke: var(--hair-2); stroke-width: .6px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.world .arc { fill: none; stroke: var(--hair-3); vector-effect: non-scaling-stroke; }
+.world .place { cursor: pointer; transition: opacity .3s; }
+.world .place.dim { opacity: .3; }
+.world .place .dot { fill: var(--tx-1); }
+.world .place.earlier .dot { fill: none; stroke: var(--tx-3); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.world .place.earlier .arc { stroke: var(--hair-2); stroke-dasharray: 3 4; }
+.world .place .hit { fill: transparent; }
+.world .place .ring { fill: none; stroke: var(--tx-1); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.world .place:hover .lab { fill: var(--fg); }
+.world .lab { fill: var(--tx-2); font-family: var(--sans); font-weight: 500; paint-order: stroke; stroke: var(--ink-0); stroke-width: 3px; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.world .home-ring { fill: none; stroke: var(--tx-1); stroke-width: 1.4px; vector-effect: non-scaling-stroke; }
+.world .home-dot { fill: var(--tx-1); }
+.world .home-lab { fill: var(--tx-1); font-weight: 650; }
+.world-ctl { position: absolute; top: 16px; left: 18px; }
+.world-legend { max-width: min(640px, calc(100% - 36px)); font-size: 12px; }
+.world-legend a { pointer-events: auto; color: var(--tx-2); }
+.world-side { position: absolute; top: 0; right: 0; bottom: 0; width: var(--side-w); }
+.world-side h2 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+.world-side p { margin: 0; }
+.wl { display: flex; flex-direction: column; gap: 2px; }
+.wl-row { display: grid; grid-template-columns: minmax(0, 1fr) 56px 70px 60px; gap: 10px; align-items: center; padding: 7px 8px; margin: 0 -8px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.wl-row:hover { background: var(--ink-3); }
+.wl-row.on { background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.wl-row b { color: var(--tx-1); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-row.earlier b { color: var(--tx-3); font-weight: 500; }
+.wl-ago { grid-column: span 2; text-align: right; color: var(--tx-3); font-size: 11px; }
+.world-details .sec-title { margin-top: 6px; }
+.world-details .kv { grid-template-columns: 96px 1fr; }
+.world-details .kv a { color: var(--tx-1); }
+.world-details p { margin-top: 10px; }
+.world-map.drag { cursor: grabbing; }

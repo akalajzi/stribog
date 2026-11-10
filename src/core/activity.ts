@@ -201,32 +201,87 @@ export interface OwnerNow {
   connections: number;
 }
 
+type OwnerOf = (ip: string) => { asn: number; name: string; country?: string } | undefined;
+
+/** Every device's internet flows that moved something in `moved`. */
+function* internetFlows(moved: RosRecord[], m: NetworkModel): Generator<{ device: NetworkModel["devices"][number]; flow: Flow }> {
+  const none = new Map<string, string[]>();
+  for (const device of m.devices)
+    for (const l of connectionsOf(device)) {
+      if (!l.ip) continue;
+      for (const flow of flowsFor(l.ip, moved, none, m)) if (flow.scope === "internet" && flow.down + flow.up > 0) yield { device, flow };
+    }
+}
+
+/** Bytes per key, as bits per second, busiest first. */
+const tally = () => {
+  const by = new Map<string, { name: string; bytes: number }>();
+  return {
+    add: (key: string, name: string, bytes: number) => {
+      const x = by.get(key) ?? { name, bytes: 0 };
+      x.bytes += bytes;
+      by.set(key, x);
+    },
+    rates: (seconds: number) => [...by].sort(([, a], [, b]) => b.bytes - a.bytes).map(([key, x]) => ({ key, name: x.name, bps: Math.round((x.bytes * 8) / seconds) })),
+  };
+};
+
 /**
  * The whole network's internet traffic by who runs the other end, as rates: `moved` is what each
  * connection carried in the last `seconds` (see the recorder's deltas).
  */
-export function networkByOwner(moved: RosRecord[], seconds: number, m: NetworkModel, ownerOf: (ip: string) => { asn: number; name: string; country?: string } | undefined): OwnerNow[] {
-  const groups = new Map<string, OwnerNow & { by: Map<string, { id: string; name: string; bytes: number }> }>();
-  const none = new Map<string, string[]>();
-  for (const d of m.devices) {
-    for (const l of connectionsOf(d)) {
-      if (!l.ip) continue;
-      for (const f of flowsFor(l.ip, moved, none, m)) {
-        if (f.scope !== "internet" || f.down + f.up === 0) continue;
-        const o = ownerOf(f.remote);
-        const name = o?.name ?? "Unknown network";
-        let g = groups.get(name);
-        if (!g) groups.set(name, (g = { name, asn: o?.asn, country: o?.country, downBps: 0, upBps: 0, devices: [], connections: 0, by: new Map() }));
-        g.downBps += (f.down * 8) / seconds;
-        g.upBps += (f.up * 8) / seconds;
-        g.connections += f.connections;
-        const who = g.by.get(d.id) ?? { id: d.id, name: d.name, bytes: 0 };
-        who.bytes += f.down + f.up;
-        g.by.set(d.id, who);
-      }
-    }
+export function networkByOwner(moved: RosRecord[], seconds: number, m: NetworkModel, ownerOf: OwnerOf): OwnerNow[] {
+  const groups = new Map<string, OwnerNow & { by: ReturnType<typeof tally> }>();
+  for (const { device: d, flow: f } of internetFlows(moved, m)) {
+    const o = ownerOf(f.remote);
+    const name = o?.name ?? "Unknown network";
+    let g = groups.get(name);
+    if (!g) groups.set(name, (g = { name, asn: o?.asn, country: o?.country, downBps: 0, upBps: 0, devices: [], connections: 0, by: tally() }));
+    g.downBps += (f.down * 8) / seconds;
+    g.upBps += (f.up * 8) / seconds;
+    g.connections += f.connections;
+    g.by.add(d.id, d.name, f.down + f.up);
   }
   return [...groups.values()]
-    .map(({ by, ...g }) => ({ ...g, downBps: Math.round(g.downBps), upBps: Math.round(g.upBps), devices: [...by.values()].sort((a, b) => b.bytes - a.bytes).map((x) => ({ id: x.id, name: x.name, bps: Math.round((x.bytes * 8) / seconds) })) }))
+    .map(({ by, ...g }) => ({ ...g, downBps: Math.round(g.downBps), upBps: Math.round(g.upBps), devices: by.rates(seconds).map((x) => ({ id: x.key, name: x.name, bps: x.bps })) }))
+    .sort((a, b) => b.downBps + b.upBps - (a.downBps + a.upBps));
+}
+
+/** Traffic to one country from the whole home right now: who runs the other ends there, and who in the home talks to them. */
+export interface PlaceNow {
+  /** ISO 3166 alpha-2, from a geolocation database (a guess, not router data); absent when it does not know the addresses. */
+  country?: string;
+  downBps: number;
+  upBps: number;
+  connections: number;
+  /** Network owners there, busiest first. */
+  owners: { name: string; bps: number }[];
+  /** Devices talking to it, busiest first. */
+  devices: { id: string; name: string; bps: number }[];
+}
+
+/** The whole network's internet traffic by the country of the other end, as rates (see networkByOwner). */
+export function networkByPlace(moved: RosRecord[], seconds: number, m: NetworkModel, placeOf: (ip: string) => string | undefined, ownerOf: OwnerOf): PlaceNow[] {
+  const groups = new Map<string, PlaceNow & { by: ReturnType<typeof tally>; who: ReturnType<typeof tally> }>();
+  for (const { device: d, flow: f } of internetFlows(moved, m)) {
+    const country = placeOf(f.remote);
+    const key = country ?? "";
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { country, downBps: 0, upBps: 0, connections: 0, owners: [], devices: [], by: tally(), who: tally() }));
+    g.downBps += (f.down * 8) / seconds;
+    g.upBps += (f.up * 8) / seconds;
+    g.connections += f.connections;
+    g.by.add(d.id, d.name, f.down + f.up);
+    const owner = ownerOf(f.remote)?.name ?? "Unknown network";
+    g.who.add(owner, owner, f.down + f.up);
+  }
+  return [...groups.values()]
+    .map(({ by, who, ...g }) => ({
+      ...g,
+      downBps: Math.round(g.downBps),
+      upBps: Math.round(g.upBps),
+      devices: by.rates(seconds).map((x) => ({ id: x.key, name: x.name, bps: x.bps })),
+      owners: who.rates(seconds).map((x) => ({ name: x.name, bps: x.bps })),
+    }))
     .sort((a, b) => b.downBps + b.upBps - (a.downBps + a.upBps));
 }

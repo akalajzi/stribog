@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { useLiveRates, useNetwork, useRoute, useSession, type Finding, type NetworkPayload, type SessionInfo } from "./api.ts";
 import { Logo } from "./components/Logo.tsx";
 import { Login } from "./views/Login.tsx";
@@ -13,9 +13,12 @@ import { ClientsView } from "./views/ClientsView.tsx";
 import { NetworkView } from "./views/NetworkView.tsx";
 import { PlanView } from "./views/PlanView.tsx";
 import { ChangeView } from "./views/ChangeView.tsx";
+// The world outline is about 110 KB: loaded when the page is opened.
+const WorldView = lazy(() => import("./views/WorldView.tsx").then((m) => ({ default: m.WorldView })));
 
 const NAV: { path: string; label: string; icon: ReactNode }[] = [
   { path: "/", label: "Home", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11 12 4l8 7" /><path d="M6 9.5V20h12V9.5" /><path d="M10 20v-5h4v5" /></svg> },
+  { path: "/world", label: "World", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.6 2.6 3.6 5.4 3.6 8.5s-1 5.9-3.6 8.5c-2.6-2.6-3.6-5.4-3.6-8.5s1-5.9 3.6-8.5z" /></svg> },
   { path: "/map", label: "Topology", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="5" r="2.2" /><circle cx="5" cy="18" r="2.2" /><circle cx="19" cy="18" r="2.2" /><circle cx="12" cy="13" r="2.2" /><path d="M12 7.2v3.6M10.3 14.5l-3.6 2.2M13.7 14.5l3.6 2.2" /></svg> },
   { path: "/wifi", label: "Wi-Fi", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 9.5a13 13 0 0 1 18 0M6 13a8 8 0 0 1 12 0M9 16.5a3.5 3.5 0 0 1 6 0" /><circle cx="12" cy="19.5" r=".8" fill="currentColor" /></svg> },
   { path: "/clients", label: "Clients", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="13" height="10" rx="1.5" /><rect x="15.5" y="9" width="5.5" height="10" rx="1.3" /><path d="M6 19h7" /></svg> },
@@ -98,6 +101,10 @@ function Shell({ session, onSignOut, onSignedOut }: { session: SessionInfo; onSi
         <PendingBar />
         {path === "/map" ? (
           <MapView data={fresh!} selected={params.get("d") || undefined} highlight={params.get("hl")?.split(",").filter(Boolean)} go={go} onNotesSaved={refetch} />
+        ) : path === "/world" ? (
+          <Suspense fallback={<div className="loading"><span className="pulse">Drawing the world…</span></div>}>
+            <WorldView data={data} selected={params.get("c") || undefined} onSelect={(c) => go("/world", c ? { c } : {})} onDevice={(id) => go("/map", { d: id })} />
+          </Suspense>
         ) : path === "/wifi" ? (
           <WifiView data={data} focus={params.get("f") ?? undefined} tab={(["setup", "review"] as const).find((t) => t === params.get("t")) ?? "overview"} onTab={(t) => go("/wifi", t === "overview" ? {} : { t })} onSelect={(id) => go("/map", { d: id })} />
         ) : path === "/clients" ? (

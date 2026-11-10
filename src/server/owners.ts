@@ -4,11 +4,12 @@
 // - reverse DNS through the system's own resolver, which already sees every name lookup;
 // - RDAP (registry "whois"), only when someone asks about one address.
 
-import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import { promises as dns } from "node:dns";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { createGunzip } from "node:zlib";
+import { fetchGzip, keptDb, keptDbReady, type Downloaded } from "./downloads.ts";
 
 export interface Owner {
   asn: number;
@@ -22,7 +23,8 @@ export interface Owner {
 export const ASN_URL = "https://iptoasn.com/data/ip2asn-v4.tsv.gz";
 const REFRESH_MS = 7 * 86_400_000;
 
-const ipNum = (ip: string) => {
+/** An IPv4 address as a number; undefined for anything else. */
+export const ipNum = (ip: string) => {
   const p = ip.split(".").map(Number);
   return p.length === 4 && p.every((x) => x >= 0 && x <= 255) ? ((p[0]! << 24) >>> 0) + (p[1]! << 16) + (p[2]! << 8) + p[3]! : undefined;
 };
@@ -91,54 +93,22 @@ export class AsnDb {
 
 // ---- the database on disk ---------------------------------------------------------
 
-const G = globalThis as { __stribogAsn?: { path: string; db?: AsnDb; loading?: Promise<void>; fetching?: Promise<void> } };
+const asnFile = (dataDir: string): Downloaded<AsnDb> => ({
+  key: "asn",
+  path: join(dataDir, "asn", "ip2asn-v4.tsv.gz"),
+  refreshMs: REFRESH_MS,
+  download: (f) => fetchGzip(ASN_URL, f, "ASN database"),
+  load: AsnDb.load,
+});
 
 /**
  * The ASN database, if it is ready. Starts loading it from the data directory, and downloading
  * it when it is missing or older than a week; until then callers go without owners.
  */
-export function asnDb(dataDir: string, fetchImpl: typeof fetch = fetch): AsnDb | undefined {
-  const path = join(dataDir, "asn", "ip2asn-v4.tsv.gz");
-  const st = (G.__stribogAsn ??= { path });
-  if (st.path !== path) G.__stribogAsn = { path };
-  const s = G.__stribogAsn!;
-  const fresh = existsSync(path) && Date.now() - statSync(path).mtimeMs < REFRESH_MS;
-  // STRIBOG_NO_DOWNLOADS=1 keeps Stribog off the internet (tests, air-gapped setups); a database already on disk still works.
-  if (!fresh && !s.fetching && (!process.env.STRIBOG_NO_DOWNLOADS || fetchImpl !== fetch))
-    s.fetching = download(path, fetchImpl)
-      .then(() => {
-        s.db = undefined;
-        s.loading = undefined;
-      })
-      .catch(() => {})
-      .finally(() => (s.fetching = undefined));
-  if (!s.db && !s.loading && existsSync(path))
-    s.loading = AsnDb.load(path)
-      .then((db) => void (s.db = db))
-      .catch(() => {})
-      .finally(() => (s.loading = undefined));
-  return s.db;
-}
+export const asnDb = (dataDir: string, fetchImpl?: typeof fetch): AsnDb | undefined => keptDb(asnFile(dataDir), fetchImpl);
 
 /** Wait for a load or download in progress (tests, the first lookup after start). */
-export async function asnReady(dataDir: string, fetchImpl?: typeof fetch): Promise<AsnDb | undefined> {
-  asnDb(dataDir, fetchImpl);
-  await G.__stribogAsn?.fetching;
-  asnDb(dataDir, fetchImpl);
-  await G.__stribogAsn?.loading;
-  return G.__stribogAsn?.db;
-}
-
-async function download(path: string, fetchImpl: typeof fetch) {
-  const res = await fetchImpl(ASN_URL);
-  if (!res.ok) throw new Error(`ASN database: HTTP ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length < 20 || buf[0] !== 0x1f || buf[1] !== 0x8b) throw new Error("ASN database: not a gzip file");
-  mkdirSync(join(path, ".."), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, buf, { mode: 0o600 });
-  renameSync(tmp, path);
-}
+export const asnReady = (dataDir: string, fetchImpl?: typeof fetch): Promise<AsnDb | undefined> => keptDbReady(asnFile(dataDir), fetchImpl);
 
 // ---- reverse DNS -----------------------------------------------------------------
 
