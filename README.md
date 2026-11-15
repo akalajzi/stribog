@@ -4,12 +4,9 @@
 
 Stribog signs in to your RouterOS router with the same user and password as WinBox or WebFig and shows, in plain English, what is on your network, where it is connected, how the internet is doing and what in the setup is worth fixing. It changes nothing on the router unless you ask it to and confirm.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/hero.jpg">
-  <img src="docs/screenshots/light/hero.jpg" alt="The demo network's map: the internet, the router, a NAS whose cable is full (in red), two access points and their Wi-Fi devices, with live traffic moving along the links">
-</picture>
+![The demo network's map: the internet, the router, a NAS whose cable is full (in red), two access points and their Wi-Fi devices, with live traffic moving along the links](docs/screenshots/light/hero.jpg)
 
-<sub>All screenshots show the built-in demo network, "Maple Street". It is fictional: try it without a router. Stribog has a light and a dark theme; the screenshots follow yours.</sub>
+<sub>All screenshots show the built-in demo network, "Maple Street". It is fictional: try it without a router. Stribog has a light and a dark theme; the screenshots below follow yours.</sub>
 
 ```sh
 pnpm install && pnpm dev    # open http://127.0.0.1:4517 and pick "Explore the demo network"
