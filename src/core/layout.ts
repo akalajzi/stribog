@@ -299,7 +299,8 @@ export function layoutTopology(m: NetworkModel): Layout {
   const xs = nodes.map((n) => n.x);
   const ys = nodes.map((n) => n.y);
   const pad = 60;
-  const x0 = Math.min(...xs, ...zones.map((z) => z.x)) - pad;
+  // Labels and service pills are centred on a node, so the leftmost one needs room too.
+  const x0 = Math.min(...xs, ...zones.map((z) => z.x)) - pad - 60;
   const x1 = Math.max(...xs, ...zones.map((z) => z.x + z.w)) + pad + 120;
   const y0 = Math.min(...ys) - 90;
   const y1 = Math.max(...ys) + 120;
