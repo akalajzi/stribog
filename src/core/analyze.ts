@@ -452,16 +452,15 @@ const wpa2Only: Rule = ({ m }) => {
 
 const roaming: Rule = ({ m }) => {
   const aps = m.devices.filter((d) => d.kind === "ap" && d.managed);
-  const plannedAps = m.planned.filter((p) => p.kind === "ap");
   const noFt = m.ssids.filter((s) => !s.ft);
   if (!noFt.length) return { id: "wifi-ft-on", severity: "pass", category: "wifi", title: "Fast roaming (802.11r) is enabled", summary: "Devices can move between access points without a full re-authentication." };
-  if (aps.length + plannedAps.length < 2) return undefined;
+  if (aps.length < 2) return undefined;
   return {
     id: "wifi-ft-off",
     severity: "suggestion",
     category: "wifi",
-    title: aps.length >= 2 ? "Fast roaming is off with several access points" : "Turn on fast roaming when the second access point arrives",
-    summary: `With ${aps.length >= 2 ? `${aps.length} access points` : "a second access point planned"}, phones and laptops will hand over between them. Without 802.11r each move is a full reconnect, which drops calls and video for a moment.`,
+    title: "Fast roaming is off with several access points",
+    summary: `With ${aps.length} access points, phones and laptops will hand over between them. Without 802.11r each move is a full reconnect, which drops calls and video for a moment.`,
     detail: ["Enable FT per SSID and test with every important device; a few older clients misbehave with FT and can stay on a separate SSID."],
     evidence: noFt.map((s) => `${s.name}: ft=no`),
   };
@@ -470,7 +469,6 @@ const roaming: Rule = ({ m }) => {
 const fiveGhzPlan: Rule = ({ m }) => {
   const r5 = m.radios.filter((r) => r.band === "5");
   if (!r5.length) return undefined;
-  const plannedAps = m.planned.filter((p) => p.kind === "ap").length;
   const aps = new Set(r5.map((r) => r.apId)).size;
   const sample = r5[0]!;
   // Every access point can have its own channel plan: count what all of them allow together.
@@ -479,10 +477,10 @@ const fiveGhzPlan: Rule = ({ m }) => {
   const blocks = freqs.length ? Math.max(1, Math.floor(freqs.length / (width / 20))) : 0;
   const out: Finding[] = [];
   if (sample.current && !sample.current.dfs) out.push({ id: "wifi-5-non-dfs", severity: "pass", category: "wifi", title: "5 GHz avoids radar channels", summary: `Channel ${sample.current.channel} at ${sample.current.width} MHz needs no radar checks, so it never goes silent for a minute to listen for radar.` });
-  if (freqs.length && blocks < aps + plannedAps && aps + plannedAps >= 2) {
+  if (freqs.length && blocks < aps && aps >= 2) {
     out.push({
       id: "wifi-5-one-block",
-      severity: aps >= 2 ? "warning" : "suggestion",
+      severity: "warning",
       category: "wifi",
       title: "Only one 5 GHz channel is available for two access points",
       summary: `The channel plans allow ${freqs.join(", ")} MHz at ${width} MHz width${sample.plan?.skipDfs ? " and skip radar (DFS) channels" : ""}. That is room for ${plural(blocks, `${width} MHz block`)}, so access points share one and slow each other down where they overlap.`,
@@ -754,23 +752,6 @@ const segmentation: Rule = ({ m }) => {
 // ---------------------------------------------------------------------------
 // Ports & power
 
-const plannedPorts: Rule = ({ m }) => {
-  const out: Finding[] = [];
-  for (const p of m.planned) {
-    const port = m.ports.find((x) => x.name === p.port);
-    if (!port) continue;
-    if (p.kind === "ap" && port.poe === "off")
-      out.push({
-        id: `planned-poe-${p.id}`,
-        severity: "suggestion",
-        category: "hardware",
-        title: `PoE is off on ${port.name}, where ${p.name} is planned`,
-        summary: `${p.name} would need its own power adapter on ${port.name}${port.comment ? ` (“${port.comment}”)` : ""}. Turn PoE on for that port before plugging it in.`,
-      });
-  }
-  return out;
-};
-
 const hwOffload: Rule = ({ m }) => {
   const lanPorts = m.ports.filter((p) => p.zone === "lan" && p.bridge);
   if (!lanPorts.length) return undefined;
@@ -830,7 +811,6 @@ const RULES: Rule[] = [
   identity,
   backups,
   updateChannels,
-  plannedPorts,
   linkSpeeds,
   unboundReservations,
   legacyCompat,

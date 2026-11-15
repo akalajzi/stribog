@@ -437,7 +437,6 @@ function PortPanel({ ports, data, onSelect }: { ports: Port[]; data: NetworkPayl
       <div className="nv-ports">
         {ports.map((p) => {
           const col = speedColor(p);
-          const planned = p.planned ? model.planned.find((x) => x.id === p.planned) : undefined;
           const up = p.zone === "upstream";
           const linkText = p.running === false ? "no link" : p.speedMbps !== undefined ? fmtSpeed(p.speedMbps) : p.running ? "link" : model.hasState ? "no link" : "";
           return (
@@ -463,11 +462,6 @@ function PortPanel({ ports, data, onSelect }: { ports: Port[]; data: NetworkPayl
                     </button>
                   ) : null;
                 })}
-                {planned && !p.deviceIds.length && (
-                  <span className="nv-pd planned" title={planned.note}>
-                    <Glyph kind={planned.kind} size={12} color={COLORS.w5} />{planned.name}
-                  </span>
-                )}
               </div>
             </div>
           );
@@ -478,7 +472,6 @@ function PortPanel({ ports, data, onSelect }: { ports: Port[]; data: NetworkPayl
         <span><i style={{ background: COLORS.g1 }} />1G</span>
         <span><i style={{ background: COLORS.warn }} />slower than 1G</span>
         <span><i style={{ background: COLORS.up }} />to the ISP</span>
-        <span><i style={{ border: `1px dashed ${COLORS.w5}`, background: "transparent" }} />planned</span>
         {totalPoe > 0 && <span style={{ marginLeft: "auto" }}>PoE out <b className="mono" style={{ color: "var(--tx-2)" }}>{+totalPoe.toFixed(1)} W</b></span>}
         {!model.hasState && <span style={{ marginLeft: "auto" }}>Link speeds need a live connection</span>}
       </div>

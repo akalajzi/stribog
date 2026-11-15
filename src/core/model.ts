@@ -31,7 +31,6 @@ import {
   type DeviceSnapshot,
   type NetworkRole,
   type Notes,
-  type PlannedDevice,
   type RosConfig,
   type RosRecord,
   type ServiceNote,
@@ -79,7 +78,7 @@ export interface Device {
   leaseComment?: string;
   network?: string;
   zone: "internet" | "upstream" | "lan";
-  status: "online" | "offline" | "unknown" | "planned";
+  status: "online" | "offline" | "unknown";
   managed?: boolean;
   parent?: string;
   via?: Connection;
@@ -118,7 +117,7 @@ export function linkCounters(m: Pick<NetworkModel, "routerId" | "ports">, l: Pic
   return port.txBps !== undefined || port.rxBps !== undefined ? { downBps: port.txBps, upBps: port.rxBps } : undefined;
 }
 
-/** A device's connections: its links, or the one it has. Devices without a MAC (the router's own view of itself, planned ones) have none. */
+/** A device's connections: its links, or the one it has. Devices without a MAC (the router's own view of itself) have none. */
 export function connectionsOf(d: Device): DeviceLink[] {
   if (d.links) return d.links;
   if (!d.mac) return [];
@@ -167,7 +166,6 @@ export interface Port {
   running?: boolean;
   hwOffload?: boolean;
   deviceIds: string[];
-  planned?: string;
   kind: "ethernet" | "sfp";
 }
 
@@ -245,7 +243,6 @@ export interface NetworkModel {
   ssids: Ssid[];
   radios: Radio[];
   wan: Wan;
-  planned: PlannedDevice[];
   /** The router's time zone (/system/clock), when it reports one. */
   timezone?: string;
   /** Management services (/ip service), defaults filled in. */
@@ -928,10 +925,6 @@ export function buildModel(snap: Snapshot, opts: { vendors?: VendorRegistry } = 
   const upstreamPort = portByName(upstreamPortName);
   if (upstreamPort && devices.has("upstream")) upstreamPort.deviceIds.unshift("upstream");
   if (routerId && devices.get(routerId)?.via && upstreamPort) devices.get(routerId)!.via!.port = upstreamPort.name;
-  for (const pd of ov.planned ?? []) {
-    const p = portByName(pd.port);
-    if (p) p.planned = pd.id;
-  }
 
   // Devices whose internet Stribog paused: its rules carry the MAC in their comment.
   const pauses = pausesIn(menu(cfg, "/ip/firewall/filter"));
@@ -955,7 +948,6 @@ export function buildModel(snap: Snapshot, opts: { vendors?: VendorRegistry } = 
     ssids: [...ssids.values()],
     radios,
     wan,
-    planned: ov.planned ?? [],
     services: servicesOf(cfg),
     system: systemOf(stateMenu("/system/resource")[0]),
     // A live read has the versions in the menu itself; files can carry them as state.

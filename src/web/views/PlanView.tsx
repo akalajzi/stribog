@@ -59,7 +59,7 @@ function initialOptions(data: NetworkPayload, preset: SetupPreset): SetupOptions
   const up = model.ports.find((p) => p.deviceIds.includes("upstream"));
   if (up) o.wan.port = up.defaultName;
   const apIds = new Set(model.devices.filter((d) => d.kind === "ap").map((d) => d.id));
-  o.apPorts = model.ports.filter((p) => p.deviceIds.some((id) => apIds.has(id)) || (p.planned && model.planned.find((x) => x.id === p.planned)?.kind === "ap")).map((p) => p.defaultName).filter((p) => p !== o.wan.port);
+  o.apPorts = model.ports.filter((p) => p.deviceIds.some((id) => apIds.has(id))).map((p) => p.defaultName).filter((p) => p !== o.wan.port);
   const country = model.ssids.find((s) => s.country)?.country;
   if (country) o.wifi.country = country;
   if (model.timezone && model.timezone !== "manual") o.timezone = model.timezone;

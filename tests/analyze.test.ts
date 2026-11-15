@@ -60,7 +60,6 @@ describe("analyze: demo network", () => {
       "svc-unrestricted": "suggestion",
       "seg-flat-network": "suggestion",
       "update-channels-differ": "suggestion",
-      "planned-poe-garden-ap": "suggestion",
       "port-slow-ether4": "suggestion",
       "wifi-24-expected-00:00:5E:00:53:40": "info",
       "wifi-24-expected-00:00:5E:00:53:41": "info",

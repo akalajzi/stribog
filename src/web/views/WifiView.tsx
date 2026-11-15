@@ -2,27 +2,22 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } fro
 import { isOpen } from "../../core/analyze.ts";
 import type { Device, Finding, NetworkPayload, Radio, Severity } from "../api.ts";
 import type { Band } from "../../core/net.ts";
-import { isDfs } from "../../core/net.ts";
 import { connectionViews } from "../../core/model.ts";
-import { FindingCard, SEV_VAR } from "../components/FindingCard.tsx";
+import { FindingCard } from "../components/FindingCard.tsx";
 import { Glyph, bandColor } from "../components/DeviceArt.tsx";
 import { WifiNetworkForm } from "../components/WifiNetworkForm.tsx";
 import {
   AXIS,
   BAND_LABEL,
-  blockIsDfs,
   blockSpan,
   planBlocks,
   planChannels,
   planMaxWidth,
-  placePlanned,
   radioBlock,
   securityLabel,
-  shared,
   signalWord,
   SIGNAL_ZONES,
   type Block,
-  type Placement,
 } from "./spectrum.ts";
 import "./wifi.css";
 
@@ -61,10 +56,8 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
   }, [tab, focus]);
   const { model, analysis } = data;
   const aps = model.devices.filter((d) => d.kind === "ap" || model.radios.some((r) => r.apId === d.id));
-  const plannedAps = model.planned.filter((p) => p.kind === "ap");
   const clients = connectionViews(model.devices).filter((d) => d.via?.kind === "wifi" && d.status !== "offline");
-  const placements = placePlanned(model);
-  const apName = (id: string) => model.devices.find((d) => d.id === id)?.name ?? model.planned.find((p) => `planned:${p.id}` === id)?.name ?? id;
+  const apName = (id: string) => model.devices.find((d) => d.id === id)?.name ?? id;
   const devName = (id: string) => model.devices.find((d) => d.id === id)?.name ?? id;
 
   const wifiFindings = analysis.findings.filter((f) => f.category === "wifi");
@@ -91,8 +84,7 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
             <p className="lede">
               {model.ssids.length || model.radios.length ? (
                 <>
-                  {plural(model.ssids.length, "network name")} on {plural(aps.length, "access point")}
-                  {plannedAps.length ? ` (${plannedAps.length} more planned)` : ""}, with {plural(clients.length, "device")} connected.
+                  {plural(model.ssids.length, "network name")} on {plural(aps.length, "access point")}, with {plural(clients.length, "device")} connected.
                 </>
               ) : (
                 "No Wi-Fi radios were found in the configuration."
@@ -125,7 +117,7 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
                           <span>Fast roaming</span>
                           <span className="tx">
                             {s.ft ? "On" : "Off"}
-                            <span className="faint wf-hint">{s.ft ? "802.11r: quick hand-over between APs" : aps.length + plannedAps.length > 1 ? "802.11r: worth turning on with several APs" : "802.11r: only matters with several APs"}</span>
+                            <span className="faint wf-hint">{s.ft ? "802.11r: quick hand-over between APs" : aps.length > 1 ? "802.11r: worth turning on with several APs" : "802.11r: only matters with several APs"}</span>
                           </span>
                           <span>Network</span>
                           <span className="tx">{net ? <>{net.label}{net.cidr && <span className="mono faint" style={{ marginLeft: 8 }}>{net.cidr}</span>}</> : "—"}</span>
@@ -144,40 +136,11 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
             <div className="sec-title">Signal <em className="faint">{model.hasState ? "how strongly each device hears its access point" : "needs live data from the router"}</em></div>
             <SignalStrip clients={clients} findings={open} onSelect={onSelect} />
 
-            {(aps.length > 0 || plannedAps.length > 0) && (
+            {aps.length > 0 && (
               <>
                 <div className="sec-title">Access points</div>
                 <div className="wf-aps">
                   {aps.map((ap) => <ApCard key={ap.id} ap={ap} radios={model.radios.filter((r) => r.apId === ap.id)} onSelect={onSelect} />)}
-                  {plannedAps.map((p) => {
-                    const pl = placements.filter((x) => x.plannedId === p.id);
-                    return (
-                      <div key={p.id} className="card wf-ap planned">
-                        <div className="wf-ap-head">
-                          <span className="wf-ap-ic ghost"><Glyph kind="ap" size={20} /></span>
-                          <div>
-                            <b>{p.name}</b>
-                            <div className="faint" style={{ fontSize: 12 }}>Planned{p.port ? <> · <span className="mono">{p.port}</span></> : ""}</div>
-                          </div>
-                          <span className="wf-grow" />
-                          <span className="tag wf-planned-tag">Planned</span>
-                        </div>
-                        {p.note && <div className="muted" style={{ fontSize: 12.5 }}>{p.note}</div>}
-                        {pl.length > 0 && (
-                          <div className="wf-radios">
-                            {pl.map((x) => (
-                              <div key={x.band} className="wf-radio">
-                                <span className={`chip band-${x.band}`}>{BAND_LABEL[x.band]}</span>
-                                <span className="mono tx">ch {blockSpan(x.block)} · {x.block.width} MHz</span>
-                                <span className={`chip${x.overlaps.length ? " wf-chip-warn" : ""}`}>{x.overlaps.length ? `shares with ${x.overlaps.map((o) => apName(o.radio.apId)).join(", ")}` : "own channel"}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="faint" style={{ fontSize: 12 }}>Channels it would get with today's channel plan.</div>
-                      </div>
-                    );
-                  })}
                 </div>
               </>
             )}
@@ -204,9 +167,7 @@ export function WifiView({ data, tab, focus, onTab, onSelect }: { data: NetworkP
                       key={b}
                       band={b}
                       radios={model.radios.filter((r) => r.band === b)}
-                      placements={placements.filter((p) => p.band === b)}
                       apName={apName}
-                      fixFinding={b === "5" ? wifiFindings.find((f) => f.id === "wifi-5-one-block") : undefined}
                     />
                   ))}
                 </div>
@@ -334,12 +295,10 @@ interface Item {
   sub: string;
   x0: number;
   x1: number;
-  planned?: boolean;
-  warn?: boolean;
   block: Block;
 }
 
-function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band; radios: Radio[]; placements: Placement[]; apName: (id: string) => string; fixFinding?: Finding }) {
+function Spectrum({ band, radios, apName }: { band: Band; radios: Radio[]; apName: (id: string) => string }) {
   const [ref, W] = useWidth<HTMLDivElement>();
   const color = bandColor(band);
   const plan = planChannels(radios);
@@ -358,34 +317,18 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
       const [x0, x1] = scale.span(b);
       items.push({ key: r.id, name: apName(r.apId), sub: `ch ${b.primary} · ${b.width} MHz`, x0, x1, block: b });
     }
-    for (const p of placements) {
-      const [x0, x1] = scale.span(p.block);
-      items.push({ key: `p-${p.plannedId}`, name: `${p.name} · planned`, sub: `would use ch ${blockSpan(p.block)}${p.overlaps.length ? " · shared" : ""}`, x0, x1, planned: true, warn: p.overlaps.length > 0, block: p.block });
-    }
   }
 
-  // Labels sit above their hill; overlapping labels move up a lane. A planned AP that lands on an
-  // existing one is labelled beside its hill instead, so the clash reads at a glance.
+  // Labels sit above their hill; overlapping labels move up a lane.
   const lanes: [number, number][][] = [];
   const laneOf = new Map<string, number>();
-  const side = new Map<string, { x: number; anchor: "start" | "end" }>();
   const labelW = (it: Item) => Math.max(it.name.length * 7, it.sub.length * 6.8) + 16;
   const fits = (lane: [number, number][], l: number, r: number) => lane.every(([a, z]) => r + 10 < a || l > z + 10);
-  const ordered = [...items].sort((a, b) => Number(!!a.planned) - Number(!!b.planned) || a.x0 - b.x0);
+  const ordered = [...items].sort((a, b) => a.x0 - b.x0);
   for (const it of ordered) {
     const c = (it.x0 + it.x1) / 2;
     const lw = labelW(it);
     const [l, r] = [c - lw / 2, c + lw / 2];
-    if (it.planned && lanes[0] && !fits(lanes[0], l, r)) {
-      if (it.x1 + 16 + lw < W - PAD) {
-        side.set(it.key, { x: it.x1 + 16, anchor: "start" });
-        continue;
-      }
-      if (it.x0 - 16 - lw > PAD) {
-        side.set(it.key, { x: it.x0 - 16, anchor: "end" });
-        continue;
-      }
-    }
     let lane = lanes.findIndex((ln) => fits(ln, l, r));
     if (lane < 0) lane = lanes.push([]) - 1;
     lanes[lane]!.push([l, r]);
@@ -409,7 +352,6 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
         <span className="wf-grow" />
         <span className="wf-legend">
           <span><i className="sw" style={{ background: `color-mix(in srgb, ${color} 45%, transparent)`, borderColor: color }} />in use</span>
-          {placements.length > 0 && <span><i className="sw dashed" style={{ borderColor: color }} />planned</span>}
           {plan.length > 0 && <span><i className="br" />allowed by plan</span>}
           {band === "5" && <span><i className="sw hatch" />radar (DFS)</span>}
         </span>
@@ -422,15 +364,8 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
                 <stop offset="0" stopColor={color} stopOpacity=".42" />
                 <stop offset="1" stopColor={color} stopOpacity=".04" />
               </linearGradient>
-              <linearGradient id={`${id}-ghost`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor={color} stopOpacity=".14" />
-                <stop offset="1" stopColor={color} stopOpacity="0" />
-              </linearGradient>
               <pattern id={`${id}-dfs`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                 <line x1="0" y1="0" x2="0" y2="6" stroke="var(--fg)" strokeOpacity={.07} strokeWidth="2" />
-              </pattern>
-              <pattern id={`${id}-clash`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-                <line x1="0" y1="0" x2="0" y2="5" stroke="var(--warn)" strokeOpacity=".55" strokeWidth="1.6" />
               </pattern>
             </defs>
 
@@ -481,8 +416,8 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
               );
             })}
 
-            {/* Hills: active radios first, planned on top so the clash is visible. */}
-            {items.filter((it) => !it.planned).map((it) => (
+            {/* Hills */}
+            {items.map((it) => (
               <g key={it.key}>
                 <path d={hillPath(band, it.x0, it.x1, base, top + 8)} fill={`url(#${id}-fill)`} />
                 <path d={hillPath(band, it.x0, it.x1, base, top + 8)} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity=".9" />
@@ -491,37 +426,10 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
                 )}
               </g>
             ))}
-            {items.filter((it) => it.planned).map((it) => {
-              const others = items.filter((o) => !o.planned && o.key !== it.key && shared(o.block.channels, it.block.channels).length);
-              return (
-                <g key={it.key}>
-                  {others.map((o) => {
-                    const ch = shared(o.block.channels, it.block.channels);
-                    const [a, z] = band === "2.4" ? [Math.max(o.x0, it.x0), Math.min(o.x1, it.x1)] : scale.chans(ch);
-                    return <rect key={o.key} x={a + 2} y={top + 14} width={Math.max(0, z - a - 4)} height={base - top - 15} fill={`url(#${id}-clash)`} rx={5} />;
-                  })}
-                  <path d={hillPath(band, it.x0 + 3, it.x1 - 3, base, top + 16)} fill={`url(#${id}-ghost)`} stroke={it.warn ? "var(--warn)" : color} strokeWidth={1.5} strokeDasharray="5 4" />
-                </g>
-              );
-            })}
-
             {/* Labels */}
             {items.map((it) => {
-              const sd = side.get(it.key);
-              const hillTop = top + (it.planned ? 16 : 8);
-              const subStyle = { fill: it.warn ? "var(--warn)" : color };
-              if (sd) {
-                const y = hillTop + 22;
-                const edge = sd.anchor === "start" ? it.x1 - 6 : it.x0 + 6;
-                const gap = sd.anchor === "start" ? -6 : 6;
-                return (
-                  <g key={it.key}>
-                    <line x1={edge} x2={sd.x + gap} y1={y - 4} y2={y - 4} stroke={it.warn ? "var(--warn)" : color} strokeOpacity=".5" strokeDasharray="2 3" />
-                    <text x={sd.x} y={y - 8} textAnchor={sd.anchor} className="wf-svg-name">{it.name}</text>
-                    <text x={sd.x} y={y + 8} textAnchor={sd.anchor} className="wf-svg-sub" style={subStyle}>{it.sub}</text>
-                  </g>
-                );
-              }
+              const hillTop = top + 8;
+              const subStyle = { fill: color };
               const c = Math.min(Math.max((it.x0 + it.x1) / 2, 70), W - 70);
               const lane = laneOf.get(it.key) ?? 0;
               const y = top - 8 - lane * LANE;
@@ -542,39 +450,7 @@ function Spectrum({ band, radios, placements, apName, fixFinding }: { band: Band
         {unknown.map((r) => (
           <p key={r.id} className="faint">{apName(r.apId)} ({r.iface}) has not reported its current channel, so it is not drawn.</p>
         ))}
-        {placements.map((p) => <PlacementNote key={p.plannedId} p={p} apName={apName} fixFinding={p.overlaps.length ? fixFinding : undefined} />)}
       </div>
-    </div>
-  );
-}
-
-function PlacementNote({ p, apName, fixFinding }: { p: Placement; apName: (id: string) => string; fixFinding?: Finding }) {
-  const others = [...new Set(p.overlaps.map((o) => apName(o.radio.apId)))];
-  const dfs = blockIsDfs(p.band, p.block);
-  const sev: Severity = fixFinding?.severity ?? "suggestion";
-  if (!p.overlaps.length)
-    return (
-      <div className="wf-callout ok">
-        <span className="dot" />
-        <span>
-          <b>{p.name}</b> would get channel{p.block.channels.length > 1 ? "s" : ""} <span className="mono">{blockSpan(p.block)}</span>
-          {dfs ? " (a radar-checked DFS block)" : ""}, clear of the access points you have today.
-        </span>
-      </div>
-    );
-  return (
-    <div className="wf-callout" style={{ ["--c" as string]: SEV_VAR[sev] }}>
-      <span className="dot" style={{ background: SEV_VAR[sev], boxShadow: "none" }} />
-      <span>
-        <b>{p.name}</b> would have to use <span className="mono">{blockSpan(p.block)}</span> too, the same {p.block.width} MHz block as {others.join(" and ")}.{" "}
-        Access points on one block take turns on the air, so both slow down wherever their coverage overlaps.
-        {fixFinding && (
-          <>
-            {" "}
-            <a href={`#/wifi?t=review&f=${encodeURIComponent(fixFinding.id)}`}>More in the review ›</a>
-          </>
-        )}
-      </span>
     </div>
   );
 }
@@ -590,7 +466,7 @@ function bandCaption(band: Band, blocks: Block[], width: number, skipDfs: boolea
   }`;
 }
 
-/** Contiguous runs of planned channels, so the plan bracket does not span gaps. */
+/** Contiguous runs of the channel plan's channels, so the plan bracket does not span gaps. */
 function runsOf(band: Band, chs: number[]): number[][] {
   const step = band === "2.4" ? 1 : 4;
   const out: number[][] = [];

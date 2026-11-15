@@ -207,9 +207,9 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
             const load = loadOf(l.down, l.up, l.capacity);
             const full = load !== undefined && load >= FULL;
             const c = full ? "var(--bad)" : mediumColor(l.medium);
-            // Cable is solid and heavier; Wi-Fi is dashed in its band colour; planned and legacy are dotted.
+            // Cable is solid and heavier; Wi-Fi is dashed in its band colour; legacy is dotted.
             const wifi = l.medium.startsWith("wifi");
-            const dashed = l.medium === "planned" ? "2 6" : l.medium === "legacy" ? "2 5" : wifi ? "7 6" : undefined;
+            const dashed = l.medium === "legacy" ? "2 5" : wifi ? "7 6" : undefined;
             const faded = dim(l.to) && dim(l.from);
             const to = byId.get(l.to);
             const width = l.medium === "2.5g" ? 3.4 : l.medium === "wan" ? 2.6 : 2.8;
@@ -243,17 +243,6 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
             const d = byId.get(n.id);
             const isSel = selected === n.id;
             const sev = worst.get(n.id);
-            if (n.ghost) {
-              const p = model.planned.find((x) => `planned:${x.id}` === n.id);
-              return (
-                <g key={n.id} transform={`translate(${n.x} ${n.y})`} className="node" onClick={click(n.id)} opacity={dim(n.id) ? 0.3 : 1}>
-                  <rect className="hit" x={-60} y={-40} width={120} height={110} />
-                  <DeviceArt kind={n.kind} ghost />
-                  <text y={50} textAnchor="middle" fill={COLORS.w5} fontSize={12.5} fontWeight={600} className="lab-name">{p?.name}</text>
-                  <text y={66} textAnchor="middle" fill="var(--tx-2)" fontSize={10.5}>Planned · not applied</text>
-                </g>
-              );
-            }
             if (n.id === UPSTREAM_GROUP) {
               const all = model.devices.filter((x) => x.zone === "upstream" && x.id !== "upstream" && x.mac && x.parent !== model.routerId);
               const now = all.filter((x) => x.status === "online").length;
@@ -305,7 +294,6 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
           <span><i style={{ borderColor: COLORS.w24, borderTopStyle: "dashed" }} />2.4 GHz Wi-Fi</span>
           <span><i style={{ borderColor: COLORS.up, opacity: 0.6 }} />upstream</span>
           <span><i style={{ borderColor: COLORS.tx3, borderTopStyle: "dotted" }} />upstream side</span>
-          {model.planned.length > 0 && <span><i style={{ borderColor: COLORS.w5, borderTopStyle: "dotted" }} />planned</span>}
         </div>
         <span className="legend-note">
           Moving dots are traffic now: light ones go to the device, coloured ones come back. A red line is at {Math.round(FULL * 100)}% or more of what it can carry.

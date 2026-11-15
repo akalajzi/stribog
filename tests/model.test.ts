@@ -141,13 +141,13 @@ describe("demo model: ports", () => {
     expect(m.ports.at(-1)!.kind).toBe("sfp");
   });
 
-  it("records occupancy, zones, speeds, PoE and the planned AP", () => {
+  it("records occupancy, zones, speeds and PoE", () => {
     const p = Object.fromEntries(m.ports.map((x) => [x.name, x]));
     expect(p.ether1).toMatchObject({ zone: "upstream", deviceIds: ["upstream"], poe: "off", speedMbps: 1000 });
     expect(p.ether2!.deviceIds).toEqual(["mac:00:00:5E:00:53:10"]);
     expect(p.ether4).toMatchObject({ speedMbps: 100, zone: "lan", network: "bridge" });
     expect(p.ether5).toMatchObject({ deviceIds: [], running: false });
-    expect(p.ether6).toMatchObject({ poe: "off", planned: "garden-ap", deviceIds: [] });
+    expect(p.ether6).toMatchObject({ poe: "off", deviceIds: [] });
     expect(p.ether7).toMatchObject({ deviceIds: [`mac:${LIVING}`], poeWatts: 6.8, poeVolts: 53.1, hwOffload: true });
     expect(p.ether8).toMatchObject({ deviceIds: [`mac:${UPSTAIRS}`], poeWatts: 7.4 });
   });

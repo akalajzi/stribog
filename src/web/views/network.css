@@ -107,7 +107,6 @@
 .nv-port-devs { display: grid; gap: 4px; }
 .nv-pd { display: inline-flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--tx-1); border: 0; background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--hair); padding: 3px 7px; border-radius: 6px; cursor: pointer; text-align: left; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .nv-pd:hover { background: var(--ink-4); }
-.nv-pd.planned { background: color-mix(in srgb, var(--w5) 5%, transparent); box-shadow: none; outline: 1px dashed color-mix(in srgb, var(--w5) 60%, transparent); outline-offset: -1px; color: var(--w5); cursor: default; }
 .nv-panel-foot { display: flex; gap: 16px; margin-top: 12px; font-size: 11.5px; flex-wrap: wrap; align-items: center; }
 .nv-panel-foot i, .nv-fw-legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 

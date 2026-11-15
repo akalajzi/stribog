@@ -58,17 +58,9 @@ function Box({ w, h, fill = "url(#mFront)", top = "url(#mTop)", rx = 4, children
   );
 }
 
-export function DeviceArt({ kind, status, accent = COLORS.g1, ghost }: { kind: string; status?: string; accent?: string; ghost?: boolean }) {
+export function DeviceArt({ kind, status, accent = COLORS.g1 }: { kind: string; status?: string; accent?: string }) {
   const on = status === "online" || status === "unknown";
   const led = status === "offline" ? COLORS.tx3 : COLORS.ok;
-  if (ghost) {
-    return (
-      <g opacity={0.85}>
-        <rect x={-22} y={-28} width={44} height={56} rx={11} fill={COLORS.w5} fillOpacity={0.05} stroke={COLORS.w5} strokeOpacity={0.7} strokeDasharray="4 4" />
-        <circle cy={18} r={2} fill="none" stroke={COLORS.w5} strokeOpacity={0.7} />
-      </g>
-    );
-  }
   switch (kind) {
     case "internet":
       return (
@@ -286,7 +278,6 @@ export function GatewayArt({ ports, portX, model }: { ports: Port[]; portX: Reco
           <g key={p.name}>
             <rect x={px - pw / 2} y={y + 22} width={pw} height={11} rx={1.5} fill="#07090c" stroke="rgba(255,255,255,.16)" strokeWidth={0.8} />
             {c ? <rect x={px - pw / 2} y={y + 37} width={pw} height={2} rx={1} fill={c} filter="url(#led)" /> : null}
-            {p.planned && !p.deviceIds.length ? <rect x={px - pw / 2} y={y + 36.5} width={pw} height={3} rx={1.5} fill="none" stroke={COLORS.w5} strokeWidth={0.8} strokeDasharray="1.5 1.5" /> : null}
             {p.poeWatts ? <path d={`M${px + 1} ${y + 12} l-3 4 h2.4 l-.6 3.2 3-4.2 h-2.4z`} fill={COLORS.g1} /> : null}
             <text x={px} y={y + 50} textAnchor="middle" fill="#5d636d" fontSize={6.5} fontFamily="JetBrains Mono, monospace">{sfp ? "S+" : p.name.replace(/^\D+/, "")}</text>
           </g>
@@ -324,6 +315,6 @@ export function Glyph({ kind, size = 16, color = "currentColor" }: { kind: strin
 }
 
 export const mediumColor = (m: string) =>
-  m === "2.5g" ? COLORS.mg : m === "1g" || m === "wired" ? COLORS.g1 : m === "100m" ? COLORS.warn : m === "wan" ? COLORS.up : m === "wifi-2.4" ? COLORS.w24 : m === "wifi-5" ? COLORS.w5 : m === "wifi-6" ? COLORS.w6 : m === "planned" ? COLORS.w5 : COLORS.tx3;
+  m === "2.5g" ? COLORS.mg : m === "1g" || m === "wired" ? COLORS.g1 : m === "100m" ? COLORS.warn : m === "wan" ? COLORS.up : m === "wifi-2.4" ? COLORS.w24 : m === "wifi-5" ? COLORS.w5 : m === "wifi-6" ? COLORS.w6 : COLORS.tx3;
 
 export const bandColor = (b?: string) => (b === "2.4" ? COLORS.w24 : b === "6" ? COLORS.w6 : COLORS.w5);

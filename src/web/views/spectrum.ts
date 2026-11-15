@@ -1,8 +1,8 @@
 // Channel geometry for the Wi-Fi spectrum: which channels each radio occupies, which blocks the
-// channel plan allows, and where a planned access point would have to go. Pure, no React.
+// channel plan allows. Pure, no React.
 
-import type { NetworkModel, Radio } from "../../core/model.ts";
-import { channelOf, coveredChannels, isDfs, type Band } from "../../core/net.ts";
+import type { Radio } from "../../core/model.ts";
+import { channelOf, coveredChannels, type Band } from "../../core/net.ts";
 
 /** 20 MHz channel numbers drawn on the axis, in contiguous runs (a gap is drawn between runs). */
 export const AXIS: Record<Band, number[][]> = {
@@ -56,7 +56,6 @@ export function planBlocks(band: Band, plan: number[], width: number): Block[] {
   return [...seen.values()];
 }
 
-export const shared = (a: number[], b: number[]) => a.filter((c) => b.includes(c));
 
 export const blockSpan = (b: Block) => {
   const lo = Math.min(...b.channels);
@@ -64,50 +63,6 @@ export const blockSpan = (b: Block) => {
   return lo === hi ? `${lo}` : `${lo}–${hi}`;
 };
 
-export const blockIsDfs = (band: Band, b: Block) => band === "5" && b.channels.some(isDfs);
-
-export interface Placement {
-  plannedId: string;
-  name: string;
-  band: Band;
-  block: Block;
-  /** Radios whose block shares at least one channel with this placement. */
-  overlaps: { radio: Radio | { id: string; apId: string }; channels: number[] }[];
-}
-
-/**
- * Where each planned access point would land if it used the same channel plan as the existing
- * radios: the allowed block with the least overlap, and among equals the one furthest away.
- * Planned APs are placed one after another, so the second planned AP sees the first.
- */
-export function placePlanned(model: NetworkModel): Placement[] {
-  const planned = model.planned.filter((p) => p.kind === "ap");
-  const out: Placement[] = [];
-  for (const band of ["2.4", "5", "6"] as Band[]) {
-    const radios = model.radios.filter((r) => r.band === band);
-    const plan = planChannels(radios);
-    if (!radios.length || !plan.length) continue;
-    const width = Math.max(...radios.map(planMaxWidth));
-    const taken: { radio: Placement["overlaps"][number]["radio"]; block: Block }[] = radios.flatMap((r) => {
-      const b = radioBlock(r);
-      return b ? [{ radio: r, block: b }] : [];
-    });
-    for (const p of planned) {
-      const candidates = planBlocks(band, plan, width).map((block) => {
-        const overlaps = taken.map((t) => ({ radio: t.radio, channels: shared(block.channels, t.block.channels) })).filter((o) => o.channels.length);
-        const cost = overlaps.reduce((s, o) => s + o.channels.length, 0);
-        const distance = taken.length ? Math.min(...taken.map((t) => Math.abs(t.block.primary - block.primary))) : 0;
-        return { block, overlaps, cost, distance };
-      });
-      candidates.sort((a, b) => a.cost - b.cost || b.distance - a.distance || a.block.primary - b.block.primary);
-      const best = candidates[0];
-      if (!best) continue;
-      out.push({ plannedId: p.id, name: p.name, band, block: best.block, overlaps: best.overlaps });
-      taken.push({ radio: { id: `planned:${p.id}`, apId: `planned:${p.id}` }, block: best.block });
-    }
-  }
-  return out;
-}
 
 /** Signal zones, matching the wording the review uses. */
 export const SIGNAL_ZONES = [

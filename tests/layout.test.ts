@@ -50,28 +50,23 @@ describe("layout: demo network", () => {
     checkSane(m, l);
   });
 
-  it("draws every placed device exactly once, plus planned ghosts", () => {
+  it("draws every placed device exactly once", () => {
     const ids = l.nodes.map((n) => n.id);
     const placed = m.devices.filter((d) => d.id === "internet" || d.parent);
     for (const d of placed) expect(ids.filter((i) => i === d.id), d.id).toHaveLength(1);
-    expect(ids).toContain("planned:garden-ap");
-    expect(l.nodes.find((n) => n.id === "planned:garden-ap")!.ghost).toBe(true);
     // Offline reservations without a known place are not drawn.
     expect(ids).not.toContain("mac:3A:00:5E:00:53:60");
   });
 
   it("orders gateway children by port left to right, so links never cross", () => {
     const tier1 = m.devices.filter((d) => d.parent === m.routerId && d.zone !== "upstream");
-    const slots = [
-      ...tier1.map((d) => ({ id: d.id, port: d.via?.port })),
-      ...m.planned.map((p) => ({ id: `planned:${p.id}`, port: p.port })),
-    ];
+    const slots = tier1.map((d) => ({ id: d.id, port: d.via?.port }));
     const portIdx = (p?: string) => m.ports.findIndex((x) => x.name === p);
     const byPort = [...slots].sort((a, b) => portIdx(a.port) - portIdx(b.port));
     const xOf = (id: string) => l.nodes.find((n) => n.id === id)!.x;
     const xs = byPort.map((s) => xOf(s.id));
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
-    expect(byPort.map((s) => s.port)).toEqual(["ether2", "ether4", "ether6", "ether7", "ether8", "sfp-sfpplus1"]);
+    expect(byPort.map((s) => s.port)).toEqual(["ether2", "ether4", "ether7", "ether8", "sfp-sfpplus1"]);
     // Port x positions on the gateway increase in the same order.
     const px = byPort.map((s) => l.portX[s.port!]!);
     expect([...px].sort((a, b) => a - b)).toEqual(px);
@@ -129,8 +124,6 @@ describe("layout: demo network", () => {
   it("labels links with port, speed and PoE", () => {
     expect(l.links.find((x) => x.to === "mac:00:00:5E:00:53:A0")!.label).toBe("ether7 · 1G · PoE 6.8 W");
     expect(l.links.find((x) => x.to === "mac:00:00:5E:00:53:30")).toMatchObject({ label: "ether4 · 100M", medium: "100m" });
-    expect(l.links.find((x) => x.to === "planned:garden-ap")).toMatchObject({ medium: "planned" });
-    expect(l.links.find((x) => x.to === "planned:garden-ap")!.down).toBeUndefined();
   });
 });
 

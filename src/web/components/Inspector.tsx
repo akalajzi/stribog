@@ -18,23 +18,7 @@ export function SignalBars({ dbm }: { dbm?: number }) {
 const certLabel = (c?: string) => (c === "inferred" ? "probably" : c === "user" ? "noted" : undefined);
 
 export function Inspector({ data, id, onClose, onSelect, onFinding, onNotesSaved, onDetails }: { data: NetworkPayload; id: string; onClose: () => void; onSelect: (id: string) => void; onFinding: (fid: string) => void; onNotesSaved: () => void; onDetails: (id: string) => void }) {
-  const { model, analysis } = data;
-  const planned = model.planned.find((p) => `planned:${p.id}` === id);
-  if (planned) {
-    const port = model.ports.find((p) => p.name === planned.port);
-    return (
-      <aside className="side">
-        <Header kind={planned.kind} title={planned.name} sub={<span style={{ color: "var(--w5)" }}>Planned · not applied</span>} onClose={onClose} />
-        <div className="kv">
-          <span>Port</span><span className="tx mono">{planned.port ?? "—"}</span>
-          <span>PoE</span><span className="tx">{port?.poe ?? "—"}</span>
-          <span>Note</span><span className="tx">{planned.note ?? "—"}</span>
-        </div>
-        <Related data={data} id={id} onFinding={onFinding} extra={analysis.findings.filter((f) => f.id.includes(planned.id) || f.id === "wifi-5-one-block" || f.id === "wifi-ft-off")} />
-      </aside>
-    );
-  }
-
+  const { model } = data;
   if (id === UPSTREAM_GROUP) return <UpstreamGroup data={data} onClose={onClose} onSelect={onSelect} />;
 
   const d = model.devices.find((x) => x.id === id);

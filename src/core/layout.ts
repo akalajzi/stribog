@@ -9,7 +9,7 @@ import { portCapacity, wifiCapacity, type Capacity } from "./capacity.ts";
 import type { Device, NetworkModel, Port } from "./model.ts";
 import type { Band } from "./net.ts";
 
-export type Medium = "2.5g" | "1g" | "100m" | "wired" | "wan" | "legacy" | "wifi-2.4" | "wifi-5" | "wifi-6" | "planned";
+export type Medium = "2.5g" | "1g" | "100m" | "wired" | "wan" | "legacy" | "wifi-2.4" | "wifi-5" | "wifi-6";
 
 export interface LNode {
   id: string;
@@ -17,7 +17,6 @@ export interface LNode {
   y: number;
   kind: string;
   label: "below" | "left" | "right" | "pill";
-  ghost?: boolean;
 }
 
 export interface LLink {
@@ -84,8 +83,7 @@ const KID_W = 188;
 const KID_ROW_H = 178;
 const CLUSTER_GAP = 44;
 
-export function mediumOf(d: Device, port?: Port, ghost?: boolean): Medium {
-  if (ghost) return "planned";
+export function mediumOf(d: Device, port?: Port): Medium {
   if (d.via?.kind === "wifi") return d.via.band === "2.4" ? "wifi-2.4" : d.via.band === "6" ? "wifi-6" : "wifi-5";
   if (d.zone === "upstream") return "legacy";
   const s = port?.speedMbps;
@@ -126,11 +124,10 @@ export function layoutTopology(m: NetworkModel): Layout {
   sfp.forEach((p, i) => (portX[p.name] = left + GATEWAY_W - 26 - i * 22));
 
   // ---- tier 1: what hangs off gateway LAN ports, in port order -------------------
-  type Slot = { kind: "device"; dev: Device; port?: string } | { kind: "ghost"; id: string; name: string; deviceKind: string; port?: string };
+  type Slot = { dev: Device; port?: string };
   const tier1: Slot[] = [];
   if (router) {
-    for (const d of children(router.id)) if (d.zone !== "upstream") tier1.push({ kind: "device", dev: d, port: d.via?.port });
-    for (const p of m.planned) tier1.push({ kind: "ghost", id: `planned:${p.id}`, name: p.name, deviceKind: p.kind, port: p.port });
+    for (const d of children(router.id)) if (d.zone !== "upstream") tier1.push({ dev: d, port: d.via?.port });
   }
   const portIndex = (p?: string) => (p ? ports.findIndex((x) => x.name === p) : 999);
   tier1.sort((a, b) => portIndex(a.port) - portIndex(b.port));
@@ -154,7 +151,6 @@ export function layoutTopology(m: NetworkModel): Layout {
   const colsFor = (n: number) => (n <= 3 ? n : 4);
   const clusterW = (n: number) => colsFor(n) * KID_W;
   const widthOf = (s: Slot) => {
-    if (s.kind !== "device") return NODE_W;
     const cs = clustersOf(s.dev.id);
     return Math.max(NODE_W, cs.reduce((w, c) => w + clusterW(c.kids.length), 0) + Math.max(0, cs.length - 1) * CLUSTER_GAP + 24);
   };
@@ -166,18 +162,18 @@ export function layoutTopology(m: NetworkModel): Layout {
     const w = widths[i]!;
     const x = cursor + w / 2;
     cursor += w;
-    const id = s.kind === "device" ? s.dev.id : s.id;
-    const isAp = s.kind === "device" ? s.dev.kind === "ap" : s.deviceKind === "ap";
-    const clusters = s.kind === "device" ? clustersOf(s.dev.id) : [];
+    const id = s.dev.id;
+    const isAp = s.dev.kind === "ap";
+    const clusters = clustersOf(s.dev.id);
     const y = t1;
-    nodes.push({ id, x, y, kind: s.kind === "device" ? s.dev.kind : s.deviceKind, label: "below", ghost: s.kind === "ghost" });
+    nodes.push({ id, x, y, kind: s.dev.kind, label: "below" });
 
     const port = ports.find((p) => p.name === s.port);
     const px = s.port && portX[s.port] !== undefined ? portX[s.port]! : gx;
     const y1 = gy + GATEWAY_H / 2 + 4;
     const y2 = y - (isAp ? 34 : 40);
-    const medium = s.kind === "ghost" ? "planned" : mediumOf(s.dev, port);
-    const wifiFromRouter = s.kind === "device" && s.dev.via?.kind === "wifi";
+    const medium = mediumOf(s.dev, port);
+    const wifiFromRouter = s.dev.via?.kind === "wifi";
     links.push({
       id: `l:${id}`,
       from: router!.id,
@@ -187,12 +183,11 @@ export function layoutTopology(m: NetworkModel): Layout {
       medium,
       label: wifiFromRouter ? undefined : [s.port, speedLabel(port?.speedMbps), port?.poeWatts ? `PoE ${port.poeWatts} W` : ""].filter(Boolean).join(" · "),
       labelAt: { x: x + 8, y: y2 - 14, anchor: "start" },
-      // A planned device has no traffic yet, whatever its port is doing.
       // A port shared through a switch counts everyone behind it; then each device's own measure.
-      down: s.kind === "ghost" ? undefined : port && port.deviceIds.length <= 1 ? port.txBps : s.dev.via?.downBps,
-      up: s.kind === "ghost" ? undefined : port && port.deviceIds.length <= 1 ? port.rxBps : s.dev.via?.upBps,
+      down: port && port.deviceIds.length <= 1 ? port.txBps : s.dev.via?.downBps,
+      up: port && port.deviceIds.length <= 1 ? port.rxBps : s.dev.via?.upBps,
       // A port shared through a switch carries more than this device's traffic: no limit to compare with.
-      capacity: s.kind === "ghost" ? undefined : wifiFromRouter ? wifiCapacity(s.dev) : port && port.deviceIds.length <= 1 ? portCapacity(port) : undefined,
+      capacity: wifiFromRouter ? wifiCapacity(s.dev) : port && port.deviceIds.length <= 1 ? portCapacity(port) : undefined,
     });
 
     // Devices behind this one: clusters side by side, each a small tree in its medium's colour.

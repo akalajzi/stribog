@@ -105,14 +105,5 @@
       ]
     }
   },
-  "planned": [
-    {
-      "id": "garden-ap",
-      "name": "Garden AP",
-      "kind": "ap",
-      "port": "ether6",
-      "note": "Outdoor cAP for the garden and the shed"
-    }
-  ],
   "notes": "Fictional demo network for Stribog."
 }

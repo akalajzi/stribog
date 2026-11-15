@@ -61,7 +61,6 @@ export interface Notes {
   upstream?: { name?: string; model?: string; isp?: string };
   networks?: Record<string, { role?: NetworkRole; label?: string }>;
   devices?: Record<string, DeviceNotes>;
-  planned?: PlannedDevice[];
   /** Review findings the owner has accepted, by finding id: they stop counting until they change. */
   accepted?: Record<string, AcceptedFinding>;
 }
@@ -100,14 +99,6 @@ export interface ServiceNote {
   port?: number;
   protocol?: string;
   url?: string;
-  note?: string;
-}
-
-export interface PlannedDevice {
-  id: string;
-  name: string;
-  kind: string;
-  port?: string;
   note?: string;
 }
 

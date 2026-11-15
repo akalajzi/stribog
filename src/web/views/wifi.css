@@ -63,19 +63,15 @@
 /* ---------- access points ---------- */
 .wf-aps { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
 .wf-ap { display: grid; gap: 12px; align-content: start; padding: 16px 18px; }
-.wf-ap.planned { background: transparent; box-shadow: none; border: 1px dashed var(--hair-3); }
 .wf-ap-head { display: flex; align-items: center; gap: 12px; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; width: 100%; }
 div.wf-ap-head { cursor: default; }
 .wf-ap-head b { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
 button.wf-ap-head:hover b { color: var(--fg); }
 .wf-ap-ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: var(--tx-1); background: radial-gradient(circle at 50% 30%, var(--ink-4), var(--ink-2)); box-shadow: inset 0 0 0 1px var(--hair-2); flex: none; }
-.wf-ap-ic.ghost { background: none; box-shadow: inset 0 0 0 1px var(--hair-2); color: var(--tx-3); }
-.wf-planned-tag { color: var(--w5); background: color-mix(in srgb, var(--w5) 8%, transparent); }
 .wf-radios { display: grid; gap: 1px; border-radius: 10px; overflow: hidden; background: var(--hair); box-shadow: inset 0 0 0 1px var(--hair); }
 .wf-radio { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: var(--ink-2); }
 .wf-radio .tx { color: var(--tx-1); font-size: 12.5px; }
 .wf-radio-ssids { flex-basis: 100%; font-size: 12px; }
-.wf-chip-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); box-shadow: none; }
 
 /* ---------- "what's good" ---------- */
 .wf-good { margin-top: 14px; }
