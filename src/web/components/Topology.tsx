@@ -223,7 +223,8 @@ export function Topology({ data, selected, highlight, onSelect, covered = 0 }: P
                 {full && <path d={l.d} fill="none" stroke="var(--bad)" strokeWidth={10} opacity={0.22} filter="url(#soft)" />}
                 {(l.label || busy(l) || full) && l.labelAt && (
                   // Port and speed on the first line, traffic now under it, so neighbours stay apart.
-                  <text x={l.labelAt.x} y={l.labelAt.y} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={full ? 1 : l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
+                  // A third line (how full it is) lifts the block, so it does not run into the device.
+                  <text x={l.labelAt.x} y={l.labelAt.y - Math.max(0, [l.label, busy(l), full].filter(Boolean).length - 2) * 13} textAnchor={l.labelAt.anchor} fontSize={10.5} fontFamily="JetBrains Mono, monospace" fill={c} fillOpacity={full ? 1 : l.medium === "wan" || l.medium === "legacy" ? 0.6 : 0.85}>
                     {l.label && <tspan>{l.label}</tspan>}
                     {busy(l) && <tspan x={l.labelAt.x} dy={l.label ? 13 : 0}>{busy(l)}</tspan>}
                     {full && (
