@@ -1,5 +1,5 @@
 .git
-.forgejo
+.github
 .playwright-mcp
 node_modules
 dist

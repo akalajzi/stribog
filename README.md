@@ -159,7 +159,7 @@ echo '{ "router": { "url": "192.168.88.1" } }' > data/docker/config/stribog.conf
 docker compose up -d --build  # http://127.0.0.1:4517
 ```
 
-A container cannot see your network's gateway, so the config names the router. `STRIBOG_HOME` moves the `config` and `data` folders elsewhere, and `STRIBOG_BIND` changes where it listens. `/healthz` answers without signing in. `.forgejo/workflows/deploy.yml` tests every push and, when the repository has deploy settings, asks the host to deploy the tested commit over SSH (see the comments at its top).
+A container cannot see your network's gateway, so the config names the router. `STRIBOG_HOME` moves the `config` and `data` folders elsewhere, and `STRIBOG_BIND` changes where it listens. `/healthz` answers without signing in.
 
 Stribog has no accounts of its own: signing in means signing in to the router. The Stribog server itself speaks plain http, so if you open it from another machine the password travels from your browser to Stribog unencrypted. Keep it on localhost, or put it behind https on the LAN or a VPN.
 
