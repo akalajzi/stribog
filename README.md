@@ -4,6 +4,8 @@
 
 Stribog signs in to your RouterOS router with the same user and password as WinBox or WebFig and shows, in plain English, what is on your network, where it is connected, how the internet is doing and what in the setup is worth fixing. It changes nothing on the router unless you ask it to and confirm.
 
+It also serves [MCP](https://modelcontextprotocol.io), so your favourite AI agent (Claude Code, Codex, Cursor or any other MCP client) can look at the network with you, name the devices it works out, and draft fixes for what the review finds. Agents read and take notes; only a person signed in to Stribog can change the router. [Connect one](#agents-mcp).
+
 ![The demo network's map: the internet, the router, a NAS whose cable is full (in red), two access points and their Wi-Fi devices, with live traffic moving along the links](docs/screenshots/light/hero.jpg)
 
 <sub>All screenshots show the built-in demo network, "Maple Street". It is fictional: try it without a router. Stribog comes in light and dark (or follows your system), and the screenshots show both.</sub>
