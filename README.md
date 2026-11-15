@@ -4,9 +4,12 @@
 
 Stribog signs in to your RouterOS router with the same user and password as WinBox or WebFig and shows, in plain English, what is on your network, where it is connected, how the internet is doing and what in the setup is worth fixing. It changes nothing on the router unless you ask it to and confirm.
 
-![The demo network's topology: the internet, the router, two access points and every device, with live traffic moving along the links](docs/screenshots/topology.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/hero.jpg">
+  <img src="docs/screenshots/light/hero.jpg" alt="The demo network's map: the internet, the router, a NAS whose cable is full (in red), two access points and their Wi-Fi devices, with live traffic moving along the links">
+</picture>
 
-<sub>All screenshots show the built-in demo network, "Maple Street". It is fictional: try it without a router.</sub>
+<sub>All screenshots show the built-in demo network, "Maple Street". It is fictional: try it without a router. Stribog has a light and a dark theme; the screenshots follow yours.</sub>
 
 ```sh
 pnpm install && pnpm dev    # open http://127.0.0.1:4517 and pick "Explore the demo network"
@@ -18,13 +21,21 @@ pnpm install && pnpm dev    # open http://127.0.0.1:4517 and pick "Explore the d
 
 ### The whole network on one map
 
-The map above draws the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), strongest signal first.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/topology.jpg">
+  <img src="docs/screenshots/light/topology.jpg" alt="The whole demo network on one map, from the internet down to every Wi-Fi device">
+</picture>
 
-Moving dots are traffic right now. A link at 80% or more of what it can carry turns red and says how full it is: a cable against its speed, a Wi-Fi device against roughly 60% of its link rate (an estimate). While Stribog records, it notes every minute a link is at its limit, and links that were often full in the last week show in the review, so you know which parts to make faster. The box above the internet lists who the whole network is talking to right now, by network owner (Google, Cloudflare, Amazon…), with the rate each way and the devices behind it.
+The map draws the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), strongest signal first.
+
+Moving dots are traffic right now. A link at 80% or more of what it can carry turns red and says how full it is (in the demo, the study desktop on the router's 10G port is copying files from the NAS, so the NAS's 1G cable is full): a cable against its speed, a Wi-Fi device against roughly 60% of its link rate (an estimate). While Stribog records, it notes every minute a link is at its limit, and links that were often full in the last week show in the review, so you know which parts to make faster. The box above the internet lists who the whole network is talking to right now, by network owner (Google, Cloudflare, Amazon…), with the rate each way and the devices behind it.
 
 ### Home: is everything working?
 
-![Home: internet up, devices online, access points up, the router's load, and a short list of what needs you](docs/screenshots/home.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/home.jpg">
+  <img src="docs/screenshots/light/home.jpg" alt="Home: internet up, devices online, access points up, the router's load, and a short list of what needs you">
+</picture>
 
 Internet and traffic now, devices online, access points up and the router's load, then what needs you: problems right now, devices nobody has said anything about yet, a newer RouterOS.
 
@@ -33,46 +44,70 @@ Internet and traffic now, devices online, access points up and the router's load
 
 ### Where the traffic goes
 
-![World: arcs from home to the Netherlands, Germany and the United States, with the rate to each country](docs/screenshots/world.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/world.jpg">
+  <img src="docs/screenshots/light/world.jpg" alt="World: arcs from home to the Netherlands, Germany and the United States, with the rate to each country">
+</picture>
 
 The same traffic on a world map: an arc from home to each country the network is talking to, with dots moving along it (plain ones coming home, orange ones going out; more and faster dots for more traffic). Click a country for who runs the addresses there and which devices talk to them. Countries come from DB-IP's free country database ([IP geolocation by DB-IP](https://db-ip.com), CC BY 4.0, about 5 MB, downloaded every two weeks and searched offline). It is a guess: it names one country per address range, and big services answer from many places. Home is placed at the city of the router's time zone.
 
 ### Is it me or my provider?
 
-![Internet over time: round trips over 24 hours, a strip of minutes up, losing packets or down, and each outage with where it probably stopped](docs/screenshots/internet.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/internet.jpg">
+  <img src="docs/screenshots/light/internet.jpg" alt="Internet over time: round trips over 24 hours, a strip of minutes up, losing packets or down, and each outage with where it probably stopped">
+</picture>
 
 Once a minute the router pings its provider's gateway and two public addresses (Cloudflare's 1.1.1.1 and Google's 8.8.8.8). Stribog shows the last day or week: round trips, every minute up, losing packets or down, and each outage with where it probably stopped (the cable to the provider's box, no address from the provider, the provider's box, or the provider's network beyond it).
 
 ### Every device, up close
 
-![A laptop's page: traffic over 24 hours, when it was online, and who it talks to](docs/screenshots/device.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/device.jpg">
+  <img src="docs/screenshots/light/device.jpg" alt="A laptop's page: traffic over 24 hours, when it was online, and who it talks to">
+</picture>
 
 Traffic over time and when it was online, who it is talking to now and over the last day or week (by network owner, with ports, bytes each way and the names the router's DNS knows), the maker of its network chip, and your notes: its name, kind, room, owner and the services it runs. When something looks off, **Pause internet** cuts it off the internet but keeps the local network, until you resume it.
 
 ### Wi-Fi
 
 <p>
-<img src="docs/screenshots/wifi.jpg" width="49%" alt="Wi-Fi overview: the two networks and every client on a signal scale from weak to excellent">
-<img src="docs/screenshots/wifi-channels.jpg" width="49%" alt="Wi-Fi setup: name, password and security per network, and a channel map showing where a planned access point would fit">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/wifi.jpg">
+  <img src="docs/screenshots/light/wifi.jpg" width="49%" alt="Wi-Fi overview: the two networks and every client on a signal scale from weak to excellent">
+</picture>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/wifi-channels.jpg">
+  <img src="docs/screenshots/light/wifi-channels.jpg" width="49%" alt="Wi-Fi setup: name, password and security per network, and a channel map showing where a planned access point would fit">
+</picture>
 </p>
 
 The networks, every client on a signal scale and the access points; a channel map per band, including where a planned access point would go. Change a network's name, password or security (WPA2, WPA2 + WPA3, WPA3) from Stribog: before anything changes, it puts a scheduler entry on the router that restores the old settings after 2½ minutes, so if the change cuts you off, the router undoes it on its own. Once you are back on the Wi-Fi, you **Keep** it. Stribog never reads the old password and never stores the new one.
 
 ### A review, not a score
 
-![The review: findings worth fixing, ideas and notes, each with a plain explanation, filterable by area](docs/screenshots/review.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/review.jpg">
+  <img src="docs/screenshots/light/review.jpg" alt="The review: findings worth fixing, ideas and notes, each with a plain explanation, filterable by area">
+</picture>
 
 How the network is set up, what is solid and what is fragile. Every finding explains why it matters in plain words, with the evidence, and says where the setup stands in words (healthy, a few loose ends, needs attention) rather than as a number. A finding that is fine on your network can be **accepted** with a reason: it stops counting until something changes. The review only diagnoses; how to fix something depends on the rest of your network, so each finding hands an AI agent a request with the configuration involved (see [Agents](#agents-mcp)).
 
 ### Changes you can read first
 
-![Change: adding an IoT network, with the exact RouterOS commands and an undo script](docs/screenshots/change.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/change.jpg">
+  <img src="docs/screenshots/light/change.jpg" alt="Change: adding an IoT network, with the exact RouterOS commands and an undo script">
+</picture>
 
 Add a guest or IoT network, rename the Wi-Fi, change its security or 5 GHz channels: Stribog shows what it read about your setup (inferences marked as such) and writes the commands for exactly what you chose, plus a script that undoes them. You review and paste them yourself. **New setup** (in Settings) generates a clean, opinionated configuration for a router reset with no configuration.
 
 <details><summary>And the rest: clients, LAN & internet</summary>
 
-![Clients: every device the router has seen, where it is connected, its address and signal](docs/screenshots/clients.jpg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/clients.jpg">
+  <img src="docs/screenshots/light/clients.jpg" alt="Clients: every device the router has seen, where it is connected, its address and signal">
+</picture>
 
 **Clients** lists everything the router has seen, where it is connected, reservations that no longer match and devices Stribog is unsure about. **LAN & internet** shows the internet path (double NAT shows as two hops), networks and DHCP, an address map, the router's ports, management services, and the firewall in plain language.
 
