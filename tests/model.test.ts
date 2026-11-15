@@ -87,7 +87,7 @@ describe("demo model: clients", () => {
   it("places wired devices on their router ports", () => {
     for (const [mac, port, kind] of [
       ["00:00:5E:00:53:10", "ether2", "nas"],
-      ["00:00:5E:00:53:20", "ether3", "desktop"],
+      ["00:00:5E:00:53:20", "sfp-sfpplus1", "desktop"],
       ["00:00:5E:00:53:30", "ether4", "tv"],
     ] as const) {
       const d = must(byMac(mac));
@@ -99,11 +99,11 @@ describe("demo model: clients", () => {
   it("hangs Wi-Fi clients off the right access point and radio", () => {
     const wifi = m.devices.filter((d) => d.via?.kind === "wifi");
     expect(wifi).toHaveLength(11);
-    expect(wifi.filter((d) => d.parent === `mac:${LIVING}`)).toHaveLength(5);
-    expect(wifi.filter((d) => d.parent === `mac:${UPSTAIRS}`)).toHaveLength(6);
+    expect(wifi.filter((d) => d.parent === `mac:${LIVING}`)).toHaveLength(4);
+    expect(wifi.filter((d) => d.parent === `mac:${UPSTAIRS}`)).toHaveLength(7);
     const mac = must(byMac("00:00:5E:00:53:70"));
     expect(mac).toMatchObject({ name: "Alex MacBook", kind: "laptop", status: "online" });
-    expect(mac.via).toMatchObject({ ssid: "Maple", band: "5", signal: -52, radio: "cap-wifi2", txRate: "1200.9Mbps" });
+    expect(mac.via).toMatchObject({ ssid: "Maple", band: "5", signal: -52, radio: "cap-wifi4", txRate: "1200.9Mbps" });
     const plug = must(byMac("00:00:5E:00:53:40"));
     expect(plug).toMatchObject({ kind: "iot", only24: true, name: "Kitchen Shelly plug", nameSource: "comment" });
     expect(plug.via).toMatchObject({ band: "2.4", radio: "cap-wifi1" });
@@ -111,8 +111,8 @@ describe("demo model: clients", () => {
 
   it("resolves guest clients on a virtual interface to the physical radio", () => {
     const g = must(byMac("7A:00:5E:00:53:73"));
-    expect(g).toMatchObject({ network: "vlan20-guest", ip: "192.168.60.101", privateMac: true, parent: `mac:${LIVING}` });
-    expect(g.via).toMatchObject({ ssid: "Maple Guest", radio: "cap-wifi2", band: "5" });
+    expect(g).toMatchObject({ network: "vlan20-guest", ip: "192.168.60.101", privateMac: true, parent: `mac:${UPSTAIRS}` });
+    expect(g.via).toMatchObject({ ssid: "Maple Guest", radio: "cap-wifi4", band: "5" });
   });
 
   it("decodes escaped UTF-8 comments and applies user names", () => {
@@ -180,10 +180,10 @@ describe("demo model: networks and Wi-Fi", () => {
   it("builds one radio per CAP band with live channels", () => {
     const r = Object.fromEntries(m.radios.map((x) => [x.id, x]));
     expect(Object.keys(r).sort()).toEqual(["cap-wifi1", "cap-wifi2", "cap-wifi3", "cap-wifi4"]);
-    expect(r["cap-wifi1"]).toMatchObject({ apId: `mac:${LIVING}`, band: "2.4", current: { channel: 1, width: 20 }, clients: 1, ssids: ["Maple", "Maple Guest"] });
-    expect(r["cap-wifi2"]).toMatchObject({ apId: `mac:${LIVING}`, band: "5", current: { channel: 36, width: 80, dfs: false }, clients: 4 });
-    expect(r["cap-wifi3"]).toMatchObject({ apId: `mac:${UPSTAIRS}`, band: "2.4", current: { channel: 11 }, clients: 3 });
-    expect(r["cap-wifi4"]).toMatchObject({ apId: `mac:${UPSTAIRS}`, band: "5", current: { channel: 44, width: 80 }, clients: 3 });
+    expect(r["cap-wifi1"]).toMatchObject({ apId: `mac:${LIVING}`, band: "2.4", current: { channel: 1, width: 20 }, clients: 4, ssids: ["Maple", "Maple Guest"] });
+    expect(r["cap-wifi2"]).toMatchObject({ apId: `mac:${LIVING}`, band: "5", current: { channel: 36, width: 80, dfs: false }, clients: 0 });
+    expect(r["cap-wifi3"]).toMatchObject({ apId: `mac:${UPSTAIRS}`, band: "2.4", current: { channel: 11 }, clients: 0 });
+    expect(r["cap-wifi4"]).toMatchObject({ apId: `mac:${UPSTAIRS}`, band: "5", current: { channel: 44, width: 80 }, clients: 7 });
     expect(r["cap-wifi2"]!.plan).toEqual({ frequencies: [5180, 5200, 5220, 5240], width: "20/40/80mhz", skipDfs: true });
   });
 
@@ -360,7 +360,7 @@ it("shows REST Wi-Fi rates (bits per second) the way exports print them", () => 
 
 it("reads traffic now: per router port from monitor-traffic, per Wi-Fi client from the registration table", () => {
   const p = m.ports.find((x) => x.name === "ether2")!;
-  expect(p).toMatchObject({ rxBps: 210_000_000, txBps: 3_100_000 });
+  expect(p).toMatchObject({ rxBps: 946_000_000, txBps: 12_400_000 });
   expect(byMac("00:00:5E:00:53:70")!.via).toMatchObject({ downBps: 38_400_000, upBps: 1_900_000 });
   expect(byMac("00:00:5E:00:53:72")?.via?.downBps).toBe(0);
 });

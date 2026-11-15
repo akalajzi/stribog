@@ -10,7 +10,7 @@ add admin-mac=00:00:5E:00:53:01 auto-mac=no comment="Home LAN" name=bridge \
 set [ find default-name=ether1 ] comment="WAN to ONT (Example Fibre)" \
     poe-out=off
 set [ find default-name=ether2 ] comment="NAS - hall cupboard"
-set [ find default-name=ether3 ] comment="Study desktop"
+set [ find default-name=sfp-sfpplus1 ] comment="Study desktop (10G)"
 set [ find default-name=ether4 ] comment="Living room TV (wall plate)"
 set [ find default-name=ether5 ] comment="Spare"
 set [ find default-name=ether6 ] comment="Future garden AP - PoE off" \

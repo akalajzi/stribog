@@ -71,7 +71,7 @@ describe("layout: demo network", () => {
     const xOf = (id: string) => l.nodes.find((n) => n.id === id)!.x;
     const xs = byPort.map((s) => xOf(s.id));
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
-    expect(byPort.map((s) => s.port)).toEqual(["ether2", "ether3", "ether4", "ether6", "ether7", "ether8"]);
+    expect(byPort.map((s) => s.port)).toEqual(["ether2", "ether4", "ether6", "ether7", "ether8", "sfp-sfpplus1"]);
     // Port x positions on the gateway increase in the same order.
     const px = byPort.map((s) => l.portX[s.port!]!);
     expect([...px].sort((a, b) => a - b)).toEqual(px);
@@ -288,6 +288,7 @@ describe("layout: traffic", () => {
     const node = l.nodes.find((n) => n.id === laptop.id)!;
     expect(link.route).toMatch(new RegExp(`^M ${Math.round(ap.x * 10) / 10} `));
     expect(link.route).toMatch(new RegExp(`H ${Math.round(node.x * 10) / 10} V ${Math.round((node.y - 40) * 10) / 10}$`));
-    expect(link.len).toBeGreaterThan(node.y - ap.y);
+    // At least the height it covers: from under the AP's drawing to the top of the device's.
+    expect(link.len).toBeGreaterThanOrEqual(node.y - 40 - (ap.y + 96));
   });
 });
