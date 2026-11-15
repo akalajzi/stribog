@@ -5,3 +5,6 @@ dist/
 /stribog.config.json
 *.local.json
 .DS_Store
+
+# Browser automation output (screenshots and page dumps from development sessions).
+/.playwright-mcp/

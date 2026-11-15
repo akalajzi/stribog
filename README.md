@@ -180,6 +180,8 @@ pnpm typecheck
 
 ## Status
 
-Early. Signing in and reading live are tested against a mocked router; the first runs on real hardware are under way. Stribog does not change anything on the router yet: changes are planned, each shown in full and confirmed before it is applied. The setup generator follows RouterOS v7 syntax but should be tried on a spare or freshly reset router before being trusted.
+Early. Signing in and reading live are tested against a mocked router; the first runs on real hardware are under way. The only changes Stribog makes to the router itself are pausing a device and the Wi-Fi settings, each shown in full and confirmed first; everything else is a script for you to review. The setup generator follows RouterOS v7 syntax but should be tried on a spare or freshly reset router before being trusted.
 
-Licence: not chosen yet.
+## Licence
+
+[MIT](LICENSE).

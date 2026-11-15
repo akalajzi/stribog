@@ -2,6 +2,7 @@
   "name": "stribog",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "A calm, honest control room for MikroTik home networks: topology, Wi-Fi and a setup audit.",
   "type": "module",
   "bin": {
