@@ -1,40 +1,89 @@
 # Stribog
 
-A calm, honest control room for MikroTik home networks.
+**A calm, honest control room for MikroTik home networks.**
 
-Stribog signs in to a RouterOS router with the same user and password as WinBox or WebFig (or reads `/export` files) and shows you:
+Stribog signs in to your RouterOS router with the same user and password as WinBox or WebFig and shows, in plain English, what is on your network, where it is connected, how the internet is doing and what in the setup is worth fixing. It changes nothing on the router unless you ask it to and confirm.
 
-- **Home**: is the network working (internet and traffic now, devices online, access points up, the router's load) and what needs you: problems right now and what the review says is worth fixing. The full review sits folded below; click to open it.
-- **On the internet now**: a box above the Internet on the map lists who the whole network is talking to on the internet right now, by network owner (Google, Cloudflare, Amazon…), with the rate each way and the devices behind it, busiest first. It reads the router's connection table every few seconds (less often when the table is large: about 2 ms per connection) and counts what each connection moved since the last read; owners come from the offline network database.
-- **World**: the same traffic on a world map: an arc from home to each country the network is talking to now, with dots moving along it (plain ones coming home for download, orange ones going out for upload; more and faster dots for more traffic). Places that went quiet stay faint for two minutes. Click a country for who runs the addresses there and which devices talk to them. Countries come from DB-IP's free country database ([IP geolocation by DB-IP](https://db-ip.com), CC BY 4.0, about 5 MB, downloaded every two weeks into the data directory and searched offline). It is a guess: it names one country per address range, and big services answer from many places. Home is placed at the city of the router's time zone (or, without one, the country of its public address). Scroll to zoom, drag to move.
-- **Is it me or my provider?** Once a minute the router pings its provider's gateway and two public addresses (Cloudflare's 1.1.1.1 and Google's 8.8.8.8). LAN & internet shows the internet over the last day or week: round trips, every minute up, losing packets or down, and each outage with where it probably stopped (the cable to the provider's box, no address from the provider, the provider's box, or the provider's network beyond it). Home says when the internet is down right now and when the last outage was.
-- **Updates**: once a day Stribog asks the router to check MikroTik's server for a newer RouterOS on its update channel (`/system/package/update/check-for-updates`: it changes no settings and downloads nothing). Home says when one is out, with a link to what changed, and when the router's firmware (RouterBOOT) is behind its RouterOS. Updating stays in WinBox or WebFig, because it restarts the router.
-- **Where the network runs out**: the topology shows what goes to and from the internet right now in big numbers, and draws any link at 80% or more of what it can carry in red, with how full it is: a cable against its speed, a Wi-Fi device against roughly 60% of its link rate (an estimate). While Stribog records, it notes every minute a link is at its limit; links that were often full in the last week show in the review under Capacity, so you know which parts to make faster.
-- **Review** (on Home, folded until opened): how the network is set up, what is solid and what is fragile. Every finding explains why it matters in plain words, with the evidence. There is no score: the review says where the setup stands in words (healthy, a few loose ends, needs attention) from what is broken or exposed. Ideas are optional and never change that. The review only diagnoses: how to fix something depends on the rest of the network, so each finding hands an AI agent a request with the configuration involved (see Agents below). A finding that is fine on your network (a weak signal on a device nobody uses, no guest Wi-Fi when you have no guests) can be **accepted**, with a reason: it stops counting until it changes, and opens again when it does.
-- **Topology**: a tidy map with drawings of the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), each with its own line in that colour, strongest signal first.
-- **Wi-Fi**, in three tabs. *Overview*: the networks, every client on a signal scale, the access points. *Setup*: change a network's name, password and security (WPA2, WPA2 + WPA3, WPA3), and a channel map per band, including where a planned access point would have to go. *Review*: the Wi-Fi findings. A Wi-Fi change can cut you off, so it is made with a timed undo: before anything changes, Stribog puts a scheduler entry on the router that restores the old settings after 2½ minutes; a bar on every page lets you **Keep** the change (or undo it now) once you are back on the Wi-Fi. If you never come back, the router undoes it on its own. Passwords go straight to the router: Stribog never reads the old one (the undo copies it on the router), never stores or logs the new one, and draws a QR code for joining from what you typed.
-- **Clients**: everything the router has seen, where it is connected, reservations that no longer match, and devices Stribog is unsure about.
-- **New devices**: Stribog keeps when it first saw each device online (`seen.json` in the data directory). After a first week of learning the network, a device that turns up is marked new, on Home and in Clients, until someone says what it is: any note does (a name, a kind) or **I know this device** on its page, and so does a reservation on the router. A device on a private (random) address may be a known one that changed its address, and Stribog says so.
-- **LAN & internet**: the internet path (double NAT shows as two NAT hops), networks and DHCP, an address map of the LAN, the router's ports, management services, and the firewall in plain language.
-- **Change**: small changes to the setup the router has now: add a guest or IoT network, rename the Wi-Fi, change its security or 5 GHz channels. Stribog shows what it read about the setup (inferences marked as such) and writes only the commands for what you choose, plus a script that undoes them. The change first saves the configuration to a file on the router, new Wi-Fi starts disabled until you set its passphrase, and nothing is applied: you review and paste it.
-- **Pause internet**, on a device's page: when something looks off, cut a device off the internet while you look into it. It keeps the local network (DNS, the devices at home, you reaching it), and Resume undoes it. This is the one change Stribog makes to the router itself, always the same way: it shows the exact firewall rules first, adds them only when you confirm, reads them back to check they are in place before the router's fasttrack rule (and takes them out again if not), then ends the device's open connections. The rules carry a "Stribog pause" comment with the device's MAC address, so they are easy to find by hand too. Home lists paused devices, so none stays paused by mistake.
-- **New setup** (in Settings, under Start over): a generator for a clean, opinionated home or small-office setup, as a script to review, for a router reset with no configuration. On a router that is already set up it asks first.
+![The demo network's topology: the internet, the router, two access points and every device, with live traffic moving along the links](docs/screenshots/topology.jpg)
 
-Apart from pausing a device and the Wi-Fi settings above, Stribog never changes anything on the router: other changes are scripts you review and apply yourself. Every change shows exactly what it will do first, is read back from the router to check it, and is logged in Settings → History.
+<sub>All screenshots show the built-in demo network, "Maple Street". It is fictional: try it without a router.</sub>
 
-![Review](docs/screenshots/review.jpg)
-![Topology](docs/screenshots/map.jpg)
+```sh
+pnpm install && pnpm dev    # open http://127.0.0.1:4517 and pick "Explore the demo network"
+```
 
-<details><summary>More screens</summary>
+[What it shows](#what-it-shows) · [Safe by design](#safe-by-design) · [Quick start](#quick-start) · [Agents (MCP)](#agents-mcp) · [Licence](#licence)
 
-![Wi-Fi](docs/screenshots/wifi.jpg)
-![LAN & internet](docs/screenshots/network.jpg)
-![Clients](docs/screenshots/clients.jpg)
-![New setup](docs/screenshots/plan.jpg)
+## What it shows
+
+### The whole network on one map
+
+The map above draws the actual kinds of hardware, wired and Wi-Fi alike. Cables are solid and coloured by link speed, Wi-Fi links are dashed in their band's colour, port LEDs show link speed and PoE is marked. Devices behind an access point sit under it in one cluster per medium (cable, 2.4 GHz, 5 GHz), strongest signal first.
+
+Moving dots are traffic right now. A link at 80% or more of what it can carry turns red and says how full it is: a cable against its speed, a Wi-Fi device against roughly 60% of its link rate (an estimate). While Stribog records, it notes every minute a link is at its limit, and links that were often full in the last week show in the review, so you know which parts to make faster. The box above the internet lists who the whole network is talking to right now, by network owner (Google, Cloudflare, Amazon…), with the rate each way and the devices behind it.
+
+### Home: is everything working?
+
+![Home: internet up, devices online, access points up, the router's load, and a short list of what needs you](docs/screenshots/home.jpg)
+
+Internet and traffic now, devices online, access points up and the router's load, then what needs you: problems right now, devices nobody has said anything about yet, a newer RouterOS.
+
+- **New devices.** Stribog keeps when it first saw each device online. After a first week of learning the network, a device that turns up is marked new until someone says what it is (any note, a reservation on the router, or **I know this device**). A device on a private (random) address may be a known one that changed its address, and Stribog says so.
+- **Updates.** Once a day Stribog asks the router to check MikroTik's server for a newer RouterOS on its channel (`/system/package/update/check-for-updates`: it changes no settings and downloads nothing), and says when the firmware (RouterBOOT) is behind. Updating stays in WinBox or WebFig, because it restarts the router.
+
+### Where the traffic goes
+
+![World: arcs from home to the Netherlands, Germany and the United States, with the rate to each country](docs/screenshots/world.jpg)
+
+The same traffic on a world map: an arc from home to each country the network is talking to, with dots moving along it (plain ones coming home, orange ones going out; more and faster dots for more traffic). Click a country for who runs the addresses there and which devices talk to them. Countries come from DB-IP's free country database ([IP geolocation by DB-IP](https://db-ip.com), CC BY 4.0, about 5 MB, downloaded every two weeks and searched offline). It is a guess: it names one country per address range, and big services answer from many places. Home is placed at the city of the router's time zone.
+
+### Is it me or my provider?
+
+![Internet over time: round trips over 24 hours, a strip of minutes up, losing packets or down, and each outage with where it probably stopped](docs/screenshots/internet.jpg)
+
+Once a minute the router pings its provider's gateway and two public addresses (Cloudflare's 1.1.1.1 and Google's 8.8.8.8). Stribog shows the last day or week: round trips, every minute up, losing packets or down, and each outage with where it probably stopped (the cable to the provider's box, no address from the provider, the provider's box, or the provider's network beyond it).
+
+### Every device, up close
+
+![A laptop's page: traffic over 24 hours, when it was online, and who it talks to](docs/screenshots/device.jpg)
+
+Traffic over time and when it was online, who it is talking to now and over the last day or week (by network owner, with ports, bytes each way and the names the router's DNS knows), the maker of its network chip, and your notes: its name, kind, room, owner and the services it runs. When something looks off, **Pause internet** cuts it off the internet but keeps the local network, until you resume it.
+
+### Wi-Fi
+
+<p>
+<img src="docs/screenshots/wifi.jpg" width="49%" alt="Wi-Fi overview: the two networks and every client on a signal scale from weak to excellent">
+<img src="docs/screenshots/wifi-channels.jpg" width="49%" alt="Wi-Fi setup: name, password and security per network, and a channel map showing where a planned access point would fit">
+</p>
+
+The networks, every client on a signal scale and the access points; a channel map per band, including where a planned access point would go. Change a network's name, password or security (WPA2, WPA2 + WPA3, WPA3) from Stribog: before anything changes, it puts a scheduler entry on the router that restores the old settings after 2½ minutes, so if the change cuts you off, the router undoes it on its own. Once you are back on the Wi-Fi, you **Keep** it. Stribog never reads the old password and never stores the new one.
+
+### A review, not a score
+
+![The review: findings worth fixing, ideas and notes, each with a plain explanation, filterable by area](docs/screenshots/review.jpg)
+
+How the network is set up, what is solid and what is fragile. Every finding explains why it matters in plain words, with the evidence, and says where the setup stands in words (healthy, a few loose ends, needs attention) rather than as a number. A finding that is fine on your network can be **accepted** with a reason: it stops counting until something changes. The review only diagnoses; how to fix something depends on the rest of your network, so each finding hands an AI agent a request with the configuration involved (see [Agents](#agents-mcp)).
+
+### Changes you can read first
+
+![Change: adding an IoT network, with the exact RouterOS commands and an undo script](docs/screenshots/change.jpg)
+
+Add a guest or IoT network, rename the Wi-Fi, change its security or 5 GHz channels: Stribog shows what it read about your setup (inferences marked as such) and writes the commands for exactly what you chose, plus a script that undoes them. You review and paste them yourself. **New setup** (in Settings) generates a clean, opinionated configuration for a router reset with no configuration.
+
+<details><summary>And the rest: clients, LAN & internet</summary>
+
+![Clients: every device the router has seen, where it is connected, its address and signal](docs/screenshots/clients.jpg)
+
+**Clients** lists everything the router has seen, where it is connected, reservations that no longer match and devices Stribog is unsure about. **LAN & internet** shows the internet path (double NAT shows as two hops), networks and DHCP, an address map, the router's ports, management services, and the firewall in plain language.
 
 </details>
 
-Screenshots show the built-in fictional demo network (`fixtures/demo`).
+## Safe by design
+
+- **Your router password stays in memory.** Stribog has no accounts of its own: you sign in with the router's user, and Stribog keeps the credentials in server memory for the session only, never on disk, in logs or in the browser.
+- **It writes to the router only twice**, and only when a person signed in to Stribog confirms: pausing a device's internet and the Wi-Fi settings. Each shows the exact change first, is read back from the router to check it, and is undone if the check fails; the Wi-Fi change also has the timed undo above. Everything else is a script for you to review. Every change is logged in Settings → History.
+- **It says what it does not know.** Everything comes from the router or from notes people write. Inferences are marked "probably", and estimates say so.
+- **Your traffic stays home.** Network owners, countries and network-chip makers come from public databases (iptoasn.com, DB-IP, the IEEE registry) that Stribog downloads and searches offline. The only other site it contacts is rdap.org, when you click **Who is this?** on an address. `STRIBOG_NO_DOWNLOADS=1` keeps it off the internet entirely.
 
 ## Quick start
 
@@ -57,7 +106,7 @@ To pin the address, create `stribog.config.json` in the repository root (it is g
 
 ```json
 {
-  "router": { "url": "192.168.88.1", "interval": 15 },
+  "router": { "url": "192.168.88.1", "interval": 15 }
 }
 ```
 
