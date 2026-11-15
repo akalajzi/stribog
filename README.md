@@ -1,6 +1,6 @@
 # Stribog
 
-**A calm, honest control room for MikroTik home networks.**
+**MikroTik's hardware, without the maze: your home network made simple to understand and manage.**
 
 Stribog signs in to your RouterOS router with the same user and password as WinBox or WebFig and shows, in plain English, what is on your network, where it is connected, how the internet is doing and what in the setup is worth fixing. It changes nothing on the router unless you ask it to and confirm.
 

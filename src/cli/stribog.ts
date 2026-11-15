@@ -71,7 +71,7 @@ const bullet = (mark: string, text: string, indent: number, max: number) => " ".
 // ---------------------------------------------------------------------------
 // Commands
 
-const HELP = `${c.bold("stribog")} ${c.dim("— a calm, honest review of a MikroTik home network")}
+const HELP = `${c.bold("stribog")} ${c.dim("— a plain-English review of a MikroTik home network")}
 
 ${c.bold("Usage")}
   stribog audit [--config stribog.config.json] [--json] [--details]

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "A calm, honest control room for MikroTik home networks: topology, Wi-Fi and a setup audit.",
+  "description": "MikroTik's hardware, without the maze: your home network made simple to understand and manage.",
   "type": "module",
   "bin": {
     "stribog": "./src/cli/stribog.ts"
